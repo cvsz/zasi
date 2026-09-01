@@ -1,0 +1,21 @@
+name: Nightly Superintelligence Stress Benchmark
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  stress-test:
+    name: Subsystem & Invariant Verification Matrix
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with: { python-version: "3.11" }
+      - name: Install dependencies
+        run: pip install build coverage
+      - name: Run Full Stress Tests & SMT Benchmark
+        run: python3 -m unittest discover -s tests -v
+      - name: Run Dialectical Pipeline 148-Stage Step
+        run: python3 main.py

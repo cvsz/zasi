@@ -1,0 +1,22 @@
+name: Lint & Code Style
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: Python Syntax & React JSX Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with: { python-version: "3.11" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - name: Validate Python Syntax across all 176 Subsystems
+        run: python3 -m py_compile src/*.py backend/*.py main.py
+      - name: Validate React Components
+        run: node tests/test_components.js
