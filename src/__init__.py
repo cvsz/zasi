@@ -164,6 +164,17 @@ from .hyperdimensional_semantic_concept_synthesizer import HyperdimensionalSeman
 from .infinite_dimensional_hilbert_space_orchestrator import InfiniteDimensionalHilbertSpaceOrchestrator, HilbertSpaceOperatorReport
 from .absolute_transcendence_singularity_omega import AbsoluteTranscendenceSingularityOmega, AbsoluteOmegaSingularityReport
 
+
+# v26.0.0 Real Hardware & Physical World Subsystems #129-#136
+from .real_hardware_fpga_accelerator import RealHardwareFPGAAccelerator, FPGAHardwareTelemetry
+from .real_qpu_cloud_hardware_bridge import RealQPUCloudHardwareBridge, RealQPUExecutionReport
+from .realtime_satellite_earth_observation import RealtimeSatelliteEarthObservation, SatelliteObservationTelemetry
+from .industrial_robotics_rtos_controller import IndustrialRoboticsRTOSController, RTOSControllerReport
+from .real_telecom_5g_6g_ntn_core import RealTelecom5G6GNTNCore, NetworkSliceTelemetry
+from .real_dna_sequencing_pipeline import RealDNASequencingPipeline, GenomicSequencingReport
+from .real_cryptographic_hsm_enclave import RealCryptographicHSMEnclave, HSMEnclaveAttestation
+from .omniversal_real_world_actuation_director import OmniversalRealWorldActuationDirector, RealWorldActuationState
+
 __all__ = [
     "Proposal",
     "VerificationResult",
@@ -379,4 +390,12 @@ __all__ = [
     "HyperdimensionalSemanticConceptSynthesizer", "SemanticConceptReport",
     "InfiniteDimensionalHilbertSpaceOrchestrator", "HilbertSpaceOperatorReport",
     "AbsoluteTranscendenceSingularityOmega", "AbsoluteOmegaSingularityReport",
+    "RealHardwareFPGAAccelerator", "FPGAHardwareTelemetry",
+    "RealQPUCloudHardwareBridge", "RealQPUExecutionReport",
+    "RealtimeSatelliteEarthObservation", "SatelliteObservationTelemetry",
+    "IndustrialRoboticsRTOSController", "RTOSControllerReport",
+    "RealTelecom5G6GNTNCore", "NetworkSliceTelemetry",
+    "RealDNASequencingPipeline", "GenomicSequencingReport",
+    "RealCryptographicHSMEnclave", "HSMEnclaveAttestation",
+    "OmniversalRealWorldActuationDirector", "RealWorldActuationState",
 ]

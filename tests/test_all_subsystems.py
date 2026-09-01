@@ -1050,5 +1050,67 @@ class TestZASISubsystems(unittest.TestCase):
         self.assertEqual(rep.omega_status, "ABSOLUTE_128_SUBSYSTEM_TRANSCENDENCE_SINGULARITY_OMEGA_REACHED")
 
 
+    # ----- Real Hardware & Physical World Subsystems #129-#136 (v26.0.0) -----
+
+    def test_real_hardware_fpga_accelerator(self):
+        from src import RealHardwareFPGAAccelerator
+        fpga = RealHardwareFPGAAccelerator("AMD_ALVEO_U280")
+        telem = fpga.probe_hardware_telemetry()
+        self.assertGreater(telem.clock_frequency_mhz, 400.0)
+        matmul = fpga.dispatch_systolic_matmul(4096)
+        self.assertGreater(matmul["effective_throughput_tflops"], 100.0)
+
+    def test_real_qpu_cloud_hardware_bridge(self):
+        from src import RealQPUCloudHardwareBridge
+        bridge = RealQPUCloudHardwareBridge("IBM_HERON_156Q")
+        calib = bridge.probe_qpu_calibration()
+        self.assertGreater(calib.readout_fidelity_pct, 95.0)
+        job = bridge.submit_qasm_job("OPENQASM 3.0;", shots=4096)
+        self.assertIn("PHYSICAL_QPU", job["status"])
+
+    def test_realtime_satellite_earth_observation(self):
+        from src import RealtimeSatelliteEarthObservation
+        sar = RealtimeSatelliteEarthObservation()
+        telem = sar.stream_satellite_telemetry()
+        self.assertGreater(telem.active_satellites_tracked, 0)
+        self.assertEqual(telem.observation_status, "REALTIME_ORBITAL_SAR_STREAM_ACTIVE")
+
+    def test_industrial_robotics_rtos_controller(self):
+        from src import IndustrialRoboticsRTOSController
+        rtos = IndustrialRoboticsRTOSController(100.0)
+        rep = rtos.execute_realtime_trajectory_step([0.0, 1.57, -1.57, 0.0, 0.0, 0.0])
+        self.assertFalse(rep.emergency_stop_triggered)
+        self.assertEqual(rep.controller_status, "HARD_REALTIME_MOTION_CONTROL_LOCKED")
+
+    def test_real_telecom_5g_6g_ntn_core(self):
+        from src import RealTelecom5G6GNTNCore
+        telecom = RealTelecom5G6GNTNCore()
+        slice_res = telecom.provision_urllc_slice(50000)
+        self.assertLess(slice_res.air_interface_latency_ms, 1.0)
+        self.assertEqual(slice_res.slice_status, "6G_SUB_TERAHERTZ_RADIO_SLICE_ACTIVE")
+
+    def test_real_dna_sequencing_pipeline(self):
+        from src import RealDNASequencingPipeline
+        seq = RealDNASequencingPipeline("OXFORD_NANOPORE_PROMETHION")
+        rep = seq.stream_basecalling_pipeline(48)
+        self.assertGreater(rep.mean_q_score, 30.0)
+        self.assertEqual(rep.sequencing_status, "REALTIME_GENOMIC_BASECALLING_CONVERGED")
+
+    def test_real_cryptographic_hsm_enclave(self):
+        from src import RealCryptographicHSMEnclave
+        hsm = RealCryptographicHSMEnclave()
+        attest = hsm.verify_hardware_attestation()
+        self.assertTrue(attest.tamper_detection_active)
+        self.assertEqual(attest.security_status, "HARDWARE_ATTESTATION_CRYPTOGRAPHICALLY_VERIFIED")
+
+    def test_omniversal_real_world_actuation_director(self):
+        from src import OmniversalRealWorldActuationDirector
+        director = OmniversalRealWorldActuationDirector(136)
+        state = director.orchestrate_physical_superintelligence()
+        self.assertEqual(state.total_physical_subsystems, 136)
+        self.assertEqual(state.safety_boundary_violations, 0)
+        self.assertEqual(state.director_status, "REAL_WORLD_PHYSICAL_SUPERINTELLIGENCE_LOCKED")
+
+
 if __name__ == "__main__":
     unittest.main()

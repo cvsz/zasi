@@ -5,16 +5,16 @@ PIP ?= $(PYTHON) -m pip
 PORT ?= 8080
 
 help:
-	@echo "ZASI v25.0.0 Unified Full-Stack Build & Setup Automation"
+	@echo "ZASI v26.0.0 Unified Full-Stack Build & Setup Automation"
 	@echo "=========================================================="
 	@echo "make all      - Full setup, config, test, build, and install"
 	@echo "make setup    - Setup build dependencies and requirements"
 	@echo "make config   - Configure environment and verify settings"
-	@echo "make test     - Execute full 125-subsystem unit test suite"
+	@echo "make test     - Execute full 133-subsystem unit test suite"
 	@echo "make build    - Package sdist and wheel into dist/"
 	@echo "make install  - Install ZASI wheel into Python environment"
 	@echo "make server   - Launch full-stack backend & 3D Web Cockpit UI"
-	@echo "make run      - Run complete 128-subsystem main.py pipeline"
+	@echo "make run      - Run complete 136-subsystem main.py pipeline"
 	@echo "make clean    - Remove build artifacts, caches, and dist/"
 
 setup:
@@ -25,14 +25,14 @@ config: setup
 	@echo "[*] Configuring ZASI environment..."
 	@mkdir -p config docs/generated web/static backend
 	@if [ ! -f config/zasi_config.json ]; then \
-		echo '{"version": "25.0.0", "subsystems": 128, "environment": "production", "formal_verification": true, "frontend_port": $(PORT)}' > config/zasi_config.json; \
+		echo '{"version": "25.0.0", "subsystems": 136, "environment": "production", "formal_verification": true, "frontend_port": $(PORT)}' > config/zasi_config.json; \
 	fi
 	@echo "[✓] Configuration initialized: config/zasi_config.json"
 
 test: config
-	@echo "[*] Running full 125-subsystem test suite..."
+	@echo "[*] Running full 133-subsystem test suite..."
 	@$(PYTHON) -m unittest discover -s tests -q
-	@echo "[✓] All 125 test suites passed."
+	@echo "[✓] All 133 test suites passed."
 
 build: test
 	@echo "[*] Building distribution packages..."
@@ -44,7 +44,7 @@ build: test
 install: build
 	@echo "[*] Installing ZASI into environment..."
 	@$(PIP) install --break-system-packages --no-deps --force-reinstall dist/zasi-25.0.0-py3-none-any.whl
-	@echo "[✓] ZASI v25.0.0 installed successfully into environment."
+	@echo "[✓] ZASI v26.0.0 installed successfully into environment."
 
 server: install
 	@echo "=========================================================="
@@ -55,7 +55,7 @@ server: install
 
 all: setup config test build install
 	@echo "=========================================================="
-	@echo "[SUCCESS] ZASI v25.0.0 Full-Stack Build & Install Complete"
+	@echo "[SUCCESS] ZASI v26.0.0 Full-Stack Build & Install Complete"
 	@echo "=========================================================="
 
 run:

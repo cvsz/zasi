@@ -1,6 +1,6 @@
 {
-  "version": "25.0.0",
-  "subsystems": 128,
+  "version": "26.0.0",
+  "subsystems": 136,
   "environment": "production",
   "formal_verification": true,
   "quantum_backend": "QISKIT_OPENQASM_3",
