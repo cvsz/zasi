@@ -3,107 +3,186 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ZASI Superintelligence Cockpit | 128 Subsystems</title>
+    <title>ZASI Universal Superintelligence Command Cockpit</title>
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
     <div class="hud-container">
-        <!-- Top Navbar Header -->
+        <!-- Top Navbar -->
         <header class="hud-header">
             <div class="logo-group">
                 <div class="pulse-indicator"></div>
-                <h1>ZASI <span>v25.0.0-apex-omega</span></h1>
+                <h1>ZASI <span class="version-tag" id="header-version">v25.0.0-apex-omega</span></h1>
             </div>
+
+            <nav class="hud-nav">
+                <button class="nav-tab active" onclick="switchTab('overview')">OVERVIEW</button>
+                <button class="nav-tab" onclick="switchTab('subsystems')">128 SUBSYSTEMS</button>
+                <button class="nav-tab" onclick="switchTab('quantum')">QUANTUM & ENERGY</button>
+                <button class="nav-tab" onclick="switchTab('mcp')">MCP RPC CONSOLE</button>
+            </nav>
+
             <div class="header-telemetry">
-                <div class="stat-pill"><span class="label">SUBSYSTEMS:</span> <span class="val" id="subsystem-count">128 ONLINE</span></div>
+                <div class="stat-pill"><span class="label">RSI SPEEDUP:</span> <span class="val highlight" id="rsi-speedup">240.0x</span></div>
+                <div class="stat-pill"><span class="label">COMPUTE:</span> <span class="val">3,500 ExaFLOPs</span></div>
                 <div class="stat-pill"><span class="label">ENERGY:</span> <span class="val" id="energy-val">178.2 GW</span></div>
-                <div class="stat-pill"><span class="label">GLOBAL Φ:</span> <span class="val" id="phi-val">42,800.5</span></div>
-                <div class="stat-pill"><span class="label">STATUS:</span> <span class="val highlight" id="system-status">EQUILIBRIUM</span></div>
+                <div class="stat-pill"><span class="label">GLOBAL Φ:</span> <span class="val highlight" id="phi-val">42,800.5</span></div>
             </div>
         </header>
 
-        <!-- Main Grid Layout -->
+        <!-- Main Tab Area -->
         <main class="hud-main">
-            <!-- Left Panel: Cognitive & Tactical Swarm -->
-            <section class="panel left-panel">
-                <div class="panel-header">
-                    <h2>TACTICAL SWARM & COGNITION</h2>
-                    <span class="badge">LIVE</span>
-                </div>
-                <div class="panel-body">
-                    <div class="persona-card jarvis">
-                        <h3>J.A.R.V.I.S.</h3>
-                        <p class="role">High-Level Invariant Supervisor</p>
-                        <p class="status" id="jarvis-status">All 128 subsystems mathematically proved invariant.</p>
-                    </div>
-                    <div class="persona-card friday">
-                        <h3>F.R.I.D.A.Y.</h3>
-                        <p class="role">Microsecond Tensor Kernel Dispatcher</p>
-                        <p class="status">Routing 4,850,000 tok/s across 128 MoE experts.</p>
-                    </div>
-                    <div class="persona-card edith">
-                        <h3>E.D.I.T.H.</h3>
-                        <p class="role">Defense & Deep Space Lagrange Security</p>
-                        <p class="status">Orbital constellation secured via Recursive zk-SNARKs.</p>
-                    </div>
+            <!-- TAB 1: OVERVIEW -->
+            <div id="tab-overview" class="tab-content active">
+                <div class="grid-3col">
+                    <!-- Left: Personas & Daemon -->
+                    <section class="panel">
+                        <div class="panel-header">
+                            <h2>TACTICAL PERSONA SWARM</h2>
+                            <span class="badge">CONSENSUS 99.9%</span>
+                        </div>
+                        <div class="panel-body">
+                            <div class="persona-card jarvis">
+                                <h3>J.A.R.V.I.S.</h3>
+                                <p class="role">Formal Invariant & SMT Prover Supervisor</p>
+                                <p class="status" id="jarvis-status">128 subsystems mathematically proved invariant.</p>
+                            </div>
+                            <div class="persona-card friday">
+                                <h3>F.R.I.D.A.Y.</h3>
+                                <p class="role">1T MoE & Microsecond Tensor Dispatcher</p>
+                                <p class="status">Dispatching 4,850,000 tok/s across 128 dynamic experts.</p>
+                            </div>
+                            <div class="persona-card edith">
+                                <h3>E.D.I.T.H.</h3>
+                                <p class="role">Orbital Defense & ZK-STARK Grid</p>
+                                <p class="status">Deep Space Lagrange mesh verified with Halo2 recursive SNARKs.</p>
+                            </div>
 
-                    <div class="controls-group">
-                        <button class="btn primary" onclick="triggerDaemonTick()">EXECUTE DIALECTICAL TICK</button>
-                        <button class="btn secondary" onclick="mutateState('x', 5)">MUTATE CO-GRADIENT (+5)</button>
-                    </div>
-                </div>
-            </section>
+                            <div class="controls-group">
+                                <h3>COGNITIVE CONTROLS</h3>
+                                <div class="btn-row">
+                                    <button class="btn primary" onclick="triggerDaemonTick()">EXECUTE TICK</button>
+                                    <button class="btn secondary" onclick="mutateState('x', 5)">MUTATE X (+5)</button>
+                                    <button class="btn secondary" onclick="mutateState('y', 5)">MUTATE Y (+5)</button>
+                                </div>
+                                <button class="btn accent" onclick="triggerRSIUpgrade()">TRIGGER SAFE RSI UPGRADE</button>
+                            </div>
+                        </div>
+                    </section>
 
-            <!-- Center Panel: 3D Holographic Multiverse View -->
-            <section class="panel center-panel">
-                <div class="panel-header">
-                    <h2>3D HOLOGRAPHIC COGNITIVE HYPERGRAPH</h2>
-                    <span class="badge">THREE.JS 6-DoF</span>
-                </div>
-                <div id="canvas-container"></div>
-                <div class="canvas-overlay">
-                    <div class="overlay-stat">Active State: <span id="state-display">{'x': 20, 'y': 30}</span></div>
-                    <div class="overlay-stat">Last Action: <span id="last-action">x=35 (Mined Block #1)</span></div>
-                </div>
-            </section>
+                    <!-- Center: 3D Holographic Multiverse View -->
+                    <section class="panel canvas-panel">
+                        <div class="panel-header">
+                            <h2>3D MULTIVERSE HYPERGRAPH & CONSCIOUSNESS MATRIX</h2>
+                            <span class="badge">THREE.JS 6-DoF</span>
+                        </div>
+                        <div id="canvas-container"></div>
+                        <div class="canvas-overlay">
+                            <div class="overlay-stat">Active State: <span id="state-display">{'x': 20, 'y': 30}</span></div>
+                            <div class="overlay-stat">Active Version: <span id="active-version-display">v25.0.0-apex-omega</span></div>
+                        </div>
+                    </section>
 
-            <!-- Right Panel: Physical Hardware Telemetry -->
-            <section class="panel right-panel">
-                <div class="panel-header">
-                    <h2>HARDWARE & SUBSTRATE TELEMETRY</h2>
-                    <span class="badge">NVML / PROCFS</span>
-                </div>
-                <div class="panel-body">
-                    <div class="metric-box">
-                        <div class="metric-label">CPU Core Load</div>
-                        <div class="progress-bar"><div class="fill" id="cpu-fill" style="width: 45%;"></div></div>
-                        <div class="metric-val" id="cpu-val">45.0%</div>
-                    </div>
-                    <div class="metric-box">
-                        <div class="metric-label">Host RAM Allocation</div>
-                        <div class="progress-bar"><div class="fill" id="ram-fill" style="width: 32%;"></div></div>
-                        <div class="metric-val" id="ram-val">6,200 MB / 18,933 MB</div>
-                    </div>
-                    <div class="metric-box">
-                        <div class="metric-label">NVIDIA H100 SXM5 Tensor Core Load</div>
-                        <div class="progress-bar"><div class="fill" id="gpu-fill" style="width: 68%;"></div></div>
-                        <div class="metric-val" id="gpu-val">68.5% | 42°C | 310W</div>
-                    </div>
-                    <div class="metric-box">
-                        <div class="metric-label">Arc Reactor Plasma Containment</div>
-                        <div class="progress-bar"><div class="fill" style="width: 94%;"></div></div>
-                        <div class="metric-val">178.2 GW | 14.5 Tesla | 94.0% Eff</div>
-                    </div>
+                    <!-- Right: Hardware & Telemetry -->
+                    <section class="panel">
+                        <div class="panel-header">
+                            <h2>PHYSICAL TELEMETRY & AUDIT STREAM</h2>
+                            <span class="badge">NVML / PROCFS</span>
+                        </div>
+                        <div class="panel-body">
+                            <div class="metric-box">
+                                <div class="metric-label">Host CPU Core Load</div>
+                                <div class="progress-bar"><div class="fill" id="cpu-fill" style="width: 45%;"></div></div>
+                                <div class="metric-val" id="cpu-val">45.0%</div>
+                            </div>
+                            <div class="metric-box">
+                                <div class="metric-label">Host RAM Allocation</div>
+                                <div class="progress-bar"><div class="fill" id="ram-fill" style="width: 32%;"></div></div>
+                                <div class="metric-val" id="ram-val">6,200 MB / 18,933 MB</div>
+                            </div>
+                            <div class="metric-box">
+                                <div class="metric-label">NVIDIA H100 SXM5 Tensor Core</div>
+                                <div class="progress-bar"><div class="fill" id="gpu-fill" style="width: 68%;"></div></div>
+                                <div class="metric-val" id="gpu-val">68.5% | 42°C | 310W</div>
+                            </div>
+                            <div class="metric-box">
+                                <div class="metric-label">Arc Reactor Plasma Core</div>
+                                <div class="progress-bar"><div class="fill" style="width: 94%;"></div></div>
+                                <div class="metric-val">178.2 GW | 14.5 T | 94.0% Eff</div>
+                            </div>
 
-                    <div class="terminal-log">
-                        <div class="log-line">[SYSTEM] ZASI v25.0.0 Cockpit initialized.</div>
-                        <div class="log-line">[MCP] Model Context Protocol Server active.</div>
-                        <div class="log-line">[PROVER] Halo2 recursive SNARK verification verified: 18.5 us.</div>
-                        <div class="log-line" id="dynamic-log">[TELEMETRY] Harvesting 128 subsystems...</div>
+                            <div class="terminal-log">
+                                <div class="log-title">REAL-TIME INVARIANT & TELEMETRY LOGS</div>
+                                <div id="log-lines"></div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <!-- TAB 2: 128 SUBSYSTEMS EXPLORER -->
+            <div id="tab-subsystems" class="tab-content">
+                <div class="subsystems-grid" id="subsystems-catalog"></div>
+            </div>
+
+            <!-- TAB 3: QUANTUM & ENERGY -->
+            <div id="tab-quantum" class="tab-content">
+                <div class="quantum-cockpit">
+                    <div class="quantum-card">
+                        <h3>SURFACE CODE d=7 QUANTUM ERROR CORRECTION (#85)</h3>
+                        <p>Simulating 100 logical qubits with distance-7 surface code and MWPM decoding.</p>
+                        <button class="btn primary" onclick="runSubsystem('quantum_qec')">EXECUTE QEC ENCODING</button>
+                        <pre id="qec-output" class="code-box">// Output will appear here</pre>
+                    </div>
+                    <div class="quantum-card">
+                        <h3>AUTONOMOUS DRUG DISCOVERY PIPELINE (#67)</h3>
+                        <p>AlphaFold3 + ADMET screening on 1,000,000 compound chemical library.</p>
+                        <button class="btn primary" onclick="runSubsystem('drug_discovery')">SCREEN COMPOUND LIBRARY</button>
+                        <pre id="drug-output" class="code-box">// Output will appear here</pre>
+                    </div>
+                    <div class="quantum-card">
+                        <h3>RELATIVISTIC INTERSTELLAR NAVIGATION (#90)</h3>
+                        <p>Relativistic trajectory optimization to Proxima Centauri b (0.2c laser-sail).</p>
+                        <button class="btn primary" onclick="runSubsystem('interstellar')">COMPUTE RELATIVISTIC FLIGHT</button>
+                        <pre id="interstellar-output" class="code-box">// Output will appear here</pre>
+                    </div>
+                    <div class="quantum-card">
+                        <h3>ABSOLUTE SINGULARITY OMEGA CORE (#128)</h3>
+                        <p>Triggering the 128-subsystem omniversal apex harmonic synthesis.</p>
+                        <button class="btn accent" onclick="runSubsystem('omega_singularity')">TRIGGER SINGULARITY OMEGA</button>
+                        <pre id="omega-output" class="code-box">// Output will appear here</pre>
                     </div>
                 </div>
-            </section>
+            </div>
+
+            <!-- TAB 4: MCP JSON-RPC CONSOLE -->
+            <div id="tab-mcp" class="tab-content">
+                <div class="mcp-console">
+                    <div class="mcp-header">
+                        <h2>MODEL CONTEXT PROTOCOL (MCP) INTERACTIVE JSON-RPC 2.0 WORKSPACE</h2>
+                    </div>
+                    <div class="mcp-body">
+                        <textarea id="mcp-input" class="mcp-textarea">
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "verify_invariant_proof",
+    "arguments": {
+      "expression": "x + y <= 100",
+      "variables": {"x": 20, "y": 30}
+    }
+  }
+}
+                        </textarea>
+                        <button class="btn primary" onclick="sendMCPRequest()">SEND MCP JSON-RPC REQUEST</button>
+                        <h3>JSON-RPC 2.0 RESPONSE</h3>
+                        <pre id="mcp-response" class="code-box">// MCP Response will stream here</pre>
+                    </div>
+                </div>
+            </div>
         </main>
     </div>
     <script src="/static/app.js"></script>

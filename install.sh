@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-#                 ZASI Full-Stack Automated Installer v25.0.0
+#                 ZASI Advanced Full-Stack Automated Installer v25.0.0
 # ==============================================================================
 set -e
 
@@ -8,11 +8,11 @@ GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-echo -e "${BLUE}=========================================================${NC}"
-echo -e "${GREEN}  ZASI Full-Stack Setup, Build & Installer v25.0.0       ${NC}"
-echo -e "${BLUE}=========================================================${NC}"
+echo -e "${BLUE}===================================================================${NC}"
+echo -e "${GREEN}      ZASI Universal Superintelligence Automated Installer v25.0.0     ${NC}"
+echo -e "${BLUE}===================================================================${NC}"
 
 # 1. Check Python runtime
 PYTHON_CMD="python3"
@@ -24,7 +24,7 @@ fi
 PY_VERSION=$($PYTHON_CMD -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
 echo -e "${GREEN}[✓] Python version ${PY_VERSION} detected.${NC}"
 
-# 2. Setup Directory Structure & Configuration
+# 2. Setup Directory Structure & Environment Configurations
 echo -e "${BLUE}[*] Initializing system configurations & frontend assets...${NC}"
 mkdir -p config docs/generated web/static backend
 cat << 'JSONEOF' > config/zasi_config.json
@@ -58,14 +58,14 @@ ls -lh dist/
 echo -e "${BLUE}[*] Installing ZASI v25.0.0 package...${NC}"
 $PYTHON_CMD -m pip install --break-system-packages --no-deps --force-reinstall dist/zasi-25.0.0-py3-none-any.whl
 
-# 6. Verify CLI Binary
+# 6. Verify CLI Executable
 if command -v zasi &> /dev/null; then
     echo -e "${GREEN}[✓] CLI executable verified: $(which zasi)${NC}"
 fi
 
-echo -e "${BLUE}=========================================================${NC}"
-echo -e "${GREEN}[SUCCESS] ZASI v25.0.0 Full-Stack Installation Complete!  ${NC}"
-echo -e "${YELLOW}Launch 3D Web Cockpit UI : make server  (http://localhost:8080)${NC}"
-echo -e "${YELLOW}Run Dialectical Pipeline : python3 main.py or make run${NC}"
-echo -e "${YELLOW}Interactive Terminal     : zasi${NC}"
-echo -e "${BLUE}=========================================================${NC}"
+echo -e "${BLUE}===================================================================${NC}"
+echo -e "${GREEN}[SUCCESS] ZASI v25.0.0 Full-Stack Installation Complete!           ${NC}"
+echo -e "${YELLOW}Launch 3D Web Cockpit UI : make server  (http://localhost:8080)   ${NC}"
+echo -e "${YELLOW}Run Dialectical Pipeline : python3 main.py or make run            ${NC}"
+echo -e "${YELLOW}Interactive Terminal     : zasi                                    ${NC}"
+echo -e "${BLUE}===================================================================${NC}"

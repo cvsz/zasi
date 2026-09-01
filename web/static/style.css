@@ -1,12 +1,13 @@
 :root {
     --bg-base: #030712;
-    --panel-bg: rgba(15, 23, 42, 0.75);
+    --panel-bg: rgba(15, 23, 42, 0.85);
     --panel-border: rgba(56, 189, 248, 0.25);
     --cyan-glow: #38bdf8;
     --cyan-dim: #0284c7;
     --gold: #fbbf24;
     --red: #f43f5e;
     --green: #10b981;
+    --purple: #a855f7;
     --text-main: #f8fafc;
     --text-muted: #94a3b8;
     --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
@@ -32,15 +33,14 @@ body {
     height: 100vh;
 }
 
-/* Header */
+/* Header & Tabs */
 .hud-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 24px;
+    padding: 10px 24px;
     background: rgba(3, 7, 18, 0.95);
     border-bottom: 1px solid var(--panel-border);
-    box-shadow: 0 0 20px rgba(56, 189, 248, 0.1);
 }
 
 .logo-group {
@@ -64,34 +64,68 @@ body {
 }
 
 .logo-group h1 {
-    font-size: 1.3rem;
+    font-size: 1.25rem;
     font-weight: 800;
     letter-spacing: 2px;
 }
 
-.logo-group h1 span {
-    font-size: 0.8rem;
+.version-tag {
+    font-size: 0.75rem;
     color: var(--cyan-glow);
-    font-weight: 400;
-    margin-left: 8px;
+    font-weight: normal;
+    background: rgba(56, 189, 248, 0.15);
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-left: 6px;
+    font-family: var(--font-mono);
+}
+
+.hud-nav {
+    display: flex;
+    gap: 8px;
+}
+
+.nav-tab {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-muted);
+    padding: 8px 16px;
+    font-size: 0.8rem;
+    font-weight: bold;
+    letter-spacing: 1px;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.nav-tab:hover {
+    color: var(--text-main);
+    background: rgba(30, 41, 59, 0.5);
+}
+
+.nav-tab.active {
+    color: var(--cyan-glow);
+    background: rgba(56, 189, 248, 0.1);
+    border-color: var(--cyan-dim);
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
 }
 
 .header-telemetry {
     display: flex;
-    gap: 16px;
+    gap: 12px;
 }
 
 .stat-pill {
     background: rgba(30, 41, 59, 0.8);
     border: 1px solid rgba(56, 189, 248, 0.2);
-    padding: 6px 14px;
+    padding: 5px 12px;
     border-radius: 20px;
-    font-size: 0.85rem;
+    font-size: 0.8rem;
 }
 
 .stat-pill .label {
     color: var(--text-muted);
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     margin-right: 4px;
 }
 
@@ -104,14 +138,29 @@ body {
     color: var(--green);
 }
 
-/* Main Grid */
+/* Main Area */
 .hud-main {
+    flex: 1;
+    padding: 16px;
+    overflow: hidden;
+    position: relative;
+}
+
+.tab-content {
+    display: none;
+    height: 100%;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* Grid Layout for Tab 1 */
+.grid-3col {
     display: grid;
     grid-template-columns: 320px 1fr 340px;
     gap: 16px;
-    padding: 16px;
-    flex: 1;
-    overflow: hidden;
+    height: 100%;
 }
 
 .panel {
@@ -134,7 +183,7 @@ body {
 }
 
 .panel-header h2 {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     letter-spacing: 1px;
     color: var(--text-muted);
     font-weight: 600;
@@ -153,7 +202,7 @@ body {
     padding: 16px;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 14px;
     overflow-y: auto;
     flex: 1;
 }
@@ -162,7 +211,7 @@ body {
 .persona-card {
     background: rgba(30, 41, 59, 0.5);
     border-left: 3px solid var(--cyan-glow);
-    padding: 12px;
+    padding: 10px 12px;
     border-radius: 0 6px 6px 0;
 }
 
@@ -170,14 +219,14 @@ body {
 .persona-card.edith { border-left-color: var(--red); }
 
 .persona-card h3 {
-    font-size: 0.95rem;
-    margin-bottom: 4px;
+    font-size: 0.9rem;
+    margin-bottom: 2px;
 }
 
 .persona-card .role {
     font-size: 0.75rem;
     color: var(--text-muted);
-    margin-bottom: 6px;
+    margin-bottom: 4px;
 }
 
 .persona-card .status {
@@ -193,15 +242,28 @@ body {
     margin-top: auto;
 }
 
+.controls-group h3 {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+}
+
+.btn-row {
+    display: flex;
+    gap: 6px;
+}
+
 .btn {
-    padding: 10px;
+    padding: 8px 12px;
     border: none;
     border-radius: 6px;
     font-weight: bold;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     cursor: pointer;
     letter-spacing: 1px;
     transition: all 0.2s;
+    flex: 1;
+    text-align: center;
 }
 
 .btn.primary {
@@ -225,8 +287,17 @@ body {
     border-color: var(--cyan-glow);
 }
 
-/* Center 3D Canvas */
-.center-panel {
+.btn.accent {
+    background: linear-gradient(90deg, #9333ea, #c084fc);
+    color: white;
+}
+
+.btn.accent:hover {
+    box-shadow: 0 0 12px rgba(192, 132, 252, 0.5);
+}
+
+/* 3D Canvas */
+.canvas-panel {
     position: relative;
 }
 
@@ -238,24 +309,24 @@ body {
 
 .canvas-overlay {
     position: absolute;
-    bottom: 16px;
-    left: 16px;
-    right: 16px;
+    bottom: 12px;
+    left: 12px;
+    right: 12px;
     display: flex;
     justify-content: space-between;
-    background: rgba(3, 7, 18, 0.8);
-    padding: 10px 16px;
+    background: rgba(3, 7, 18, 0.85);
+    padding: 8px 14px;
     border-radius: 6px;
     border: 1px solid var(--panel-border);
     font-family: var(--font-mono);
-    font-size: 0.85rem;
+    font-size: 0.8rem;
 }
 
-/* Right Metrics */
+/* Metrics & Log */
 .metric-box {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
 }
 
 .metric-label {
@@ -278,7 +349,7 @@ body {
 }
 
 .metric-val {
-    font-size: 0.8rem;
+    font-size: 0.75rem;
     font-family: var(--font-mono);
     color: var(--cyan-glow);
     text-align: right;
@@ -295,11 +366,107 @@ body {
     display: flex;
     flex-direction: column;
     gap: 4px;
-    color: var(--text-muted);
+    max-height: 180px;
+    overflow-y: auto;
 }
 
-.terminal-log .log-line {
+.log-title {
+    color: var(--cyan-glow);
+    font-size: 0.7rem;
+    margin-bottom: 4px;
+    letter-spacing: 1px;
+}
+
+.log-line {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    color: var(--text-muted);
+}
+
+/* Subsystems Catalog Tab */
+.subsystems-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+    overflow-y: auto;
+    height: 100%;
+    padding-right: 8px;
+}
+
+.subsystem-card {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    padding: 16px;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.subsystem-card h4 {
+    font-size: 0.9rem;
+    color: var(--cyan-glow);
+}
+
+.subsystem-card .meta {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
+/* Quantum Cockpit */
+.quantum-cockpit {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    height: 100%;
+    overflow-y: auto;
+}
+
+.quantum-card {
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.code-box {
+    background: rgba(2, 6, 23, 0.95);
+    border: 1px solid rgba(56, 189, 248, 0.2);
+    padding: 12px;
+    border-radius: 6px;
+    font-family: var(--font-mono);
+    font-size: 0.8rem;
+    color: #38bdf8;
+    overflow-x: auto;
+    flex: 1;
+}
+
+/* MCP Console */
+.mcp-console {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    padding: 16px;
+    gap: 12px;
+}
+
+.mcp-textarea {
+    width: 100%;
+    height: 180px;
+    background: rgba(2, 6, 23, 0.95);
+    border: 1px solid var(--panel-border);
+    color: var(--text-main);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    padding: 12px;
+    border-radius: 6px;
+    resize: none;
 }

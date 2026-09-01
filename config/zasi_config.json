@@ -6,5 +6,6 @@
   "quantum_backend": "QISKIT_OPENQASM_3",
   "telemetry_prober": "NVIDIA_NVML",
   "plan_a_compliance": true,
-  "omniversal_equilibrium": 1.0
+  "omniversal_equilibrium": 1.0,
+  "server_port": 8080
 }
