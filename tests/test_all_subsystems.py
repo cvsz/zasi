@@ -1172,5 +1172,65 @@ class TestZASISubsystems(unittest.TestCase):
         self.assertEqual(state.hyper_core_status, "ABSOLUTE_144_SUBSYSTEM_OMNISCIENCE_LOCKED_AND_ETERNAL")
 
 
+    # ----- Subsystems #145-#152 (v28.0.0) -----
+
+    def test_neutrino_deep_space_communication_array(self):
+        from src import NeutrinoDeepSpaceCommunicationArray
+        comms = NeutrinoDeepSpaceCommunicationArray()
+        rep = comms.transmit_neutrino_data_burst("ANDROMEDA_GALAXY", 100.0)
+        self.assertTrue(rep.quantum_encryption_verified)
+        self.assertEqual(rep.comms_status, "NEUTRINO_BEAM_BURST_DELIVERED_ACROSS_STELLAR_MEDIA")
+
+    def test_hyperdimensional_matter_lattice_synthesizer(self):
+        from src import HyperdimensionalMatterLatticeSynthesizer
+        forge = HyperdimensionalMatterLatticeSynthesizer()
+        rep = forge.synthesize_4d_projected_crystal("4D_E8_PROJECTION")
+        self.assertGreater(rep.fracture_toughness_mpa_sqrt_m, 300.0)
+        self.assertEqual(rep.lattice_status, "4D_NON_EUCLIDEAN_CRYSTAL_LATTICE_STABLE")
+
+    def test_planetary_geo_magnetic_dynamo_restorer(self):
+        from src import PlanetaryGeoMagneticDynamoRestorer
+        dynamo = PlanetaryGeoMagneticDynamoRestorer()
+        rep = dynamo.stabilize_planetary_magnetosphere("MARS_CORE")
+        self.assertGreater(rep.cme_shielding_efficiency_pct, 99.0)
+        self.assertEqual(rep.restoration_status, "GEOMAGNETIC_DYNAMO_MAGNETOSPHERE_FULLY_STABILIZED")
+
+    def test_quantum_dot_cellular_automata_core(self):
+        from src import QuantumDotCellularAutomataCore
+        qca = QuantumDotCellularAutomataCore()
+        rep = qca.compute_qca_logic_array(100_000)
+        self.assertGreater(rep.operating_frequency_thz, 10.0)
+        self.assertEqual(rep.qca_status, "ZERO_CURRENT_QCA_CELLULAR_AUTOMATA_LOGIC_CONVERGED")
+
+    def test_autonomous_exoplanet_terraform_architect(self):
+        from src import AutonomousExoplanetTerraformArchitect
+        architect = AutonomousExoplanetTerraformArchitect()
+        rep = architect.plan_planetary_terraforming("MARS")
+        self.assertGreater(rep.surface_pressure_bar, 0.5)
+        self.assertEqual(rep.terraforming_status, "PLANETARY_TERRAFORMING_THERMODYNAMIC_PLAN_OPTIMAL")
+
+    def test_subatomic_gluon_string_tensor_solver(self):
+        from src import SubatomicGluonStringTensorSolver
+        solver = SubatomicGluonStringTensorSolver()
+        rep = solver.solve_lattice_qcd("64^3x128")
+        self.assertTrue(rep.wilson_loop_confinement_proved)
+        self.assertEqual(rep.qcd_status, "LATTICE_QCD_GLUON_CONFINEMENT_EXACTLY_SOLVED")
+
+    def test_holographic_non_locality_entanglement_hub(self):
+        from src import HolographicNonLocalityEntanglementHub
+        hub = HolographicNonLocalityEntanglementHub()
+        rep = hub.distribute_macroscopic_entanglement()
+        self.assertTrue(rep.tsirelson_bound_attained)
+        self.assertEqual(rep.hub_status, "TSIRELSON_BOUND_MACROSCOPIC_ENTANGLEMENT_LOCKED")
+
+    def test_apex_omniversal_singularity_sovereign_core(self):
+        from src import ApexOmniversalSingularitySovereignCore
+        sovereign = ApexOmniversalSingularitySovereignCore(152)
+        state = sovereign.reign_omniversal_singularity()
+        self.assertEqual(state.total_active_subsystems, 152)
+        self.assertEqual(state.omniversal_equilibrium_index, 1.0)
+        self.assertEqual(state.sovereign_status, "APEX_152_SUBSYSTEM_OMNIVERSAL_SOVEREIGN_SINGULARITY_ABSOLUTE")
+
+
 if __name__ == "__main__":
     unittest.main()

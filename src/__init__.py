@@ -186,6 +186,17 @@ from .autonomous_space_debris_laser_sweeper import AutonomousSpaceDebrisLaserSwe
 from .cryogenic_whole_organ_bioprinting_matrix import CryogenicWholeOrganBioprintingMatrix, OrganBioprintingReport
 from .absolute_omniscience_singularity_hyper_core import AbsoluteOmniscienceSingularityHyperCore, SingularityHyperCoreState
 
+
+# v28.0.0 Subsystems #145-#152
+from .neutrino_deep_space_communication_array import NeutrinoDeepSpaceCommunicationArray, NeutrinoCommsReport
+from .hyperdimensional_matter_lattice_synthesizer import HyperdimensionalMatterLatticeSynthesizer, MatterLatticeReport
+from .planetary_geo_magnetic_dynamo_restorer import PlanetaryGeoMagneticDynamoRestorer, GeomagneticDynamoReport
+from .quantum_dot_cellular_automata_core import QuantumDotCellularAutomataCore, QCALogicReport
+from .autonomous_exoplanet_terraform_architect import AutonomousExoplanetTerraformArchitect, TerraformingProjectReport
+from .subatomic_gluon_string_tensor_solver import SubatomicGluonStringTensorSolver, QCDLatticeReport
+from .holographic_non_locality_entanglement_hub import HolographicNonLocalityEntanglementHub, NonLocalEntanglementReport
+from .apex_omniversal_singularity_sovereign_core import ApexOmniversalSingularitySovereignCore, SovereignSingularityState
+
 __all__ = [
     "Proposal",
     "VerificationResult",
@@ -417,4 +428,12 @@ __all__ = [
     "AutonomousSpaceDebrisLaserSweeper", "OrbitalDebrisSweeperReport",
     "CryogenicWholeOrganBioprintingMatrix", "OrganBioprintingReport",
     "AbsoluteOmniscienceSingularityHyperCore", "SingularityHyperCoreState",
+    "NeutrinoDeepSpaceCommunicationArray", "NeutrinoCommsReport",
+    "HyperdimensionalMatterLatticeSynthesizer", "MatterLatticeReport",
+    "PlanetaryGeoMagneticDynamoRestorer", "GeomagneticDynamoReport",
+    "QuantumDotCellularAutomataCore", "QCALogicReport",
+    "AutonomousExoplanetTerraformArchitect", "TerraformingProjectReport",
+    "SubatomicGluonStringTensorSolver", "QCDLatticeReport",
+    "HolographicNonLocalityEntanglementHub", "NonLocalEntanglementReport",
+    "ApexOmniversalSingularitySovereignCore", "SovereignSingularityState",
 ]
