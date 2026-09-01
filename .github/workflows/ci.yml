@@ -1,0 +1,57 @@
+name: ZASI CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Test (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "${{ matrix.python-version }}" }
+      - name: Install dependencies
+        run: pip install build coverage
+      - name: Run unit tests
+        run: python3 -m unittest discover -s tests -q
+      - name: Run coverage
+        run: |
+          coverage run -m unittest discover -s tests -q
+          coverage report --fail-under=60
+          COVERAGE_PCT=$(coverage report | tail -1 | awk '{print $NF}')
+          echo "### Coverage: $COVERAGE_PCT" >> $GITHUB_STEP_SUMMARY
+      - name: Run React component tests
+        run: node tests/test_components.js
+
+  build:
+    name: Build Distribution
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install build
+      - name: Build wheel and sdist
+        run: python3 -m build
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: zasi-dist
+          path: dist/
+
+  docker:
+    name: Docker Build Check
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build -t zasi:ci .

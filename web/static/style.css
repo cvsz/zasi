@@ -992,3 +992,179 @@ body { overflow: auto; height: auto; }
     outline: none;
 }
 .mcp-textarea:focus { border-color: var(--cyan-glow); }
+
+/* ═══════════════════════════════════════════════════════════════
+   Light Theme & Advanced UI Overlays (Toasts, Modals, Responsive)
+   ═══════════════════════════════════════════════════════════════ */
+
+body.theme-light {
+    --bg-base: #f8fafc;
+    --panel-bg: rgba(255, 255, 255, 0.92);
+    --panel-border: rgba(14, 165, 233, 0.35);
+    --cyan-glow: #0284c7;
+    --cyan-dim: #0369a1;
+    --text-main: #0f172a;
+    --text-muted: #64748b;
+    background-color: var(--bg-base);
+    color: var(--text-main);
+}
+
+body.theme-light .top-bar {
+    background: rgba(255, 255, 255, 0.98);
+}
+
+body.theme-light .code-out,
+body.theme-light .log-window,
+body.theme-light .chat-window {
+    background: #e2e8f0;
+    color: #0f172a;
+}
+
+body.theme-light .chat-input,
+body.theme-light .mcp-textarea,
+body.theme-light .search-input {
+    background: #ffffff;
+    color: #0f172a;
+}
+
+/* Toast Container */
+.toast-container {
+    position: fixed;
+    top: 1.5rem;
+    right: 1.5rem;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.toast-banner {
+    padding: 0.65rem 1.25rem;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+    animation: toast-slide 0.25s ease-out;
+}
+
+.toast-success { background: #10b981; color: #ffffff; }
+.toast-error   { background: #f43f5e; color: #ffffff; }
+.toast-info    { background: #0284c7; color: #ffffff; }
+
+@keyframes toast-slide {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+/* Modal & Command Palette */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(3, 7, 18, 0.82);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.palette-modal {
+    background: var(--panel-bg);
+    border: 1px solid var(--cyan-glow);
+    border-radius: 12px;
+    width: 90%;
+    max-width: 520px;
+    padding: 1.25rem;
+    box-shadow: 0 8px 32px rgba(56, 189, 248, 0.25);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.palette-input {
+    background: rgba(0, 0, 0, 0.55);
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    padding: 0.65rem 1rem;
+    color: var(--text-main);
+    font-size: 0.9rem;
+    outline: none;
+}
+
+.palette-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.palette-item {
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: background 0.15s;
+    font-family: var(--font-mono);
+}
+
+.palette-item:hover {
+    background: rgba(56, 189, 248, 0.18);
+    color: var(--cyan-glow);
+}
+
+/* Route Fade Transition */
+.route-fade {
+    animation: fade-in 0.2s ease-in;
+}
+
+@keyframes fade-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Voice Mic listening state */
+.btn.listening {
+    animation: pulse-mic 1s infinite alternate;
+    border-color: #f43f5e;
+    color: #f43f5e;
+}
+
+@keyframes pulse-mic {
+    from { opacity: 0.6; }
+    to { opacity: 1; }
+}
+
+/* Hypergraph container sizing */
+.hypergraph-container {
+    width: 100%;
+    height: 440px;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+/* Fullscreen Chat Mode */
+.fullscreen-chat-mode {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 999;
+    max-width: 100vw;
+    background: var(--bg-base);
+    padding: 2rem;
+}
+
+/* Responsive Media Queries */
+@media (max-width: 768px) {
+    .telemetry-grid { grid-template-columns: 1fr; }
+    .cockpit-grid { grid-template-columns: 1fr; }
+    .hypergraph-container { height: 260px; }
+    .top-bar { flex-direction: column; align-items: flex-start; }
+    .nav-links { overflow-x: auto; width: 100%; padding-bottom: 0.25rem; }
+}

@@ -1,10 +1,60 @@
 // ZASI J.A.R.V.I.S. Command Cockpit — React 18 + React Router v6
-// Routes: / (Overview) | /jarvis | /subsystems | /cockpit | /mcp
-const { useState, useEffect, useRef } = React;
-const { BrowserRouter, Routes, Route, NavLink, Outlet } = ReactRouterDOM;
+// Ultra-Advanced Full Feature Frontend (Themes, Command Palette, Toasts, 3D Hypergraph, Voice)
+const { useState, useEffect, useRef, createContext, useContext } = React;
+const { BrowserRouter, Routes, Route, NavLink, Outlet, useNavigate } = ReactRouterDOM;
 
 // ─────────────────────────────────────────────
-// API helpers
+// Contexts: Theme & Toasts
+// ─────────────────────────────────────────────
+const ThemeContext = createContext();
+const ToastContext = createContext();
+
+function ThemeProvider({ children }) {
+    const [theme, setTheme] = useState(() => localStorage.getItem('zasi_theme') || 'dark');
+    
+    useEffect(() => {
+        document.body.className = theme === 'light' ? 'theme-light' : 'theme-dark';
+        localStorage.setItem('zasi_theme', theme);
+    }, [theme]);
+
+    const toggleTheme = () => setTheme(t => t === 'dark' ? 'light' : 'dark');
+
+    return (
+        <ThemeContext.Provider value={{ theme, toggleTheme }}>
+            {children}
+        </ThemeContext.Provider>
+    );
+}
+
+function ToastProvider({ children }) {
+    const [toasts, setToasts] = useState([]);
+
+    const addToast = (msg, type = 'info') => {
+        const id = Date.now() + Math.random();
+        setToasts(prev => [...prev, { id, msg, type }]);
+        setTimeout(() => {
+            setToasts(prev => prev.filter(t => t.id !== id));
+        }, 4000);
+    };
+
+    return (
+        <ToastContext.Provider value={{ addToast }}>
+            {children}
+            <div className="toast-container">
+                {toasts.map(t => (
+                    <div key={t.id} className={`toast-banner toast-${t.type}`}>
+                        {t.type === 'success' && '✓ '}
+                        {t.type === 'error' && '⚠ '}
+                        {t.msg}
+                    </div>
+                ))}
+            </div>
+        </ToastContext.Provider>
+    );
+}
+
+// ─────────────────────────────────────────────
+// API & WebSocket helpers
 // ─────────────────────────────────────────────
 const api = {
     get:  (url)       => fetch(url).then(r => r.json()),
@@ -15,9 +65,6 @@ const api = {
     }).then(r => r.json())
 };
 
-// ─────────────────────────────────────────────
-// TTS helper
-// ─────────────────────────────────────────────
 function speakPersona(text, persona) {
     if (!('speechSynthesis' in window)) return;
     const u   = new SpeechSynthesisUtterance(text);
@@ -66,6 +113,7 @@ function HypergraphCanvas() {
         scene.add(group);
 
         const onResize = () => {
+            if (!el) return;
             camera.aspect = el.clientWidth / el.clientHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(el.clientWidth, el.clientHeight);
@@ -89,11 +137,11 @@ function HypergraphCanvas() {
         };
     }, []);
 
-    return <div ref={mountRef} style={{ width: '100%', height: '480px', borderRadius: '12px', overflow: 'hidden' }} />;
+    return <div ref={mountRef} className="hypergraph-container" />;
 }
 
 // ─────────────────────────────────────────────
-// Hook: live telemetry
+// Live Telemetry Hook
 // ─────────────────────────────────────────────
 function useTelemetry(ms = 2000) {
     const [tele, setTele] = useState(null);
@@ -107,18 +155,93 @@ function useTelemetry(ms = 2000) {
 }
 
 // ─────────────────────────────────────────────
-// Page: Overview (/)
+// Command Palette Modal (Ctrl+K / Cmd+K)
 // ─────────────────────────────────────────────
-function OverviewPage() {
-    const tele         = useTelemetry();
-    const [status, setStatus] = useState(null);
+function CommandPalette({ isOpen, onClose }) {
+    const [query, setQuery] = useState('');
+    const navigate = useNavigate();
+    const { addToast } = useContext(ToastContext);
+
+    const actions = [
+        { label: 'Go to Overview', path: '/' },
+        { label: 'Go to J.A.R.V.I.S. Chat', path: '/jarvis' },
+        { label: 'Go to 168 Subsystems Catalog', path: '/subsystems' },
+        { label: 'Go to Quantum Hardware Cockpit', path: '/cockpit' },
+        { label: 'Go to MCP JSON-RPC Console', path: '/mcp' },
+        { label: 'Trigger Autonomous Daemon Tick', action: () => api.post('/api/tick', {}).then(() => addToast('Daemon Tick Executed', 'success')) },
+        { label: 'Trigger Safe 320x RSI Upgrade', action: () => api.post('/api/rsi/upgrade', { version: 'v30.0.0-apex-prime' }).then(() => addToast('RSI Upgrade Deployed', 'success')) },
+        { label: 'Mutate Cognitive Vector (+10 IQ)', action: () => api.post('/api/mutate', { variable: 'iq', delta: 10 }).then(() => addToast('State Mutated: +10 IQ', 'info')) },
+    ];
+
+    const filtered = actions.filter(a => a.label.toLowerCase().includes(query.toLowerCase()));
 
     useEffect(() => {
-        const fetch_ = () => api.get('/api/status').then(setStatus).catch(() => {});
-        fetch_();
-        const id = setInterval(fetch_, 3000);
-        return () => clearInterval(id);
+        const handleKeyDown = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                e.preventDefault();
+                onClose();
+            }
+            if (e.key === 'Escape' && isOpen) {
+                onClose();
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [isOpen, onClose]);
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="modal-overlay" onClick={onClose}>
+            <div className="palette-modal" onClick={e => e.stopPropagation()}>
+                <input
+                    autoFocus
+                    className="palette-input"
+                    placeholder="Type command or route..."
+                    value={query}
+                    onChange={e => setQuery(e.target.value)}
+                />
+                <div className="palette-list">
+                    {filtered.map((item, idx) => (
+                        <div
+                            key={idx}
+                            className="palette-item"
+                            onClick={() => {
+                                if (item.path) navigate(item.path);
+                                if (item.action) item.action();
+                                onClose();
+                            }}
+                        >
+                            ⚡ {item.label}
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ─────────────────────────────────────────────
+// Page: Overview
+// ─────────────────────────────────────────────
+function OverviewPage() {
+    const tele = useTelemetry();
+    const [status, setStatus] = useState(null);
+    const { addToast } = useContext(ToastContext);
+
+    useEffect(() => {
+        api.get('/api/status').then(setStatus).catch(() => {});
     }, []);
+
+    const exportTelemetry = () => {
+        const blob = new Blob([JSON.stringify({ telemetry: tele, status }, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `zasi_telemetry_${Date.now()}.json`;
+        a.click();
+        addToast('Telemetry exported to JSON', 'success');
+    };
 
     const meters = [
         { label: 'CPU',         val: tele ? `${tele.cpu_load?.toFixed(1)}%` : '—',                      pct: tele?.cpu_load || 0 },
@@ -132,8 +255,11 @@ function OverviewPage() {
     ];
 
     return (
-        <div className="page">
-            <h2 className="page-title">⚡ Overview — Omniversal Status</h2>
+        <div className="page route-fade">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h2 className="page-title">⚡ Overview — Omniversal Status</h2>
+                <button className="btn secondary small" onClick={exportTelemetry}>📥 Export JSON</button>
+            </div>
 
             <div className="arc-reactor-ring">
                 <div className="arc-inner"><div className="arc-glow" /></div>
@@ -153,9 +279,9 @@ function OverviewPage() {
                 <div className="card-header">COGNITIVE STATE VECTOR</div>
                 <pre className="code-out">{status ? JSON.stringify(status.state, null, 2) : 'Loading...'}</pre>
                 <div className="btn-row">
-                    <button className="btn primary"   onClick={() => api.post('/api/tick', {}).then(d => setStatus(p => ({ ...p, state: d.state })))}>⚡ Daemon Tick</button>
-                    <button className="btn secondary"  onClick={() => api.post('/api/rsi/upgrade', { version: 'v30.0.0-apex-prime' })}>🔁 RSI Upgrade</button>
-                    <button className="btn accent"     onClick={() => api.post('/api/mutate', { variable: 'iq', delta: 10 })}>+10 IQ</button>
+                    <button className="btn primary" onClick={() => api.post('/api/tick', {}).then(d => { setStatus(p => ({ ...p, state: d.state })); addToast('Tick complete', 'success'); })}>⚡ Daemon Tick</button>
+                    <button className="btn secondary" onClick={() => api.post('/api/rsi/upgrade', { version: 'v30.0.0-apex-prime' }).then(() => addToast('320x RSI Active', 'success'))}>🔁 RSI Upgrade</button>
+                    <button className="btn accent" onClick={() => api.post('/api/mutate', { variable: 'iq', delta: 10 }).then(d => { setStatus(p => ({ ...p, state: d.state })); addToast('+10 IQ Added', 'info'); })}>+10 IQ</button>
                 </div>
             </div>
 
@@ -177,15 +303,17 @@ function OverviewPage() {
 }
 
 // ─────────────────────────────────────────────
-// Page: J.A.R.V.I.S. Chat (/jarvis)
+// Page: J.A.R.V.I.S. Chat (with Voice Input & Fullscreen)
 // ─────────────────────────────────────────────
 function JarvisPage() {
     const [messages, setMessages] = useState([
         { speaker: 'J.A.R.V.I.S.', text: 'Good day, Sir. All 168 subsystems online. How may I assist?', cls: 'jarvis-msg' }
     ]);
-    const [input,   setInput]   = useState('');
+    const [input, setInput] = useState('');
     const [persona, setPersona] = useState('JARVIS');
     const [voiceOn, setVoiceOn] = useState(true);
+    const [isFullscreen, setIsFullscreen] = useState(false);
+    const [listening, setListening] = useState(false);
     const chatRef = useRef(null);
 
     useEffect(() => {
@@ -206,11 +334,29 @@ function JarvisPage() {
         }
     };
 
+    const startVoiceInput = () => {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+            alert('Speech recognition not supported in this browser.');
+            return;
+        }
+        const recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.onstart = () => setListening(true);
+        recognition.onend = () => setListening(false);
+        recognition.onresult = (e) => {
+            const transcript = e.results[0][0].transcript;
+            setInput(transcript);
+        };
+        recognition.start();
+    };
+
     return (
-        <div className="page">
+        <div className={`page route-fade ${isFullscreen ? 'fullscreen-chat-mode' : ''}`}>
             <h2 className="page-title">🤖 J.A.R.V.I.S. Conversational Core</h2>
             <div className="card">
-                <div className="card-header" style={{ display:'flex', gap:'1rem', alignItems:'center', flexWrap:'wrap' }}>
+                <div className="card-header" style={{ display:'flex', gap:'0.75rem', alignItems:'center', flexWrap:'wrap' }}>
                     <span>PERSONA</span>
                     <select className="persona-select" value={persona} onChange={e => setPersona(e.target.value)}>
                         <option value="JARVIS">J.A.R.V.I.S. — Invariant SMT Prover</option>
@@ -220,9 +366,12 @@ function JarvisPage() {
                     <button className="btn secondary small" onClick={() => setVoiceOn(v => !v)}>
                         {voiceOn ? '🔊 Voice ON' : '🔇 Voice OFF'}
                     </button>
+                    <button className="btn secondary small" onClick={() => setIsFullscreen(f => !f)}>
+                        {isFullscreen ? '⛶ Minimize' : '⛶ Fullscreen'}
+                    </button>
                 </div>
 
-                <div className="chat-window" ref={chatRef}>
+                <div className="chat-window" ref={chatRef} style={{ height: isFullscreen ? '70vh' : '360px' }}>
                     {messages.map((m, i) => (
                         <div className={`chat-msg ${m.cls}`} key={i}>
                             <span className="speaker">{m.speaker}</span>
@@ -239,6 +388,9 @@ function JarvisPage() {
                         onKeyDown={e => e.key === 'Enter' && send()}
                         placeholder={`Command ${persona}...`}
                     />
+                    <button className={`btn secondary small ${listening ? 'listening' : ''}`} onClick={startVoiceInput} title="Voice Input">
+                        {listening ? '🔴 Listening...' : '🎤 Mic'}
+                    </button>
                     <button className="btn primary" onClick={send}>TRANSMIT</button>
                 </div>
             </div>
@@ -247,33 +399,25 @@ function JarvisPage() {
 }
 
 // ─────────────────────────────────────────────
-// Page: Subsystems Catalog (/subsystems)
+// Page: Subsystems Catalog (with Detail Modal)
 // ─────────────────────────────────────────────
-function SubsystemCard({ s }) {
-    const [result, setResult] = useState(null);
-    const probe = () => api.get(`/api/execute/${s.module}`).then(setResult).catch(() => {});
-    return (
-        <div className="subsystem-card">
-            <div className="subsystem-id">#{s.id}</div>
-            <h4 className="subsystem-name">{s.name}</h4>
-            <div className="meta">Module: {s.module}</div>
-            <div className="meta">Category: {s.category}</div>
-            <button className="btn secondary small" onClick={probe}>PROBE</button>
-            {result && <pre className="code-out small">{JSON.stringify(result, null, 2)}</pre>}
-        </div>
-    );
-}
-
 function SubsystemsPage() {
     const [catalog, setCatalog] = useState([]);
-    const [filter,  setFilter]  = useState('');
-    const [loading, setLoading] = useState(true);
+    const [filter, setFilter] = useState('');
+    const [selected, setSelected] = useState(null);
+    const [probeResult, setProbeResult] = useState(null);
+    const { addToast } = useContext(ToastContext);
 
     useEffect(() => {
-        api.get('/api/subsystems')
-            .then(d => { setCatalog(d.catalog || []); setLoading(false); })
-            .catch(() => setLoading(false));
+        api.get('/api/subsystems').then(d => setCatalog(d.catalog || []));
     }, []);
+
+    const runProbe = (module) => {
+        api.get(`/api/execute/${module}`).then(res => {
+            setProbeResult(res);
+            addToast(`Subsystem probe completed`, 'success');
+        });
+    };
 
     const filtered = catalog.filter(s =>
         s.name.toLowerCase().includes(filter.toLowerCase()) ||
@@ -282,21 +426,45 @@ function SubsystemsPage() {
     );
 
     return (
-        <div className="page">
+        <div className="page route-fade">
             <h2 className="page-title">🔬 168 Subsystems Catalog</h2>
             <div className="card">
                 <input className="search-input" placeholder="Filter by name, category, or ID…" value={filter} onChange={e => setFilter(e.target.value)} />
-                {loading && <p style={{ color: 'var(--accent-cyan)', padding: '1rem' }}>Loading catalog…</p>}
                 <div className="subsystems-grid">
-                    {filtered.map(s => <SubsystemCard key={s.id} s={s} />)}
+                    {filtered.map(s => (
+                        <div className="subsystem-card" key={s.id} onClick={() => { setSelected(s); setProbeResult(null); }}>
+                            <div className="subsystem-id">#{s.id}</div>
+                            <h4 className="subsystem-name">{s.name}</h4>
+                            <div className="meta">Module: {s.module}</div>
+                            <div className="meta">Category: {s.category}</div>
+                        </div>
+                    ))}
                 </div>
             </div>
+
+            {selected && (
+                <div className="modal-overlay" onClick={() => setSelected(null)}>
+                    <div className="palette-modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+                        <div className="subsystem-id">SUBSYSTEM #{selected.id}</div>
+                        <h3 style={{ color: 'var(--cyan-glow)', marginTop: '0.25rem' }}>{selected.name}</h3>
+                        <div className="meta" style={{ marginTop: '0.5rem' }}>Module: <code>{selected.module}</code></div>
+                        <div className="meta">Category: <b>{selected.category}</b></div>
+                        <div className="btn-row" style={{ marginTop: '1rem' }}>
+                            <button className="btn primary" onClick={() => runProbe(selected.module)}>⚡ FIRE PROBE</button>
+                            <button className="btn secondary" onClick={() => setSelected(null)}>CLOSE</button>
+                        </div>
+                        {probeResult && (
+                            <pre className="code-out" style={{ marginTop: '1rem' }}>{JSON.stringify(probeResult, null, 2)}</pre>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
 
 // ─────────────────────────────────────────────
-// Page: Quantum Cockpit (/cockpit)
+// Page: Quantum Cockpit
 // ─────────────────────────────────────────────
 const RUNNERS = [
     { label: '🛡  Surface Code QEC d=7',          key: 'surface_code_qec'           },
@@ -309,12 +477,19 @@ const RUNNERS = [
 
 function CockpitPage() {
     const [outputs, setOutputs] = useState({});
-    const run = (key) => api.get(`/api/execute/${key}`)
-        .then(d  => setOutputs(p => ({ ...p, [key]: d })))
-        .catch(e => setOutputs(p => ({ ...p, [key]: { error: e.message } })));
+    const { addToast } = useContext(ToastContext);
+
+    const run = (key) => {
+        api.get(`/api/execute/${key}`)
+            .then(d => {
+                setOutputs(p => ({ ...p, [key]: d }));
+                addToast(`Executed ${key}`, 'success');
+            })
+            .catch(e => setOutputs(p => ({ ...p, [key]: { error: e.message } })));
+    };
 
     return (
-        <div className="page">
+        <div className="page route-fade">
             <h2 className="page-title">🚀 Quantum Hardware Cockpit</h2>
             <div className="cockpit-grid">
                 {RUNNERS.map(r => (
@@ -332,13 +507,14 @@ function CockpitPage() {
 }
 
 // ─────────────────────────────────────────────
-// Page: MCP Console (/mcp)
+// Page: MCP Console
 // ─────────────────────────────────────────────
 const DEFAULT_MCP = JSON.stringify({ jsonrpc: '2.0', method: 'tools/list', params: {}, id: 1 }, null, 2);
 
 function MCPPage() {
-    const [input,    setInput]    = useState(DEFAULT_MCP);
+    const [input, setInput] = useState(DEFAULT_MCP);
     const [response, setResponse] = useState('');
+    const { addToast } = useContext(ToastContext);
 
     const send = async () => {
         try {
@@ -348,17 +524,19 @@ function MCPPage() {
                 body:    input
             });
             setResponse(JSON.stringify(await res.json(), null, 2));
+            addToast('MCP RPC dispatched', 'success');
         } catch (e) {
             setResponse(`Error: ${e.message}`);
+            addToast('MCP RPC failed', 'error');
         }
     };
 
     return (
-        <div className="page">
+        <div className="page route-fade">
             <h2 className="page-title">🔌 MCP JSON-RPC 2.0 Console</h2>
             <div className="card">
                 <div className="card-header">REQUEST PAYLOAD</div>
-                <textarea className="mcp-textarea" value={input} onChange={e => setInput(e.target.value)} rows={10} />
+                <textarea className="mcp-textarea" value={input} onChange={e => setInput(e.target.value)} rows={8} />
                 <button className="btn primary" style={{ marginTop: '0.75rem' }} onClick={send}>DISPATCH RPC</button>
             </div>
             <div className="card">
@@ -381,12 +559,15 @@ const NAV = [
 ];
 
 function Shell() {
+    const { theme, toggleTheme } = useContext(ThemeContext);
+    const [paletteOpen, setPaletteOpen] = useState(false);
+
     return (
         <div className="shell">
             <header className="top-bar">
                 <div className="logo">
                     <span className="logo-z">Z</span>ASI
-                    <span className="logo-version">v30.0.0 · 168 Subsystems · 320× RSI</span>
+                    <span className="logo-version">v31.0.0 · 168 Subsystems · 320× RSI</span>
                 </div>
                 <nav className="nav-links">
                     {NAV.map(l => (
@@ -396,6 +577,14 @@ function Shell() {
                         </NavLink>
                     ))}
                 </nav>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                    <button className="btn secondary small" onClick={() => setPaletteOpen(true)} title="Command Palette (Ctrl+K)">
+                        ⌘K
+                    </button>
+                    <button className="btn secondary small" onClick={toggleTheme} title="Toggle Theme">
+                        {theme === 'dark' ? '☀️ Light' : '🌙 Dark'}
+                    </button>
+                </div>
             </header>
             <main className="main-content">
                 <Outlet />
@@ -403,28 +592,29 @@ function Shell() {
             <footer className="footer">
                 ZASI Omniversal Superintelligence · React 18 + React Router v6 · 168 Subsystems · MCP/REST Backend
             </footer>
+            <CommandPalette isOpen={paletteOpen} onClose={() => setPaletteOpen(false)} />
         </div>
     );
 }
 
-// ─────────────────────────────────────────────
-// Root App — React Router v6 route tree
-// ─────────────────────────────────────────────
 function App() {
     return (
-        <BrowserRouter>
-            <Routes>
-                <Route path="/" element={<Shell />}>
-                    <Route index           element={<OverviewPage />}    />
-                    <Route path="jarvis"     element={<JarvisPage />}      />
-                    <Route path="subsystems" element={<SubsystemsPage />}  />
-                    <Route path="cockpit"    element={<CockpitPage />}     />
-                    <Route path="mcp"        element={<MCPPage />}         />
-                </Route>
-            </Routes>
-        </BrowserRouter>
+        <ThemeProvider>
+            <ToastProvider>
+                <BrowserRouter>
+                    <Routes>
+                        <Route path="/" element={<Shell />}>
+                            <Route index           element={<OverviewPage />}    />
+                            <Route path="jarvis"     element={<JarvisPage />}      />
+                            <Route path="subsystems" element={<SubsystemsPage />}  />
+                            <Route path="cockpit"    element={<CockpitPage />}     />
+                            <Route path="mcp"        element={<MCPPage />}         />
+                        </Route>
+                    </Routes>
+                </BrowserRouter>
+            </ToastProvider>
+        </ThemeProvider>
     );
 }
 
-// Mount React 18 root
 ReactDOM.createRoot(document.getElementById('root')).render(<App />);

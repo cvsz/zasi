@@ -1,66 +1,61 @@
-.PHONY: all build setup config install test clean run server web help
+.PHONY: all setup test test-api test-js test-all coverage clean build install server run docker-build docker-run ci help
 
 PYTHON ?= python3
 PIP ?= $(PYTHON) -m pip
 PORT ?= 8080
 
-help:
-	@echo "ZASI v30.0.0 Unified Full-Stack Build & Setup Automation"
-	@echo "=========================================================="
-	@echo "make all      - Full setup, config, test, build, and install"
-	@echo "make setup    - Setup build dependencies and requirements"
-	@echo "make config   - Configure environment and verify settings"
-	@echo "make test     - Execute full 165-subsystem unit test suite"
-	@echo "make build    - Package sdist and wheel into dist/"
-	@echo "make install  - Install ZASI wheel into Python environment"
-	@echo "make server   - Launch full-stack backend & 3D Web Cockpit UI"
-	@echo "make run      - Run complete 168-subsystem main.py pipeline"
-	@echo "make clean    - Remove build artifacts, caches, and dist/"
+all: setup test build
 
 setup:
-	@echo "[*] Verifying build toolchain..."
-	@$(PYTHON) -c "import setuptools, build; print('[✓] Python build & setuptools available')" 2>/dev/null || $(PIP) install --break-system-packages build setuptools wheel
+	$(PIP) install --upgrade pip build wheel setuptools coverage
 
-config: setup
-	@echo "[*] Configuring ZASI environment..."
-	@mkdir -p config docs/generated web/static backend
-	@if [ ! -f config/zasi_config.json ]; then \
-		echo '{"version": "25.0.0", "subsystems": 168, "environment": "production", "formal_verification": true, "frontend_port": $(PORT)}' > config/zasi_config.json; \
-	fi
-	@echo "[✓] Configuration initialized: config/zasi_config.json"
+test:
+	$(PYTHON) -m unittest discover -s tests -q
 
-test: config
-	@echo "[*] Running full 165-subsystem test suite..."
-	@$(PYTHON) -m unittest discover -s tests -q
-	@echo "[✓] All 165 test suites passed."
+test-api:
+	$(PYTHON) -m unittest tests.test_api
 
-build: test
-	@echo "[*] Building distribution packages..."
-	@rm -rf dist/ build/ *.egg-info
-	@$(PYTHON) -m build -q
-	@echo "[✓] Build complete: dist/"
-	@ls -lh dist/
+test-js:
+	node tests/test_components.js
 
-install: build
-	@echo "[*] Installing ZASI into environment..."
-	@$(PIP) install --break-system-packages --no-deps --force-reinstall dist/zasi-25.0.0-py3-none-any.whl
-	@echo "[✓] ZASI v30.0.0 installed successfully into environment."
+test-all: test test-api test-js coverage
 
-server: install
-	@echo "=========================================================="
-	@echo "  ZASI Superintelligence Cockpit (Full-Stack Backend + 3D UI)"
-	@echo "  Access Cockpit UI at: http://localhost:$(PORT)"
-	@echo "=========================================================="
-	@$(PYTHON) backend/server.py
-
-all: setup config test build install
-	@echo "=========================================================="
-	@echo "[SUCCESS] ZASI v30.0.0 Full-Stack Build & Install Complete"
-	@echo "=========================================================="
-
-run:
-	@$(PYTHON) main.py
+coverage:
+	coverage run -m unittest discover -s tests -q
+	coverage report -m
 
 clean:
-	@rm -rf dist/ build/ *.egg-info __pycache__ src/__pycache__ tests/__pycache__ .pytest_cache
-	@echo "[✓] Cleaned build artifacts."
+	rm -rf build/ dist/ *.egg-info .coverage htmlcov/ data/*.db
+
+build: clean
+	$(PYTHON) -m build
+
+install: build
+	$(PIP) install --break-system-packages --no-deps --force-reinstall dist/*.whl
+
+server:
+	ZASI_PORT=$(PORT) $(PYTHON) backend/server.py
+
+run:
+	$(PYTHON) main.py
+
+docker-build:
+	docker build -t zasi:31.0.0 .
+
+docker-run:
+	docker run -p 8080:8080 zasi:31.0.0
+
+ci: test-all docker-build
+
+help:
+	@echo "ZASI Full-Stack Automation Makefile"
+	@echo "  make setup       - Install build dependencies"
+	@echo "  make test        - Run 165 unit tests"
+	@echo "  make test-api    - Run backend REST/WebSocket integration tests"
+	@echo "  make test-js     - Run React Router component structure tests"
+	@echo "  make test-all    - Run all unit, integration, and UI tests + coverage"
+	@echo "  make build       - Build wheel & sdist distributions"
+	@echo "  make install     - Build and install wheel"
+	@echo "  make server      - Start J.A.R.V.I.S. React Router & REST/MCP server"
+	@echo "  make run         - Run dialectical pipeline"
+	@echo "  make docker-build- Build Docker image"

@@ -1,0 +1,12 @@
+[run]
+source = src
+omit = tests/*,setup.py
+branch = true
+
+[report]
+show_missing = true
+skip_covered = false
+precision = 2
+
+[html]
+directory = htmlcov
