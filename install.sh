@@ -29,7 +29,7 @@ echo -e "${BLUE}[*] Initializing system configurations & frontend assets...${NC}
 mkdir -p config docs/generated web/static backend
 cat << 'JSONEOF' > config/zasi_config.json
 {
-  "version": "25.0.0",
+  "version": "30.0.0",
   "subsystems": 168,
   "environment": "production",
   "formal_verification": true,
@@ -55,8 +55,9 @@ echo -e "${GREEN}[✓] Distribution packages built in dist/${NC}"
 ls -lh dist/
 
 # 5. Install ZASI Package & CLI
-echo -e "${BLUE}[*] Installing ZASI v30.0.0 package...${NC}"
-$PYTHON_CMD -m pip install --break-system-packages --no-deps --force-reinstall dist/zasi-25.0.0-py3-none-any.whl
+echo -e "${BLUE}[*] Installing latest ZASI wheel package...${NC}"
+WHEEL_FILE=$(ls dist/zasi-*.whl | head -n 1)
+$PYTHON_CMD -m pip install --break-system-packages --no-deps --force-reinstall "$WHEEL_FILE"
 
 # 6. Verify CLI Executable
 if command -v zasi &> /dev/null; then

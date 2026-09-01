@@ -1,5 +1,5 @@
-// ZASI Advanced J.A.R.V.I.S. Command & Voice Cockpit Client v25.0.0
-let scene, camera, renderer, nodesGroup, activeTab = 'overview', voiceEnabled = true;
+// ZASI Ultra-Advanced J.A.R.V.I.S. Command & Voice Cockpit Client v30.0.0
+let scene, camera, renderer, nodesGroup, activeTab = 'overview', voiceEnabled = true, activePersona = 'JARVIS';
 
 // 1. Tab Switcher
 function switchTab(tabId) {
@@ -18,16 +18,23 @@ function switchTab(tabId) {
     }
 }
 
-// 2. Three.js Multiverse 3D Hypergraph
+function selectPersona(persona) {
+    activePersona = persona;
+    const selectElem = document.getElementById('persona-select');
+    if (selectElem) selectElem.value = persona;
+    switchTab('jarvis');
+}
+
+// 2. Three.js Multiverse 3D Hypergraph (168 Orbiting Subsystems)
 function initThreeJS() {
     const container = document.getElementById('canvas-container');
     if (!container) return;
 
     scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x030712, 0.02);
+    scene.fog = new THREE.FogExp2(0x030712, 0.015);
 
     camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 1000);
-    camera.position.z = 24;
+    camera.position.z = 28;
 
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setSize(container.clientWidth, container.clientHeight);
@@ -35,19 +42,19 @@ function initThreeJS() {
     container.appendChild(renderer.domElement);
 
     nodesGroup = new THREE.Group();
-    const geometry = new THREE.SphereGeometry(0.35, 16, 16);
+    const geometry = new THREE.SphereGeometry(0.32, 16, 16);
     const material = new THREE.MeshBasicMaterial({ color: 0x38bdf8, wireframe: true });
     const coreMat = new THREE.MeshBasicMaterial({ color: 0xf43f5e });
 
-    // Center Singularity Omega Core
-    const apexMesh = new THREE.Mesh(new THREE.SphereGeometry(1.2, 32, 32), coreMat);
+    // Center Singularity Apex Prime Core
+    const apexMesh = new THREE.Mesh(new THREE.SphereGeometry(1.4, 32, 32), coreMat);
     nodesGroup.add(apexMesh);
 
-    // 128 Orbiting Subsystem Nodes
-    for (let i = 0; i < 128; i++) {
-        const phi = Math.acos(-1 + (2 * i) / 128);
-        const theta = Math.sqrt(128 * Math.PI) * phi;
-        const radius = 8 + (i % 6) * 1.8;
+    // 168 Orbiting Subsystem Nodes
+    for (let i = 0; i < 168; i++) {
+        const phi = Math.acos(-1 + (2 * i) / 168);
+        const theta = Math.sqrt(168 * Math.PI) * phi;
+        const radius = 9 + (i % 7) * 1.6;
 
         const x = radius * Math.cos(theta) * Math.sin(phi);
         const y = radius * Math.sin(theta) * Math.sin(phi);
@@ -73,8 +80,8 @@ function initThreeJS() {
 function animate() {
     requestAnimationFrame(animate);
     if (nodesGroup) {
-        nodesGroup.rotation.y += 0.0025;
-        nodesGroup.rotation.x += 0.001;
+        nodesGroup.rotation.y += 0.002;
+        nodesGroup.rotation.x += 0.0008;
     }
     if (renderer && scene && camera) {
         renderer.render(scene, camera);
@@ -100,7 +107,6 @@ async function fetchTelemetry() {
             }
 
             document.getElementById('energy-val').innerText = `${data.arc_reactor_gw.toFixed(1)} GW`;
-            document.getElementById('phi-val').innerText = `${data.global_phi.toLocaleString()}`;
 
             if (data.logs) {
                 const logBox = document.getElementById('log-lines');
@@ -126,13 +132,15 @@ async function fetchStatus() {
     }
 }
 
-// 4. J.A.R.V.I.S. Conversational Core
+// 4. J.A.R.V.I.S. Persona Conversational Core
 async function sendJarvisCommand() {
     const inputField = document.getElementById('jarvis-user-input');
     const msg = inputField.value.trim();
     if (!msg) return;
 
-    // Append User message
+    const personaSelect = document.getElementById('persona-select');
+    const persona = personaSelect ? personaSelect.value : 'JARVIS';
+
     appendChatMessage('USER', msg, 'user-msg');
     inputField.value = '';
 
@@ -140,13 +148,13 @@ async function sendJarvisCommand() {
         const res = await fetch('/api/jarvis/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: msg })
+            body: JSON.stringify({ message: msg, persona })
         });
         if (res.ok) {
             const data = await res.json();
-            appendChatMessage('J.A.R.V.I.S.', data.response, 'jarvis-msg');
+            appendChatMessage(data.speaker, data.response, 'jarvis-msg');
             if (voiceEnabled) {
-                speakJarvis(data.response);
+                speakPersona(data.response, data.speaker);
             }
             fetchTelemetry();
         }
@@ -164,18 +172,26 @@ function appendChatMessage(speaker, text, className) {
     chatBox.scrollTop = chatBox.scrollHeight;
 }
 
-function speakJarvis(text) {
+function speakPersona(text, speaker) {
     if ('speechSynthesis' in window) {
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 1.05;
-        utterance.pitch = 0.95;
+        if (speaker === 'FRIDAY') {
+            utterance.pitch = 1.2;
+            utterance.rate = 1.1;
+        } else if (speaker === 'EDITH') {
+            utterance.pitch = 1.0;
+            utterance.rate = 1.15;
+        } else {
+            utterance.pitch = 0.95;
+            utterance.rate = 1.05;
+        }
         window.speechSynthesis.speak(utterance);
     }
 }
 
 function toggleVoiceSpeech() {
     voiceEnabled = !voiceEnabled;
-    alert(`J.A.R.V.I.S. Voice Output is now ${voiceEnabled ? 'ENABLED' : 'MUTED'}`);
+    alert(`Voice Output is now ${voiceEnabled ? 'ENABLED' : 'MUTED'}`);
 }
 
 // 5. Interactive Cognitive Actions
@@ -214,7 +230,7 @@ async function triggerRSIUpgrade() {
         const res = await fetch('/api/rsi/upgrade', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ version: 'v25.0.0-apex-omega' })
+            body: JSON.stringify({ version: 'v30.0.0-apex-prime' })
         });
         if (res.ok) {
             const data = await res.json();
@@ -254,11 +270,14 @@ async function runSubsystem(key) {
         if (res.ok) {
             const data = await res.json();
             let targetId = 'qec-output';
-            if (key === 'drug_discovery') targetId = 'drug-output';
-            if (key === 'interstellar') targetId = 'interstellar-output';
-            if (key === 'omega_singularity') targetId = 'omega-output';
+            if (key === 'fpga_accelerator') targetId = 'fpga-output';
+            if (key === 'quantum_teleportation') targetId = 'teleport-output';
+            if (key === 'ambient_superconductor') targetId = 'sc-output';
+            if (key === 'penrose_ergosphere') targetId = 'penrose-output';
+            if (key === 'apex_prime_superintelligence') targetId = 'apex-prime-output';
 
-            document.getElementById(targetId).innerText = JSON.stringify(data, null, 2);
+            const elem = document.getElementById(targetId);
+            if (elem) elem.innerText = JSON.stringify(data, null, 2);
         }
     } catch (e) {
         alert('Execution failed');
