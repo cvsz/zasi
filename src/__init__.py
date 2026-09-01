@@ -46,6 +46,10 @@ from .autonomous_agi_benchmark import AutonomousAGIBenchmarkSuite, BenchmarkScor
 from .hyperscale_cxl_fabric import HyperscaleCXLFabricManager, AcceleratorNode
 from .space_lagrange_mesh import SpaceLagrangeMeshOrchestrator, OrbitalRelayStation
 from .biological_simulation import BiologicalSimulationEngine, BioMolecularState
+from .fusion_tokamak_optimizer import FusionTokamakOptimizer, TokamakPlasmaState
+from .planetary_climate_actuator import PlanetaryClimateActuator, ClimateActuationPlan
+from .optical_bci_neural_bus import OpticalBCINeuralBus, NeuralSignalFrame
+from .synthetic_galaxy_sim import SyntheticGalaxySimulator, CosmicSimulationSlice
 
 __all__ = [
     "Proposal",
@@ -128,5 +132,13 @@ __all__ = [
     "SpaceLagrangeMeshOrchestrator",
     "OrbitalRelayStation",
     "BiologicalSimulationEngine",
-    "BioMolecularState"
+    "BioMolecularState",
+    "FusionTokamakOptimizer",
+    "TokamakPlasmaState",
+    "PlanetaryClimateActuator",
+    "ClimateActuationPlan",
+    "OpticalBCINeuralBus",
+    "NeuralSignalFrame",
+    "SyntheticGalaxySimulator",
+    "CosmicSimulationSlice"
 ]

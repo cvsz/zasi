@@ -1,14 +1,18 @@
 # ZASI: Apex J.A.R.V.I.S. / F.R.I.D.A.Y. / E.D.I.T.H. Superintelligence Framework
 
-**ZASI** is a total-horizon, multimodal, quantum-thermodynamic, cryptographically verified Artificial Superintelligence (ASI) framework equipped with the **J.A.R.V.I.S. / F.R.I.D.A.Y. / E.D.I.T.H.** tactical persona swarm, CXL 3.0 accelerator fabric, Deep Space Lagrange relay mesh, bio-molecular simulator, universal AGI benchmark suite, holographic WebXR Spatial HUD, Arc Reactor energy management, neural audio wake-word synthesis, autonomous Git self-evolution, Linux kernel telemetry probes, and robotics G-code drivers.
+**ZASI** is a total-horizon, multimodal, quantum-thermodynamic, cryptographically verified Artificial Superintelligence (ASI) framework equipped with the **J.A.R.V.I.S. / F.R.I.D.A.Y. / E.D.I.T.H.** tactical persona swarm, Tokamak fusion plasma optimizer, planetary climate geoengineering actuator, 65k-channel direct cortical optical BCI, N-body cosmological simulator, CXL 3.0 accelerator fabric, Deep Space Lagrange relay mesh, bio-molecular simulator, universal AGI benchmark suite, holographic WebXR Spatial HUD, Arc Reactor energy management, neural audio wake-word synthesis, autonomous Git self-evolution, Linux kernel telemetry probes, and robotics G-code drivers.
 
 ---
 
-## 36 Unified Subsystems Matrix
+## 40 Unified Subsystems Matrix
 
 | Category | Subsystem | Module | Description |
 | :--- | :--- | :--- | :--- |
 | **Tactical Persona Swarm** | J.A.R.V.I.S. / F.R.I.D.A.Y. / E.D.I.T.H. | `src/avengers_persona_swarm.py` | Multi-persona strategic, compute, and security swarm |
+| **Direct Cortical BCI** | Optical Neural Bus (65k Channels) | `src/optical_bci_neural_bus.py` | High-channel cortical electrophysiology & optogenetic thought decoding |
+| **Fusion Energy** | Tokamak Magnetic Confinement Core | `src/fusion_tokamak_optimizer.py` | Magnetohydrodynamic (MHD) plasma equilibrium & Greenwald safety limit |
+| **Planetary Actuation** | Climate Geoengineering Actuator | `src/planetary_climate_actuator.py` | SAI & ocean alkalinity radiation balancing under planetary boundaries |
+| **Cosmology** | N-Body Cosmological Simulator | `src/synthetic_galaxy_sim.py` | Dark matter halo virialization & relativistic Kerr accretion disks |
 | **Voice & Multimodal** | J.A.R.V.I.S. Audio/Vision Deck | `src/javis_voice_multimodal.py` | Neural audio waveform synthesis and visual HUD tracking |
 | **Host Telemetry** | Live Linux Kernel Supervisor | `src/os_telemetry_supervisor.py` | Real-time `/proc` metrics (CPU load, RAM, PIDs) |
 | **Hardware Actuation** | Robotics & Smart Facility IoT | `src/robotics_iot.py` | Formally verified G-code generator & facility sensor monitor |
@@ -53,10 +57,10 @@
 # Automated Setup & Self-Test
 ./install.sh
 
-# Run Complete Apex J.A.R.V.I.S. Framework (v8.0.0)
+# Run Complete Apex J.A.R.V.I.S. Framework (v9.0.0)
 python3 main.py
 
-# Run Full 33-Subsystem Unit & Integration Test Suite
+# Run Full 37-Subsystem Unit & Integration Test Suite
 python3 -m unittest discover -s tests
 
 # Interactive Voice/Terminal Shell

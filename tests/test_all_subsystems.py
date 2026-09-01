@@ -284,5 +284,36 @@ class TestZASISubsystems(unittest.TestCase):
         self.assertLess(state.gibbs_free_energy_kcal_mol, 0.0)
 
 
+    # ----- Cosmos & Energy Frontier: 4 new modules (v9.0.0) -----
+
+    def test_fusion_tokamak_optimizer(self):
+        from src import FusionTokamakOptimizer
+        tokamak = FusionTokamakOptimizer()
+        state = tokamak.optimize_plasma_equilibrium(thermal_power_target_mw=500.0)
+        self.assertTrue(tokamak.verify_greenwald_limit(state))
+        self.assertGreater(state.fusion_gain_factor_q, 20.0)
+
+    def test_planetary_climate_actuator(self):
+        from src import PlanetaryClimateActuator
+        climate = PlanetaryClimateActuator()
+        plan = climate.synthesize_mitigation_vector(target_cooling_c=0.5)
+        self.assertTrue(plan.boundary_safe)
+        self.assertLess(plan.radiative_forcing_delta_wm2, 0.0)
+
+    def test_optical_bci_neural_bus(self):
+        from src import OpticalBCINeuralBus
+        bci = OpticalBCINeuralBus()
+        frame = bci.decode_cortical_telemetry("channel_stream_raw")
+        self.assertTrue(frame.sar_safety_verified)
+        self.assertEqual(frame.active_channels, 65536)
+
+    def test_synthetic_galaxy_simulator(self):
+        from src import SyntheticGalaxySimulator
+        sim = SyntheticGalaxySimulator()
+        slice_res = sim.step_cosmological_slice(target_redshift=0.5)
+        self.assertTrue(slice_res.einstein_conservation_verified)
+        self.assertGreater(slice_res.particle_count, 1_000_000)
+
+
 if __name__ == "__main__":
     unittest.main()
