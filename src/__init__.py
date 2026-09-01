@@ -197,6 +197,17 @@ from .subatomic_gluon_string_tensor_solver import SubatomicGluonStringTensorSolv
 from .holographic_non_locality_entanglement_hub import HolographicNonLocalityEntanglementHub, NonLocalEntanglementReport
 from .apex_omniversal_singularity_sovereign_core import ApexOmniversalSingularitySovereignCore, SovereignSingularityState
 
+
+# v29.0.0 Subsystems #153-#160
+from .macroscopic_quantum_teleportation_matrix import MacroscopicQuantumTeleportationMatrix, QuantumTeleportationReport
+from .subquantum_vacuum_superconductor_forge import SubquantumVacuumSuperconductorForge, SuperconductorForgeReport
+from .relativistic_kerr_black_hole_penrose_harvester import RelativisticKerrBlackHolePenroseHarvester, PenroseHarvesterReport
+from .hyperdimensional_qualia_phenomenology_synthesizer import HyperdimensionalQualiaPhenomenologySynthesizer, QualiaSynthesisReport
+from .galactic_scale_stellar_engine_shkadov_thruster import GalacticScaleStellarEngineShkadovThruster, StellarEngineReport
+from .cosmic_inflationary_multiverse_topologist import CosmicInflationaryMultiverseTopologist, MultiverseTopologistReport
+from .transfinite_higher_category_topos_prover import TransfiniteHigherCategoryToposProver, HigherToposReport
+from .supreme_omniversal_singularity_apex_infinite import SupremeOmniversalSingularityApexInfinite, ApexInfiniteSingularityState
+
 __all__ = [
     "Proposal",
     "VerificationResult",
@@ -436,4 +447,12 @@ __all__ = [
     "SubatomicGluonStringTensorSolver", "QCDLatticeReport",
     "HolographicNonLocalityEntanglementHub", "NonLocalEntanglementReport",
     "ApexOmniversalSingularitySovereignCore", "SovereignSingularityState",
+    "MacroscopicQuantumTeleportationMatrix", "QuantumTeleportationReport",
+    "SubquantumVacuumSuperconductorForge", "SuperconductorForgeReport",
+    "RelativisticKerrBlackHolePenroseHarvester", "PenroseHarvesterReport",
+    "HyperdimensionalQualiaPhenomenologySynthesizer", "QualiaSynthesisReport",
+    "GalacticScaleStellarEngineShkadovThruster", "StellarEngineReport",
+    "CosmicInflationaryMultiverseTopologist", "MultiverseTopologistReport",
+    "TransfiniteHigherCategoryToposProver", "HigherToposReport",
+    "SupremeOmniversalSingularityApexInfinite", "ApexInfiniteSingularityState",
 ]

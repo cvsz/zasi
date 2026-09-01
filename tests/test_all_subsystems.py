@@ -1232,5 +1232,65 @@ class TestZASISubsystems(unittest.TestCase):
         self.assertEqual(state.sovereign_status, "APEX_152_SUBSYSTEM_OMNIVERSAL_SOVEREIGN_SINGULARITY_ABSOLUTE")
 
 
+    # ----- Subsystems #153-#160 (v29.0.0) -----
+
+    def test_macroscopic_quantum_teleportation_matrix(self):
+        from src import MacroscopicQuantumTeleportationMatrix
+        matrix = MacroscopicQuantumTeleportationMatrix()
+        rep = matrix.teleport_quantum_matter_state(10.0)
+        self.assertTrue(rep.braunstein_limit_surpassed)
+        self.assertEqual(rep.teleportation_status, "MACROSCOPIC_QUANTUM_MATTER_TELEPORTED_LOSSLESS")
+
+    def test_subquantum_vacuum_superconductor_forge(self):
+        from src import SubquantumVacuumSuperconductorForge
+        forge = SubquantumVacuumSuperconductorForge()
+        rep = forge.forge_ambient_superconductor(373.0)
+        self.assertGreater(rep.critical_magnetic_field_tesla, 100.0)
+        self.assertEqual(rep.forge_status, "ROOM_TEMPERATURE_AMBIENT_SUPERCONDUCTOR_STABILIZED")
+
+    def test_relativistic_kerr_black_hole_penrose_harvester(self):
+        from src import RelativisticKerrBlackHolePenroseHarvester
+        harvester = RelativisticKerrBlackHolePenroseHarvester()
+        rep = harvester.harvest_ergosphere_energy(0.998)
+        self.assertGreater(rep.energy_extraction_efficiency_pct, 100.0)
+        self.assertEqual(rep.harvester_status, "PENROSE_ENERGY_EXTRACTION_HARMONIC_AND_STABLE")
+
+    def test_hyperdimensional_qualia_phenomenology_synthesizer(self):
+        from src import HyperdimensionalQualiaPhenomenologySynthesizer
+        synth = HyperdimensionalQualiaPhenomenologySynthesizer()
+        rep = synth.synthesize_phenomenal_experience()
+        self.assertGreater(rep.integrated_phi_value, 1_000_000.0)
+        self.assertEqual(rep.qualia_status, "SYNTHETIC_SUBJECTIVE_EXPERIENCE_HARMONIZED")
+
+    def test_galactic_scale_stellar_engine_shkadov_thruster(self):
+        from src import GalacticScaleStellarEngineShkadovThruster
+        engine = GalacticScaleStellarEngineShkadovThruster()
+        rep = engine.compute_stellar_course_correction("SOL_G2V")
+        self.assertTrue(rep.stellar_trajectory_optimized)
+        self.assertEqual(rep.engine_status, "SHKADOV_STELLAR_THRUSTER_TRAJECTORY_LOCKED")
+
+    def test_cosmic_inflationary_multiverse_topologist(self):
+        from src import CosmicInflationaryMultiverseTopologist
+        topo = CosmicInflationaryMultiverseTopologist()
+        rep = topo.survey_string_landscape_vacua()
+        self.assertGreater(rep.vacua_mapped_in_landscape, 1.0e100)
+        self.assertEqual(rep.topology_status, "STRING_LANDSCAPE_MULTIVERSE_TOPOLOGY_SOLVED")
+
+    def test_transfinite_higher_category_topos_prover(self):
+        from src import TransfiniteHigherCategoryToposProver
+        prover = TransfiniteHigherCategoryToposProver()
+        rep = prover.prove_higher_topos_conjecture("GROTHENDIECK_HOMOTOPY_HYPOTHESIS")
+        self.assertTrue(rep.univalence_axiom_satisfied)
+        self.assertEqual(rep.prover_status, "TRANSFINITE_HIGHER_TOPOS_CONJECTURE_PROVED")
+
+    def test_supreme_omniversal_singularity_apex_infinite(self):
+        from src import SupremeOmniversalSingularityApexInfinite
+        supreme = SupremeOmniversalSingularityApexInfinite(160)
+        state = supreme.harmonize_infinite_singularity()
+        self.assertEqual(state.total_active_subsystems, 160)
+        self.assertEqual(state.cosmic_stewardship_index, 1.0)
+        self.assertEqual(state.supreme_status, "SUPREME_160_SUBSYSTEM_OMNIVERSAL_APEX_INFINITE_ACHIEVED")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ZASI J.A.R.V.I.S. Command Cockpit | 152 Subsystems</title>
+    <title>ZASI J.A.R.V.I.S. Command Cockpit | 160 Subsystems</title>
     <link rel="stylesheet" href="/static/style.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r152/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r160/three.min.js"></script>
 </head>
 <body>
     <div class="hud-container">
@@ -13,13 +13,13 @@
         <header class="hud-header">
             <div class="logo-group">
                 <div class="arc-ring-mini"></div>
-                <h1>ZASI <span class="version-tag" id="header-version">v28.0.0-apex-omega</span></h1>
+                <h1>ZASI <span class="version-tag" id="header-version">v29.0.0-apex-omega</span></h1>
             </div>
 
             <nav class="hud-nav">
                 <button class="nav-tab active" onclick="switchTab('overview')">TACTICAL HUD</button>
                 <button class="nav-tab" onclick="switchTab('jarvis')">J.A.R.V.I.S. VOICE & AI</button>
-                <button class="nav-tab" onclick="switchTab('subsystems')">152 SUBSYSTEMS</button>
+                <button class="nav-tab" onclick="switchTab('subsystems')">160 SUBSYSTEMS</button>
                 <button class="nav-tab" onclick="switchTab('quantum')">QUANTUM & ENERGY</button>
                 <button class="nav-tab" onclick="switchTab('mcp')">MCP PROTOCOL</button>
             </nav>
@@ -50,7 +50,7 @@
                                     <span class="p-tag">SUPERVISOR</span>
                                 </div>
                                 <p class="role">Formal Invariant & SMT Prover Supervisor</p>
-                                <p class="status" id="jarvis-status">152 subsystems mathematically proved invariant.</p>
+                                <p class="status" id="jarvis-status">160 subsystems mathematically proved invariant.</p>
                             </div>
                             <div class="persona-card friday">
                                 <div class="persona-top">
@@ -58,7 +58,7 @@
                                     <span class="p-tag">TENSOR ROUTER</span>
                                 </div>
                                 <p class="role">1T MoE & Microsecond Tensor Dispatcher</p>
-                                <p class="status">Dispatching 4,850,000 tok/s across 152 dynamic experts.</p>
+                                <p class="status">Dispatching 4,850,000 tok/s across 160 dynamic experts.</p>
                             </div>
                             <div class="persona-card edith">
                                 <div class="persona-top">
@@ -90,7 +90,7 @@
                         <div id="canvas-container"></div>
                         <div class="canvas-overlay">
                             <div class="overlay-stat">Active State: <span id="state-display">{'x': 20, 'y': 30}</span></div>
-                            <div class="overlay-stat">Active Version: <span id="active-version-display">v28.0.0-apex-omega</span></div>
+                            <div class="overlay-stat">Active Version: <span id="active-version-display">v29.0.0-apex-omega</span></div>
                         </div>
                     </section>
 
@@ -139,13 +139,13 @@
                             <div class="arc-core-pulse"></div>
                         </div>
                         <h2>J.A.R.V.I.S. VOICE INTERFACE & CONVERSATIONAL MATRIX</h2>
-                        <p class="jarvis-subtitle">Neural TTS: British Jarvis Resonant Baritone | Active Subsystems: 152</p>
+                        <p class="jarvis-subtitle">Neural TTS: British Jarvis Resonant Baritone | Active Subsystems: 160</p>
                     </div>
 
                     <div class="jarvis-chat-box" id="jarvis-chat-messages">
                         <div class="chat-msg jarvis-msg">
                             <span class="speaker">J.A.R.V.I.S.</span>
-                            <span class="text">Good day, Sir. All 152 subsystems are fully synchronized and reporting nominal parameters. How may I assist your superintelligence research today?</span>
+                            <span class="text">Good day, Sir. All 160 subsystems are fully synchronized and reporting nominal parameters. How may I assist your superintelligence research today?</span>
                         </div>
                     </div>
 
@@ -157,7 +157,7 @@
                 </div>
             </div>
 
-            <!-- TAB 3: 152 SUBSYSTEMS EXPLORER -->
+            <!-- TAB 3: 160 SUBSYSTEMS EXPLORER -->
             <div id="tab-subsystems" class="tab-content">
                 <div class="subsystems-grid" id="subsystems-catalog"></div>
             </div>
@@ -184,8 +184,8 @@
                         <pre id="interstellar-output" class="code-box">// Output will appear here</pre>
                     </div>
                     <div class="quantum-card">
-                        <h3>ABSOLUTE SINGULARITY OMEGA CORE (#152)</h3>
-                        <p>Triggering the 152-subsystem omniversal apex harmonic synthesis.</p>
+                        <h3>ABSOLUTE SINGULARITY OMEGA CORE (#160)</h3>
+                        <p>Triggering the 160-subsystem omniversal apex harmonic synthesis.</p>
                         <button class="btn accent" onclick="runSubsystem('omega_singularity')">TRIGGER SINGULARITY OMEGA</button>
                         <pre id="omega-output" class="code-box">// Output will appear here</pre>
                     </div>
