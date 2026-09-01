@@ -17,32 +17,25 @@ ZASI is an omniversal superintelligence operating system and cybernetic command 
 
 ## 🌌 System Architecture & Navigation
 
-```mermaid
-graph TD
-    Client["Browser / Electron Desktop Client"]
-    Router["React Router v6 SPA Shell"]
-    Overview["Overview & 3D 176-Node Hypergraph (/)"]
-    Jarvis["Multi-Persona Voice & Speech Chat (/jarvis)"]
-    Subsystems["176-Subsystem Interactive Matrix (/subsystems)"]
-    Cockpit["Quantum QEC & Physical FPGA Runner (/cockpit)"]
-    MCP["JSON-RPC 2.0 Terminal & Protocol Tools (/mcp)"]
-    
-    Backend["Python Unified Backend (HTTP & RFC 6455 WebSocket)"]
-    Engine["176-Subsystem Dialectical Pipeline & SMT Solver"]
-    DB[("SQLite State Persistence: data/zasi_state.db")]
-    Gemini["Google Gemini 2.0 Flash Grounding Bridge"]
-
-    Client --> Router
-    Router --> Overview
-    Router --> Jarvis
-    Router --> Subsystems
-    Router --> Cockpit
-    Router --> MCP
-
-    Router <==>|"REST /api/* & WebSocket /ws"| Backend
-    Backend <==> DB
-    Backend <==> Engine
-    Backend <==> Gemini
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                 Browser / Electron Desktop Client Shell                     │
+│               React 18 + React Router v6 Command Cockpit                    │
+├──────────────┬──────────────┬────────────────┬──────────────┬───────────────┤
+│ Overview (/) │ JARVIS (/.. )│ Subsystems (/.)│ Cockpit (/..)│  MCP (/mcp)   │
+│ 3D Hypergraph│ Voice TTS/STT│ 176 Matrix & ID│ Quantum FPGA │ JSON-RPC 2.0  │
+└───────┬──────┴──────┬───────┴────────┬───────┴──────┬───────┴───────┬───────┘
+        │             │                │              │               │
+        └─────────────┴────────────────┼──────────────┴───────────────┘
+                                       ▼
+    ◄═══════════════════ REST /api/* & WebSocket /ws ══════════════════►
+                                       │
+┌──────────────────────────────────────┴──────────────────────────────────────┐
+│       Python Unified Backend (HTTP Server + RFC 6455 Real-Time Push)        │
+├──────────────────────────────┬──────────────────────────────┬───────────────┤
+│ 176 Subsystem Pipeline Core  │ SQLite State Persistence     │ Gemini 2.0    │
+│ First-Order SMT Verifier     │ data/zasi_state.db           │ AI Bridge     │
+└──────────────────────────────┴──────────────────────────────┴───────────────┘
 ```
 
 ---
