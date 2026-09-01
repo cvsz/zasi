@@ -30,7 +30,7 @@ class ModelEpistemicProtocol:
         normalized = [round(v / norm, 4) for v in vec]
 
         return LatentThoughtPacket(
-            packet_id=f"mep_{hashlib.md5(str(thought_dict).encode()).hexdigest()[:8]}",
+            packet_id=f"mep_{hashlib.md5(str(thought_dict).encode(), usedforsecurity=False).hexdigest()[:8]}",
             source_agent=agent_id,
             target_agent="*BROADCAST*",
             latent_vector=normalized,

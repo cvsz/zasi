@@ -57,14 +57,21 @@ from src import (
     NeuralAudioVoiceEngine, MultiPersonaTacticalSwarm
 )
 
-HOST = "0.0.0.0"
+HOST = os.environ.get("ZASI_HOST", "127.0.0.1")  # default loopback; set ZASI_HOST=0.0.0.0 for container/public
 PORT = int(os.environ.get("ZASI_PORT", 8080))
 STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web")
 
 # ---------------------------------------------------------------------------
 # Feature 12: API Key Auth
 # ---------------------------------------------------------------------------
-ZASI_API_KEY = os.environ.get("ZASI_API_KEY", "")  # empty = auth disabled
+ZASI_API_KEY = os.environ.get("ZASI_API_KEY", "")  # empty = auth disabled (dev only)
+
+# ---------------------------------------------------------------------------
+# Security: CORS origin + request body size cap
+# ---------------------------------------------------------------------------
+# Set ZASI_CORS_ORIGIN to a specific origin in production (e.g. https://your-domain.com)
+CORS_ORIGIN = os.environ.get("ZASI_CORS_ORIGIN", "*")
+MAX_REQUEST_BODY = int(os.environ.get("ZASI_MAX_BODY", 1 * 1024 * 1024))  # default 1 MB
 
 # ---------------------------------------------------------------------------
 # Feature 14: SQLite Persistent State
@@ -711,7 +718,7 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
         if not allowed:
             self.send_response(429)
             self.send_header("Content-Type", "application/json")
-            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Origin", CORS_ORIGIN)
             self.send_header("Retry-After", str(int(retry_after) + 1))
             self.end_headers()
             self.wfile.write(json.dumps({
@@ -724,7 +731,7 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
 
     def do_OPTIONS(self):
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", CORS_ORIGIN)
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, X-API-Key")
         self.end_headers()
@@ -868,7 +875,7 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(content)))
-                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Origin", CORS_ORIGIN)
                 self.end_headers()
                 self.wfile.write(content)
             else:
@@ -886,6 +893,13 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
 
         parsed = urlparse(self.path)
         content_length = int(self.headers.get("Content-Length", 0))
+        # Security: reject oversized request bodies (DoS protection)
+        if content_length > MAX_REQUEST_BODY:
+            self.send_json_response(
+                {"error": f"Request body too large (max {MAX_REQUEST_BODY // 1024} KB)"},
+                status=413,
+            )
+            return
         post_data = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else "{}"
         try:
             body = json.loads(post_data)
@@ -994,7 +1008,7 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(content)))
-                self.send_header("Access-Control-Allow-Origin", "*")
+                self.send_header("Access-Control-Allow-Origin", CORS_ORIGIN)
                 self.end_headers()
                 self.wfile.write(content)
             else:
@@ -1009,7 +1023,7 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
         self.send_header("Cache-Control", "no-cache")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", CORS_ORIGIN)
         self.send_header("X-Accel-Buffering", "no")
         self.end_headers()
         words = full_text.split()
@@ -1098,7 +1112,7 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
     def send_json_response(self, data: dict, status: int = 200):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", CORS_ORIGIN)
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, X-API-Key")
         # Security headers

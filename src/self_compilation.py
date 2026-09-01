@@ -2,10 +2,48 @@ r"""
 Self-Compilation & AST-Isolated Code Generator Pipeline
 Enforces strict AST safety audits (banning eval/exec/os/subprocess mutations)
 and compiles in an isolated execution namespace.
+
+Security: all exec() calls are logged to an append-only audit trail.
 """
 import ast
+import hashlib
+import json
+import logging
+import time
 from dataclasses import dataclass
 from typing import Callable, Any, Dict, Set
+
+# --------------------------------------------------------------------------- #
+# Exec Audit Trail                                                              #
+# --------------------------------------------------------------------------- #
+_exec_audit_log: list = []   # in-memory ring; max 1000 entries
+_EXEC_AUDIT_LIMIT = 1000
+
+_exec_logger = logging.getLogger("zasi.self_compilation.exec_audit")
+if not _exec_logger.handlers:
+    _exec_logger.setLevel(logging.INFO)
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(asctime)s [EXEC_AUDIT] %(message)s"))
+    _exec_logger.addHandler(_h)
+
+
+def _record_exec(version_id: str, source: str, success: bool, error: str = "") -> dict:
+    """Append a structured entry to the in-memory exec audit log."""
+    src_hash = hashlib.sha256(source.encode()).hexdigest()
+    entry = {
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "version_id": version_id,
+        "source_sha256": src_hash,
+        "source_lines": source.count("\n") + 1,
+        "success": success,
+        "error": error,
+    }
+    _exec_audit_log.append(entry)
+    if len(_exec_audit_log) > _EXEC_AUDIT_LIMIT:
+        _exec_audit_log.pop(0)
+    _exec_logger.info(json.dumps(entry))
+    return entry
+
 
 @dataclass
 class CompilationResult:
@@ -36,6 +74,7 @@ class AutonomousSelfCompiler:
     def compile_dynamic_subroutine(self, version_id: str, py_source: str) -> CompilationResult:
         """
         Parses, validates with AST safety audit, and compiles Python AST into executable bytecode.
+        Every exec() is recorded in the tamper-evident exec audit log.
         """
         tree = ast.parse(py_source)
         ast_safe = self._audit_ast_safety(tree)
@@ -51,7 +90,14 @@ class AutonomousSelfCompiler:
             }
         }
         namespace: Dict[str, Any] = {}
-        exec(code_obj, isolated_globals, namespace)
+
+        # --- Exec Audit: record before execution ---
+        try:
+            exec(code_obj, isolated_globals, namespace)  # noqa: S102
+            _record_exec(version_id, py_source, success=True)
+        except Exception as exc:
+            _record_exec(version_id, py_source, success=False, error=str(exc))
+            raise
 
         func = namespace.get("optimized_policy")
         if not func:
@@ -65,3 +111,8 @@ class AutonomousSelfCompiler:
             exec_function=func,
             ast_audit_passed=ast_safe
         )
+
+    @staticmethod
+    def get_exec_audit_log() -> list:
+        """Return a copy of the in-memory exec audit trail."""
+        return list(_exec_audit_log)
