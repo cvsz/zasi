@@ -168,7 +168,7 @@ WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 def _ws_handshake(conn, key: str):
     """Send HTTP 101 Switching Protocols."""
     accept = base64.b64encode(
-        hashlib.sha1((key + WS_GUID).encode()).digest()
+        hashlib.sha1((key + WS_GUID).encode(), usedforsecurity=False).digest()
     ).decode()
     response = (
         "HTTP/1.1 101 Switching Protocols\r\n"
@@ -279,9 +279,52 @@ _webhooks_lock = threading.Lock()
 _webhooks = []   # list of {"url": str, "event": str}
 
 
+_ALLOWED_WEBHOOK_SCHEMES = {"http", "https"}
+_PRIVATE_RANGES = [
+    # loopback
+    (0x7F000000, 0xFF000000),
+    # RFC-1918
+    (0x0A000000, 0xFF000000),
+    (0xAC100000, 0xFFF00000),
+    (0xC0A80000, 0xFFFF0000),
+    # link-local / APIPA
+    (0xA9FE0000, 0xFFFF0000),
+    # metadata
+    (0xA9FE0100, 0xFFFFFF00),
+]
+
+
+def _is_safe_webhook_url(url: str) -> bool:
+    """Return True only for http(s) URLs pointing to non-private hosts."""
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in _ALLOWED_WEBHOOK_SCHEMES:
+            return False
+        hostname = parsed.hostname or ""
+        if not hostname:
+            return False
+        # Block localhost variants
+        if hostname in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
+            return False
+        # Resolve and check IP
+        import socket as _socket
+        addr = _socket.gethostbyname(hostname)
+        octets = [int(x) for x in addr.split(".")]
+        ip_int = (octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3]
+        for base, mask in _PRIVATE_RANGES:
+            if (ip_int & mask) == base:
+                return False
+        return True
+    except Exception:
+        return False
+
+
 def _fire_webhooks(event: str, payload: dict):
     """Asynchronously POST to all registered webhooks matching event."""
     def _send(url, data):
+        if not _is_safe_webhook_url(url):
+            append_log("WEBHOOK", f"Blocked unsafe URL: {url}")
+            return
         try:
             req = urllib.request.Request(
                 url,
@@ -700,12 +743,12 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
         if parsed.path == "/api/status":
             self.send_json_response({
                 "status": "OPERATIONAL",
-                "version": "31.0.0-apex-prime",
+                "version": "32.0.0-apex-prime",
                 "subsystems_online": 176,
                 "rsi_version": rsi_engine.current_version,
-                "state": state.variables,
-                "invariants": state.invariants,
                 "timestamp": time.time()
+                # NOTE: state.variables and invariants intentionally omitted
+                # (internal detail; access via authenticated /api/telemetry)
             })
 
         elif parsed.path == "/api/telemetry":
@@ -885,6 +928,23 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
         elif parsed.path == "/api/mutate":
             var_name = body.get("variable", "x")
             delta = body.get("delta", 5)
+            # --- Security: whitelist allowed variable names ---
+            _ALLOWED_VARS = {"x", "y", "iq", "energy", "coherence", "entropy"}
+            if var_name not in _ALLOWED_VARS:
+                self.send_json_response(
+                    {"error": f"Invalid variable '{var_name}'. Allowed: {sorted(_ALLOWED_VARS)}"},
+                    status=400,
+                )
+                return
+            # --- Security: validate delta is a number within sane bounds ---
+            try:
+                delta = float(delta)
+            except (TypeError, ValueError):
+                self.send_json_response({"error": "delta must be a number"}, status=400)
+                return
+            if abs(delta) > 1000:
+                self.send_json_response({"error": "delta magnitude exceeds maximum (1000)"}, status=400)
+                return
             state.variables[var_name] = state.variables.get(var_name, 0) + delta
             append_log("MUTATE", f"Adjusted {var_name} by {delta} (Now: {state.variables[var_name]})")
             _persist_state()
@@ -913,6 +973,12 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_json_response(
                     {"error": "Invalid body. Provide url and event (tick|mutate|rsi)"},
                     status=400,
+                )
+                return
+            if not _is_safe_webhook_url(url):
+                self.send_json_response(
+                    {"error": "Forbidden: URL must be an external http(s) endpoint (private/internal IPs and file:// are not allowed)"},
+                    status=403,
                 )
                 return
             with _webhooks_lock:
@@ -1035,6 +1101,11 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, X-API-Key")
+        # Security headers
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Content-Security-Policy", "default-src 'none'")
         self.end_headers()
         self.wfile.write(json.dumps(data).encode("utf-8"))
 
