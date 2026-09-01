@@ -817,7 +817,20 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_json_response({"webhooks": list(_webhooks)})
 
         else:
-            super().do_GET()
+            # React Router SPA fallback — serve index.html for all client-side routes (/jarvis, /subsystems, /cockpit, /mcp)
+            index_path = os.path.join(STATIC_DIR, "index.html")
+            if os.path.exists(index_path):
+                with open(index_path, "rb") as f:
+                    content = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(content)))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(content)
+            else:
+                self.send_response(404)
+                self.end_headers()
 
     # ------------------------------------------------------------------ #
     # POST routing                                                         #

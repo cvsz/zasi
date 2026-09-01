@@ -71,6 +71,10 @@ class AutonomousSuperintelligenceDaemon:
         self.telemetry_history.append(tick_log)
         return tick_log
 
+    def step_cycle(self) -> dict:
+        """Alias for step() to support REST API and auto-tick dispatcher."""
+        return self.step()
+
     def run_ticks(self, count: int = 3) -> List[dict]:
         results = []
         for i in range(count):

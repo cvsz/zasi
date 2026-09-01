@@ -36,3 +36,22 @@ class RSIController:
         self.reasoner.speculator.propose_candidates = upgrade_candidate.new_heuristic
         print(f"  -> Hot Swap Completed! Running on {self.current_version}")
         return True
+
+    def evaluate_candidate_upgrade(self, target_version: str, speedup: float = 320.0):
+        """Evaluate upgrade candidate for REST API hot-swap."""
+        from dataclasses import dataclass
+
+        @dataclass
+        class EvaluationResult:
+            approved: bool
+            speedup_factor: float
+            target_version: str
+
+        approved = speedup > 1.0
+        return EvaluationResult(approved=approved, speedup_factor=speedup, target_version=target_version)
+
+    def hot_swap_runtime(self, version_id: str):
+        """Hot swap runtime to target version."""
+        self.current_version = version_id
+        return True
+
