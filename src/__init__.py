@@ -98,6 +98,17 @@ from .exoplanet_detection_analyzer import ExoplanetDetectionAnalyzer, ExoplanetR
 from .universal_language_translator import UniversalLanguageTranslator, TranslationResult
 from .swarm_robotics_coordinator import SwarmRoboticsCoordinator, SwarmMissionReport
 
+
+# v20.0.0 Subsystems #81-#88
+from .autonomous_legal_advisor import AutonomousLegalAdvisor, LegalAnalysisReport
+from .climate_change_prediction_engine import ClimateChangePredictionEngine, ClimateProjectionReport
+from .brain_organoid_simulator import BrainOrganoidSimulator, NeuralOrganoidState
+from .autonomous_cybersecurity_soc import AutonomousCybersecuritySOC, SOCIncidentReport
+from .quantum_error_correction_engine import QuantumErrorCorrectionEngine, QECLogicalQubitReport
+from .autonomous_supply_chain_optimizer import AutonomousSupplyChainOptimizer, SupplyChainOptimizationReport
+from .digital_twin_earth_simulator import DigitalTwinEarthSimulator, DigitalTwinEarthSnapshot
+from .universal_cognitive_architecture import UniversalCognitiveArchitecture, CognitiveSynthesisReport
+
 __all__ = [
     "Proposal",
     "VerificationResult",
@@ -265,4 +276,12 @@ __all__ = [
     "TranslationResult",
     "SwarmRoboticsCoordinator",
     "SwarmMissionReport",
+    "AutonomousLegalAdvisor", "LegalAnalysisReport",
+    "ClimateChangePredictionEngine", "ClimateProjectionReport",
+    "BrainOrganoidSimulator", "NeuralOrganoidState",
+    "AutonomousCybersecuritySOC", "SOCIncidentReport",
+    "QuantumErrorCorrectionEngine", "QECLogicalQubitReport",
+    "AutonomousSupplyChainOptimizer", "SupplyChainOptimizationReport",
+    "DigitalTwinEarthSimulator", "DigitalTwinEarthSnapshot",
+    "UniversalCognitiveArchitecture", "CognitiveSynthesisReport",
 ]

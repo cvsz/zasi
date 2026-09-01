@@ -675,5 +675,73 @@ class TestZASISubsystems(unittest.TestCase):
         self.assertTrue(coord.verify_swarm_safety_invariants(report))
 
 
+    # ----- Subsystems #81-#88 (v20.0.0) -----
+
+    def test_autonomous_legal_advisor(self):
+        from src import AutonomousLegalAdvisor
+        advisor = AutonomousLegalAdvisor("US_FEDERAL")
+        report = advisor.analyze_contract("This agreement between Party A and Party B...")
+        self.assertLess(report.risk_score, 0.5)
+        self.assertGreater(report.win_probability_pct, 50.0)
+        self.assertEqual(report.legal_status, "CONTRACT_APPROVED_LOW_RISK")
+
+    def test_climate_change_prediction_engine(self):
+        from src import ClimateChangePredictionEngine
+        engine = ClimateChangePredictionEngine(resolution_km=25.0)
+        report = engine.project_climate("SSP2-4.5", 2100)
+        self.assertGreater(report.global_mean_temp_anomaly_c, 0)
+        self.assertGreater(report.sea_level_rise_cm, 0)
+        self.assertEqual(report.projection_status, "CLIMATE_PROJECTION_ENSEMBLE_CONVERGED")
+
+    def test_brain_organoid_simulator(self):
+        from src import BrainOrganoidSimulator
+        sim = BrainOrganoidSimulator(neuron_count=100_000_000)
+        state = sim.simulate_network_dynamics(duration_ms=1000.0)
+        self.assertEqual(state.neuron_count, 100_000_000)
+        self.assertGreater(state.mean_firing_rate_hz, 0)
+        self.assertEqual(state.organoid_status, "BIOPHYSICALLY_REALISTIC_DYNAMICS_STABLE")
+
+    def test_autonomous_cybersecurity_soc(self):
+        from src import AutonomousCybersecuritySOC
+        soc = AutonomousCybersecuritySOC()
+        report = soc.process_security_events(event_batch=1_000_000)
+        self.assertLess(report.detection_latency_ms, 10.0)
+        self.assertLess(report.false_positive_rate_pct, 0.1)
+        self.assertEqual(report.remediation_status, "THREAT_CONTAINED_AND_ERADICATED")
+
+    def test_quantum_error_correction_engine(self):
+        from src import QuantumErrorCorrectionEngine
+        qec = QuantumErrorCorrectionEngine(code="SURFACE_CODE", distance=7)
+        report = qec.encode_logical_qubits(num_logical=100, physical_error_rate=1e-3)
+        self.assertLess(report.logical_error_rate, 1e-9)
+        self.assertEqual(report.distance, 7)
+        self.assertEqual(report.qec_status, "FAULT_TOLERANT_LOGICAL_QUBITS_ENCODED")
+
+    def test_autonomous_supply_chain_optimizer(self):
+        from src import AutonomousSupplyChainOptimizer
+        optimizer = AutonomousSupplyChainOptimizer()
+        report = optimizer.optimize_global_network(sku_count=500_000, countries=180)
+        self.assertGreater(report.cost_reduction_pct, 10.0)
+        self.assertGreater(report.on_time_delivery_pct, 95.0)
+        self.assertGreater(report.resilience_score, 0.9)
+
+    def test_digital_twin_earth_simulator(self):
+        from src import DigitalTwinEarthSimulator
+        twin = DigitalTwinEarthSimulator(resolution_m=1.0)
+        snapshot = twin.capture_planetary_snapshot()
+        self.assertGreater(snapshot.iot_sensors_active, 1_000_000_000)
+        self.assertGreater(snapshot.twin_fidelity_pct, 99.0)
+        self.assertEqual(snapshot.snapshot_status, "PLANETARY_DIGITAL_TWIN_SYNCHRONIZED")
+
+    def test_universal_cognitive_architecture(self):
+        from src import UniversalCognitiveArchitecture
+        uca = UniversalCognitiveArchitecture(subsystem_count=88)
+        report = uca.synthesize_unified_cognition()
+        self.assertEqual(report.active_subsystems, 88)
+        self.assertGreater(report.goal_coherence_pct, 99.0)
+        self.assertGreater(report.self_awareness_index, 0.99)
+        self.assertEqual(report.orchestration_status, "ALL_SUBSYSTEMS_UNIFIED_UNDER_ACTIVE_INFERENCE")
+
+
 if __name__ == "__main__":
     unittest.main()
