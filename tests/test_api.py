@@ -21,7 +21,7 @@ class TestZASIBackendIntegration(unittest.TestCase):
         )
         cls.server_thread.start()
         
-        # Poll until server is responding
+        # Poll until server is responding cleanly
         for _ in range(30):
             try:
                 with socket.create_connection(("127.0.0.1", cls.port), timeout=0.5):
