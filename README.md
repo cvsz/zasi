@@ -1,7 +1,9 @@
 # ⚡ ZASI: Zero-Entropy Autonomous Superintelligence Infrastructure
 
 [![Version](https://img.shields.io/badge/version-v32.0.0-cyan.svg)](https://github.com/cvsz/zasi/releases)
-[![PyPI](https://img.shields.io/pypi/v/zasi.svg?color=blue)](https://pypi.org/project/zasi/)
+[![PyPI](https://img.shields.io/pypi/v/zasi.svg?logo=pypi&logoColor=white&color=3775A9)](https://pypi.org/project/zasi/)
+[![PyPI Downloads](https://img.shields.io/pypi/dm/zasi.svg?color=blue)](https://pypi.org/project/zasi/)
+[![npm](https://img.shields.io/npm/v/zasi-cockpit.svg?logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/zasi-cockpit)
 [![Subsystems](https://img.shields.io/badge/subsystems-176%20Online-green.svg)](docs/SUBSYSTEMS_REFERENCE.md)
 [![Tests](https://img.shields.io/badge/tests-172%20passing-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.14-blue.svg)](https://python.org)
