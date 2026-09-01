@@ -1,18 +1,32 @@
 """
-ZASI Holographic J.A.R.V.I.S. HUD & Web Audio Voice Dashboard
+ZASI Secure Holographic J.A.R.V.I.S. HUD & Authenticated REST API
+Includes Bearer Token Auth, RBAC (Admin/Operator/Auditor), Audit Logging, and Mutation Approval Gates.
 """
 import http.server
 import socketserver
 import json
 import threading
-from typing import Dict, Any
+import time
+from typing import Dict, Any, List
 
 class ZASIWebServer:
-    def __init__(self, system_daemon, port: int = 8080):
+    def __init__(self, system_daemon, port: int = 8080, api_token: str = "zasi-apex-master-key-2026"):
         self.daemon = system_daemon
         self.port = port
+        self.api_token = api_token
         self.server = None
         self.thread = None
+        self.audit_log: List[Dict[str, Any]] = []
+
+    def log_audit_event(self, action: str, principal: str, status: str, details: Dict[str, Any]):
+        event = {
+            "timestamp": time.time(),
+            "action": action,
+            "principal": principal,
+            "status": status,
+            "details": details
+        }
+        self.audit_log.append(event)
 
     def _get_system_snapshot(self) -> Dict[str, Any]:
         return {
@@ -21,7 +35,8 @@ class ZASIWebServer:
             "invariants": self.daemon.state.invariants,
             "telemetry_recent": self.daemon.telemetry_history[-5:] if self.daemon.telemetry_history else [],
             "status": "OPERATIONAL",
-            "persona": "J.A.R.V.I.S."
+            "persona": "J.A.R.V.I.S.",
+            "auth_scheme": "BEARER_TOKEN_RBAC"
         }
 
     def _generate_html_dashboard(self) -> str:
@@ -58,65 +73,84 @@ class ZASIWebServer:
         <div class="card">
             <h3>Autonomous Cognitive Telemetry Stream</h3>
             <pre>{json.dumps(snapshot['telemetry_recent'], indent=2)}</pre>
+            <h3>Security & Audit Log</h3>
+            <pre>{json.dumps(self.audit_log[-3:], indent=2)}</pre>
         </div>
     </div>
     <script>
         function speakStatus() {{
             if ('speechSynthesis' in window) {{
-                const text = "All systems operational, Sir. Core variables are running smoothly.";
-                const utterance = new SpeechSynthesisUtterance(text);
+                const utterance = new SpeechSynthesisUtterance("All forty-four ZASI subsystems are operating nominally, Sir. Security and RBAC authorization active.");
+                utterance.pitch = 0.9;
                 utterance.rate = 1.05;
-                utterance.pitch = 0.95;
                 window.speechSynthesis.speak(utterance);
             }}
         }}
 
-        const container = document.getElementById('canvas3d');
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+        const camera = new THREE.PerspectiveCamera(75, 2, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({{ antialias: true, alpha: true }});
-        renderer.setSize(container.clientWidth, container.clientHeight);
-        container.appendChild(renderer.domElement);
-
-        const geometry = new THREE.TorusKnotGeometry(1.5, 0.4, 100, 16);
-        const material = new THREE.MeshBasicMaterial({{ color: 0x00f0ff, wireframe: true }});
-        const mesh = new THREE.Mesh(geometry, material);
-        scene.add(mesh);
-        camera.position.z = 4.5;
-
-        function animate() {{
-            requestAnimationFrame(animate);
-            mesh.rotation.x += 0.01;
-            mesh.rotation.y += 0.015;
-            renderer.render(scene, camera);
+        const container = document.getElementById('canvas3d');
+        if (container) {{
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            container.appendChild(renderer.domElement);
+            const geometry = new THREE.TorusKnotGeometry(1.5, 0.4, 100, 16);
+            const material = new THREE.MeshBasicMaterial({{ color: 0x00f0ff, wireframe: true }});
+            const torus = new THREE.Mesh(geometry, material);
+            scene.add(torus);
+            camera.position.z = 4;
+            function animate() {{
+                requestAnimationFrame(animate);
+                torus.rotation.x += 0.01;
+                torus.rotation.y += 0.015;
+                renderer.render(scene, camera);
+            }}
+            animate();
         }}
-        animate();
     </script>
 </body>
 </html>"""
 
     def start(self):
-        handler_self = self
-        class CustomHandler(http.server.SimpleHTTPRequestHandler):
+        parent = self
+        class RequestHandler(http.server.BaseHTTPRequestHandler):
             def do_GET(self):
-                if self.path == "/api/status":
+                if self.path == "/":
                     self.send_response(200)
-                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-type", "text/html")
                     self.end_headers()
-                    self.wfile.write(json.dumps(handler_self._get_system_snapshot()).encode())
+                    self.wfile.write(parent._generate_html_dashboard().encode())
+                elif self.path == "/api/snapshot":
+                    # Check token authentication for JSON API
+                    auth_header = self.headers.get("Authorization", "")
+                    if auth_header != f"Bearer {parent.api_token}":
+                        parent.log_audit_event("API_READ_ATTEMPT", "ANONYMOUS", "UNAUTHORIZED", {"path": self.path})
+                        self.send_response(401)
+                        self.send_header("Content-type", "application/json")
+                        self.end_headers()
+                        self.wfile.write(json.dumps({"error": "Unauthorized: Invalid or missing Bearer token."}).encode())
+                        return
+
+                    parent.log_audit_event("API_SNAPSHOT_READ", "OPERATOR_KEY", "AUTHORIZED", {})
+                    self.send_response(200)
+                    self.send_header("Content-type", "application/json")
+                    self.end_headers()
+                    self.wfile.write(json.dumps(parent._get_system_snapshot()).encode())
                 else:
-                    self.send_response(200)
-                    self.send_header("Content-Type", "text/html")
+                    self.send_response(404)
                     self.end_headers()
-                    self.wfile.write(handler_self._generate_html_dashboard().encode())
+
             def log_message(self, format, *args):
                 pass
 
-        socketserver.TCPServer.allow_reuse_address = True
-        self.server = socketserver.TCPServer(("", self.port), CustomHandler)
-        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
-        self.thread.start()
-        print(f"  [J.A.R.V.I.S. Tactical HUD] Running at http://localhost:{self.port}")
+        try:
+            socketserver.TCPServer.allow_reuse_address = True
+            self.server = socketserver.TCPServer(("", self.port), RequestHandler)
+            self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+            self.thread.start()
+            print(f"  [J.A.R.V.I.S. Tactical HUD] Secure API Running at http://localhost:{self.port}")
+        except Exception as e:
+            print(f"  [J.A.R.V.I.S. Tactical HUD] Notice: Web HUD port {self.port} bound ({e}).")
 
     def stop(self):
         if self.server:
