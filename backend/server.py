@@ -112,6 +112,14 @@ def append_log(level, msg):
         logs_history.pop(0)
 
 class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
+    # Extend MIME types to support .jsx (served as JS for Babel standalone)
+    extensions_map = {
+        **http.server.SimpleHTTPRequestHandler.extensions_map,
+        '.jsx': 'application/javascript',
+        '.mjs': 'application/javascript',
+        '.json': 'application/json',
+    }
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=STATIC_DIR, **kwargs)
 
@@ -269,8 +277,21 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
             })
 
         else:
-            self.send_response(404)
-            self.end_headers()
+            # React Router SPA fallback — serve index.html for all non-API paths
+            # so client-side routes (/jarvis, /subsystems, /cockpit, /mcp) work.
+            index_path = os.path.join(STATIC_DIR, "index.html")
+            if os.path.exists(index_path):
+                with open(index_path, "rb") as f:
+                    content = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(content)))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(content)
+            else:
+                self.send_response(404)
+                self.end_headers()
 
     def process_jarvis_command(self, query: str, persona: str = "JARVIS") -> str:
         if persona == "FRIDAY":
