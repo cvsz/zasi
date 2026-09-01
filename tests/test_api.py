@@ -38,7 +38,7 @@ class TestZASIBackendIntegration(unittest.TestCase):
             self.assertEqual(resp.status, 200)
             data = json.loads(resp.read().decode())
             self.assertEqual(data.get("status"), "OPERATIONAL")
-            self.assertEqual(data.get("subsystems_online"), 168)
+            self.assertEqual(data.get("subsystems_online"), 176)
 
     def test_telemetry_endpoint(self):
         req = urllib.request.Request(self._url("/api/telemetry"))
@@ -53,8 +53,8 @@ class TestZASIBackendIntegration(unittest.TestCase):
         with urllib.request.urlopen(req, timeout=3) as resp:
             self.assertEqual(resp.status, 200)
             data = json.loads(resp.read().decode())
-            self.assertEqual(data.get("total_subsystems"), 168)
-            self.assertEqual(len(data.get("catalog")), 168)
+            self.assertEqual(data.get("total_subsystems"), 176)
+            self.assertEqual(len(data.get("catalog")), 176)
 
     def test_openapi_spec(self):
         req = urllib.request.Request(self._url("/api/openapi.json"))
@@ -71,7 +71,7 @@ class TestZASIBackendIntegration(unittest.TestCase):
             self.assertEqual(resp.status, 200)
             data = json.loads(resp.read().decode())
             self.assertEqual(data.get("speaker"), "JARVIS")
-            self.assertIn("168 subsystems", data.get("response"))
+            self.assertIn("176 subsystems", data.get("response"))
 
     def test_mutate_state(self):
         payload = json.dumps({"variable": "x", "delta": 5}).encode()

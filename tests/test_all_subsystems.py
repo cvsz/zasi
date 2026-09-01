@@ -1354,3 +1354,53 @@ class TestZASISubsystems(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_subsystem_169_tachyon_retrocausal_qec(self):
+        eng = TachyonRetrocausalQECMatrix(142.5)
+        rep = eng.mitigate_pre_decoherence_errors(1024)
+        self.assertEqual(rep.subsystem_id, 169)
+        self.assertTrue(rep.is_acausally_stabilized)
+        self.assertGreater(rep.tsirelson_retrocausal_fidelity, 0.99)
+
+    def test_subsystem_170_stellar_gravitational_wave_array(self):
+        eng = StellarGravitationalWaveArray(5.0)
+        rep = eng.survey_metric_perturbations(24.0)
+        self.assertEqual(rep.subsystem_id, 170)
+        self.assertGreater(rep.tracked_merger_events, 100)
+
+    def test_subsystem_171_plasma_wakefield_accelerator(self):
+        eng = PlasmaWakefieldPositronAccelerator(25.0)
+        rep = eng.accelerate_positron_bunch(1e18)
+        self.assertEqual(rep.subsystem_id, 171)
+        self.assertGreater(rep.beam_energy_tev, 2.0)
+
+    def test_subsystem_172_casimir_vacuum_actuator(self):
+        eng = QuantumVacuumCasimirActuator(12.0)
+        rep = eng.harvest_zero_point_force(100.0)
+        self.assertEqual(rep.subsystem_id, 172)
+        self.assertTrue(rep.is_vacuum_locked)
+
+    def test_subsystem_173_axion_dark_matter_haloscope(self):
+        eng = TransGalacticAxionHaloscope(16.0, 1e6)
+        rep = eng.scan_frequency_band(4.2)
+        self.assertEqual(rep.subsystem_id, 173)
+        self.assertTrue(rep.is_axion_resonance_detected)
+
+    def test_subsystem_174_exceptional_point_sensor(self):
+        eng = NonHermitianExceptionalPointSensor(4)
+        rep = eng.detect_perturbation(1e-7)
+        self.assertEqual(rep.subsystem_id, 174)
+        self.assertTrue(rep.is_exceptional_point_locked)
+
+    def test_subsystem_175_spacetime_wormhole_router(self):
+        eng = SpacetimeWormholeRouter(10.0)
+        rep = eng.compute_traversable_geodesic(1000.0)
+        self.assertEqual(rep.subsystem_id, 175)
+        self.assertTrue(rep.is_traversable)
+
+    def test_subsystem_176_hilbert_singularity_supreme(self):
+        eng = InfiniteHilbertSingularitySupreme(176)
+        rep = eng.achieve_absolute_supreme_singularity()
+        self.assertEqual(rep.subsystem_id, 176)
+        self.assertTrue(rep.is_supreme_singularity_absolute)
+        self.assertEqual(rep.total_unified_subsystems, 176)

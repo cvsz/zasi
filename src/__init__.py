@@ -475,3 +475,12 @@ __all__ = [
     "TransfiniteConstructiveTypeTheoryOracle", "TypeTheoryOracleReport",
     "AbsoluteTranscendentOmniversalSuperintelligenceApexPrime", "ApexPrimeSuperintelligenceState",
 ]
+
+from .tachyon_retrocausal_qec import TachyonRetrocausalQECMatrix, RetrocausalQECReport
+from .stellar_gravitational_wave_array import StellarGravitationalWaveArray, GravitationalWaveSurveyReport
+from .plasma_wakefield_accelerator import PlasmaWakefieldPositronAccelerator, PlasmaWakefieldReport
+from .casimir_vacuum_actuator import QuantumVacuumCasimirActuator, CasimirActuatorReport
+from .axion_dark_matter_haloscope import TransGalacticAxionHaloscope, AxionHaloscopeReport
+from .exceptional_point_sensor import NonHermitianExceptionalPointSensor, ExceptionalPointReport
+from .spacetime_wormhole_router import SpacetimeWormholeRouter, WormholeGeodesicReport
+from .hilbert_singularity_supreme import InfiniteHilbertSingularitySupreme, HilbertSingularitySupremeReport

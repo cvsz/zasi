@@ -1,6 +1,6 @@
 {
   "name": "zasi-cockpit",
-  "version": "31.0.0",
+  "version": "32.0.0",
   "description": "ZASI J.A.R.V.I.S. Omniversal Superintelligence Web Cockpit — React 18 + React Router v6",
   "main": "electron/main.js",
   "scripts": {

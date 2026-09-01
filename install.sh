@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-#                 ZASI Advanced Full-Stack Automated Installer v31.0.0
+#                 ZASI Advanced Full-Stack Automated Installer v32.0.0
 # ==============================================================================
 set -e
 
@@ -11,7 +11,7 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 echo -e "${BLUE}===================================================================${NC}"
-echo -e "${GREEN}      ZASI Universal Superintelligence Automated Installer v31.0.0     ${NC}"
+echo -e "${GREEN}      ZASI Universal Superintelligence Automated Installer v32.0.0     ${NC}"
 echo -e "${BLUE}===================================================================${NC}"
 
 PYTHON_CMD="python3"
@@ -28,7 +28,7 @@ mkdir -p config docs/generated web/static backend data electron
 cat << 'JSONEOF' > config/zasi_config.json
 {
   "version": "31.0.0",
-  "subsystems": 168,
+  "subsystems": 176,
   "environment": "production",
   "formal_verification": true,
   "quantum_backend": "QISKIT_OPENQASM_3",
@@ -62,7 +62,7 @@ if command -v zasi &> /dev/null; then
 fi
 
 echo -e "${BLUE}===================================================================${NC}"
-echo -e "${GREEN}[SUCCESS] ZASI v31.0.0 Full-Stack Installation Complete!           ${NC}"
+echo -e "${GREEN}[SUCCESS] ZASI v32.0.0 Full-Stack Installation Complete!           ${NC}"
 echo -e "${YELLOW}Launch React 18 Web Cockpit : make server  (http://localhost:8080)   ${NC}"
 echo -e "${YELLOW}Run Dialectical Pipeline    : make run                               ${NC}"
 echo -e "${YELLOW}Interactive Terminal Shell  : zasi                                   ${NC}"

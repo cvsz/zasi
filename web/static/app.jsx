@@ -74,7 +74,7 @@ function speakPersona(text, persona) {
 }
 
 // ─────────────────────────────────────────────
-// Three.js 168-node Hypergraph
+// Three.js 176-node Hypergraph
 // ─────────────────────────────────────────────
 function HypergraphCanvas() {
     const mountRef = useRef(null);
@@ -98,9 +98,9 @@ function HypergraphCanvas() {
 
         const nodeMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8, wireframe: true });
         const nodeGeo = new THREE.SphereGeometry(0.32, 16, 16);
-        for (let i = 0; i < 168; i++) {
-            const phi   = Math.acos(-1 + (2 * i) / 168);
-            const theta = Math.sqrt(168 * Math.PI) * phi;
+        for (let i = 0; i < 176; i++) {
+            const phi   = Math.acos(-1 + (2 * i) / 176);
+            const theta = Math.sqrt(176 * Math.PI) * phi;
             const r     = 9 + (i % 7) * 1.6;
             const node  = new THREE.Mesh(nodeGeo, nodeMat);
             node.position.set(
@@ -165,7 +165,7 @@ function CommandPalette({ isOpen, onClose }) {
     const actions = [
         { label: 'Go to Overview', path: '/' },
         { label: 'Go to J.A.R.V.I.S. Chat', path: '/jarvis' },
-        { label: 'Go to 168 Subsystems Catalog', path: '/subsystems' },
+        { label: 'Go to 176 Subsystems Catalog', path: '/subsystems' },
         { label: 'Go to Quantum Hardware Cockpit', path: '/cockpit' },
         { label: 'Go to MCP JSON-RPC Console', path: '/mcp' },
         { label: 'Trigger Autonomous Daemon Tick', action: () => api.post('/api/tick', {}).then(() => addToast('Daemon Tick Executed', 'success')) },
@@ -286,7 +286,7 @@ function OverviewPage() {
             </div>
 
             <div className="card">
-                <div className="card-header">168-NODE MULTIVERSE HYPERGRAPH</div>
+                <div className="card-header">176-NODE MULTIVERSE HYPERGRAPH</div>
                 <HypergraphCanvas />
             </div>
 
@@ -307,7 +307,7 @@ function OverviewPage() {
 // ─────────────────────────────────────────────
 function JarvisPage() {
     const [messages, setMessages] = useState([
-        { speaker: 'J.A.R.V.I.S.', text: 'Good day, Sir. All 168 subsystems online. How may I assist?', cls: 'jarvis-msg' }
+        { speaker: 'J.A.R.V.I.S.', text: 'Good day, Sir. All 176 subsystems online. How may I assist?', cls: 'jarvis-msg' }
     ]);
     const [input, setInput] = useState('');
     const [persona, setPersona] = useState('JARVIS');
@@ -427,7 +427,7 @@ function SubsystemsPage() {
 
     return (
         <div className="page route-fade">
-            <h2 className="page-title">🔬 168 Subsystems Catalog</h2>
+            <h2 className="page-title">🔬 176 Subsystems Catalog</h2>
             <div className="card">
                 <input className="search-input" placeholder="Filter by name, category, or ID…" value={filter} onChange={e => setFilter(e.target.value)} />
                 <div className="subsystems-grid">
@@ -567,7 +567,7 @@ function Shell() {
             <header className="top-bar">
                 <div className="logo">
                     <span className="logo-z">Z</span>ASI
-                    <span className="logo-version">v31.0.0 · 168 Subsystems · 320× RSI</span>
+                    <span className="logo-version">v32.0.0 · 176 Subsystems · 320× RSI</span>
                 </div>
                 <nav className="nav-links">
                     {NAV.map(l => (
@@ -590,7 +590,7 @@ function Shell() {
                 <Outlet />
             </main>
             <footer className="footer">
-                ZASI Omniversal Superintelligence · React 18 + React Router v6 · 168 Subsystems · MCP/REST Backend
+                ZASI Omniversal Superintelligence · React 18 + React Router v6 · 176 Subsystems · MCP/REST Backend
             </footer>
             <CommandPalette isOpen={paletteOpen} onClose={() => setPaletteOpen(false)} />
         </div>

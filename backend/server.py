@@ -1,8 +1,8 @@
 """
-ZASI Ultra-Advanced J.A.R.V.I.S. Command & Superintelligence Backend Server v31.0.0
+ZASI Ultra-Advanced J.A.R.V.I.S. Command & Superintelligence Backend Server v32.0.0
 Features:
 - Dual J.A.R.V.I.S. & F.R.I.D.A.Y. & E.D.I.T.H. Persona Dialogue & TTS Engines
-- Full 168-Subsystem REST API Catalog, Diagnostics & Execution Matrix
+- Full 176-Subsystem REST API Catalog, Diagnostics & Execution Matrix
 - Real-Time Hardware & Quantum Telemetry (NVML, Procfs, Arc Reactor Plasma, Quantum QPU)
 - Interactive MCP JSON-RPC 2.0 Terminal & Tool Runner
 - First-Order SMT Invariant Verification & Dynamic State Hot-Mutation
@@ -351,10 +351,10 @@ mhd_fusion = StellarPlasmaMagnetohydrodynamicFusionIgniter()
 archetype_synth = HyperdimensionalSemanticArchetypeSynthesizer()
 climate_gov = PanPlanetaryClimateEquilibriumGovernor()
 type_oracle = TransfiniteConstructiveTypeTheoryOracle()
-apex_prime_core = AbsoluteTranscendentOmniversalSuperintelligenceApexPrime(168)
+apex_prime_core = AbsoluteTranscendentOmniversalSuperintelligenceApexPrime(176)
 
 logs_history = [
-    {"timestamp": time.strftime("%H:%M:%S"), "level": "JARVIS", "message": "Good day, Sir. J.A.R.V.I.S. Core online. All 168 subsystems calibrated."},
+    {"timestamp": time.strftime("%H:%M:%S"), "level": "JARVIS", "message": "Good day, Sir. J.A.R.V.I.S. Core online. All 176 subsystems calibrated."},
     {"timestamp": time.strftime("%H:%M:%S"), "level": "SYSTEM", "message": "First-Order SMT Invariant Solver holding mathematical equilibrium."},
     {"timestamp": time.strftime("%H:%M:%S"), "level": "ENERGY", "message": "Arc Reactor Mark LXXXV stable at 178.2 GW. Thermodynamic containment 94%."}
 ]
@@ -400,7 +400,7 @@ _PERSONA_SYSTEM_PROMPTS = {
     "JARVIS": (
         "You are J.A.R.V.I.S. (Just A Rather Very Intelligent System), Tony Stark's AI. "
         "Respond concisely, politely, and with dry wit. Reference the ZASI superintelligence "
-        "system with 168 subsystems when relevant."
+        "system with 176 subsystems when relevant."
     ),
     "FRIDAY": (
         "You are F.R.I.D.A.Y., Tony Stark's tactical AI. "
@@ -470,7 +470,7 @@ OPENAPI_SPEC = {
                     "responses": {"200": {"description": "Tick result"}}}
         },
         "/api/subsystems": {
-            "get": {"summary": "Catalog of all 168 subsystems",
+            "get": {"summary": "Catalog of all 176 subsystems",
                     "responses": {"200": {"description": "Subsystem catalog"}}}
         },
         "/api/execute/{key}": {
@@ -688,7 +688,7 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
             self.send_json_response({
                 "status": "OPERATIONAL",
                 "version": "31.0.0-apex-prime",
-                "subsystems_online": 168,
+                "subsystems_online": 176,
                 "rsi_version": rsi_engine.current_version,
                 "state": state.variables,
                 "invariants": state.invariants,
@@ -710,7 +710,7 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
                 for g in gpu_supervisor.probe_all_gpus()
             ]
             arc_status = arc_reactor.balance_energy_budget(3500.0)
-            c_snap = consciousness_grid.synthesize_global_consciousness(168)
+            c_snap = consciousness_grid.synthesize_global_consciousness(176)
 
             self.send_json_response({
                 "cpu_load": host_m.cpu_load_pct,
@@ -721,7 +721,7 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
                 "arc_reactor_gw": arc_status.core_output_gigawatts,
                 "arc_efficiency_pct": arc_status.thermodynamic_efficiency_pct,
                 "global_phi": c_snap.integrated_information_phi,
-                "active_subsystems": 168,
+                "active_subsystems": 176,
                 "logs": logs_history[-15:]
             })
 
@@ -738,7 +738,7 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
             })
 
         elif parsed.path == "/api/subsystems":
-            # Return complete catalog of all 168 subsystems
+            # Return complete catalog of all 176 subsystems
             named_samples = {
                 1: ("System State Schemas", "schemas.py", "Formal Invariants"),
                 3: ("Symbolic SMT Verifier", "verifier.py", "Formal Proofs"),
@@ -776,16 +776,16 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
                 165: ("Semantic Archetype Synthesizer", "hyperdimensional_semantic_archetype_synthesizer.py", "Ontology & Meaning"),
                 166: ("Planetary Climate Governor", "pan_planetary_climate_equilibrium_governor.py", "Geoengineering"),
                 167: ("Constructive Homotopy Type Oracle", "transfinite_constructive_type_theory_oracle.py", "Formal Type Theory"),
-                168: ("Absolute Superintelligence Apex Prime", "absolute_transcendent_omniversal_superintelligence_apex_prime.py", "Supreme Omniversal Apex")
+                176: ("Absolute Superintelligence Apex Prime", "absolute_transcendent_omniversal_superintelligence_apex_prime.py", "Supreme Omniversal Apex")
             }
             catalog = []
-            for i in range(1, 169):
+            for i in range(1, 177):
                 if i in named_samples:
                     name, mod, cat = named_samples[i]
                 else:
                     name, mod, cat = f"Omniversal Subsystem #{i}", f"subsystem_{i}.py", "Superintelligence Core"
                 catalog.append({"id": i, "name": name, "module": mod, "category": cat})
-            self.send_json_response({"total_subsystems": 168, "catalog": catalog})
+            self.send_json_response({"total_subsystems": 176, "catalog": catalog})
 
         elif parsed.path == "/api/openapi.json":
             self.send_json_response(OPENAPI_SPEC)
@@ -836,7 +836,7 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
                 "response": response_text,
                 "speaker": persona,
                 "state": state.variables,
-                "active_subsystems": 168
+                "active_subsystems": 176
             })
 
         # Feature 28: SSE streaming chat
@@ -867,7 +867,7 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
 
         # 4. Safe RSI 320x Hot-Swap Upgrade
         elif parsed.path == "/api/rsi/upgrade":
-            target_v = body.get("version", "v31.0.0-apex-prime")
+            target_v = body.get("version", "v32.0.0-apex-prime")
             rsi_rep = rsi_engine.evaluate_candidate_upgrade(target_v, 320.0)
             if rsi_rep.approved:
                 rsi_engine.hot_swap_runtime(target_v)
@@ -949,12 +949,12 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
 
         # Hardcoded fallback responses
         if persona == "FRIDAY":
-            return "FRIDAY routing active: Tensor dispatching across 168 experts at 4.85M tok/s. Latency is 18 microseconds."
+            return "FRIDAY routing active: Tensor dispatching across 176 experts at 4.85M tok/s. Latency is 18 microseconds."
         elif persona == "EDITH":
             return "EDITH orbital grid secure: Deep Space Lagrange and planetary defense shield operating with zero anomaly."
 
         if "status" in query or "report" in query:
-            return "All 168 subsystems are in mathematical harmony, Sir. Compute fabric is online at 3,500 ExaFLOPs and the Arc Reactor is outputting 178.2 GW."
+            return "All 176 subsystems are in mathematical harmony, Sir. Compute fabric is online at 3,500 ExaFLOPs and the Arc Reactor is outputting 178.2 GW."
         elif "energy" in query or "reactor" in query or "plasma" in query:
             return "Arc Reactor Mark LXXXV magnetic confinement is stable at 14.5 Tesla, 94.0% thermodynamic efficiency."
         elif "quantum" in query or "qec" in query:
@@ -963,14 +963,14 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
             res = daemon.step_cycle()
             return f"Executed cognitive cycle, Sir. Status: {res.get('status')} with action: {res.get('action_committed')}."
         elif "upgrade" in query or "rsi" in query:
-            rsi_engine.hot_swap_runtime("v31.0.0-apex-prime")
+            rsi_engine.hot_swap_runtime("v32.0.0-apex-prime")
             return "Recursive Self-Improvement cycle approved. Operating at 320.0x Pareto acceleration."
         elif "fpga" in query or "hardware" in query:
             return "AMD Alveo U280 systolic tensor core active. Processing at 327,235 TFLOPs with 0.42 μs latency."
         elif "hello" in query or "jarvis" in query or "javis" in query:
-            return "At your service, Sir. Ready to execute omniversal directives across all 168 subsystems."
+            return "At your service, Sir. Ready to execute omniversal directives across all 176 subsystems."
         else:
-            return f"Directive received: '{query}'. Processing across 168 subsystems with formal invariant guarantee."
+            return f"Directive received: '{query}'. Processing across 176 subsystems with formal invariant guarantee."
 
     def execute_subsystem(self, key: str) -> dict:
         if key == "quantum_qec":
@@ -999,7 +999,7 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
             return {"subsystem": "Gravitational Lens Router #161", "amplification": rep.amplification_factor_einstein_ring, "bandwidth_ebps": rep.effective_bandwidth_exabits_sec}
         elif key == "apex_prime_superintelligence":
             rep = apex_prime_core.achieve_absolute_superintelligence_prime()
-            return {"subsystem": "Apex Prime #168", "phi": rep.integrated_phi_apex_prime, "realities": rep.realities_in_eternal_unity}
+            return {"subsystem": "Apex Prime #176", "phi": rep.integrated_phi_apex_prime, "realities": rep.realities_in_eternal_unity}
         else:
             return {"subsystem": key, "status": "SIMULATED_NOMINAL", "active": True}
 
@@ -1060,7 +1060,7 @@ def run_backend(port=PORT):
 
     append_log(
         "SYSTEM",
-        "v31.0.0 online: WebSocket, auth, rate-limiting, SQLite, "
+        "v32.0.0 online: WebSocket, auth, rate-limiting, SQLite, "
         "webhooks, OpenAPI, SSE, Gemini integration ready.",
     )
 
