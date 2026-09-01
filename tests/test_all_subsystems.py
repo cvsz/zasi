@@ -346,5 +346,42 @@ class TestZASISubsystems(unittest.TestCase):
         self.assertEqual(snapshot.system_status, "COSMIC_SINGULARITY_REACHED")
 
 
+    # ----- Hardware Drivers & MCP Protocols (v11.0.0) -----
+
+    def test_qiskit_quantum_bridge(self):
+        from src import QiskitQuantumBridge
+        bridge = QiskitQuantumBridge()
+        ghz = bridge.synthesize_ghz_entangled_state(num_qubits=4)
+        self.assertEqual(ghz.qubit_count, 4)
+        self.assertIn("OPENQASM 3.0", ghz.qasm_representation)
+        self.assertAlmostEqual(ghz.quantum_entropy_shannon, 1.0, places=2)
+        self.assertGreater(ghz.landauer_dissipation_joules, 0.0)
+
+    def test_nvidia_gpu_telemetry_supervisor(self):
+        from src import NVIDIAGPUTelemetrySupervisor
+        nv = NVIDIAGPUTelemetrySupervisor()
+        gpus = nv.probe_all_gpus()
+        self.assertGreater(len(gpus), 0)
+        self.assertGreater(gpus[0].memory_total_mb, 0.0)
+
+    def test_mcp_protocol_server(self):
+        from src import MCPProtocolServer
+        mcp = MCPProtocolServer()
+        # Test initialize
+        init_res = mcp.handle_json_rpc_request({"jsonrpc": "2.0", "id": 1, "method": "initialize"})
+        self.assertEqual(init_res["result"]["protocolVersion"], "2024-11-05")
+        # Test tools/list
+        list_res = mcp.handle_json_rpc_request({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+        self.assertGreaterEqual(len(list_res["result"]["tools"]), 2)
+        # Test tools/call
+        call_res = mcp.handle_json_rpc_request({
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {"name": "verify_invariant", "arguments": {"variables": {"x": 20, "y": 30}, "invariants": ["x + y <= 100"]}}
+        })
+        self.assertIn("Invariant Verified", call_res["result"]["content"][0]["text"])
+
+
 if __name__ == "__main__":
     unittest.main()

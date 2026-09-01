@@ -54,6 +54,10 @@ from .quantum_gravity_spacetime import QuantumGravitySpacetimeEngine, SpacetimeM
 from .molecular_nanofab_assembler import MolecularNanofabAssembler, NanofabricationBatch
 from .hyperspatial_topology_router import HyperspatialTopologyRouter, HyperspatialRoutingPacket
 from .universal_telemetry_mesh import UniversalTelemetryMesh, UniversalTelemetrySnapshot
+# Production Bridges & Protocol Engines
+from .qiskit_quantum_backend import QiskitQuantumBridge, QuantumCircuitExecutionResult
+from .nvidia_gpu_telemetry import NVIDIAGPUTelemetrySupervisor, GPUDeviceMetrics
+from .mcp_protocol_server import MCPProtocolServer, MCPToolDefinition
 
 __all__ = [
     "Proposal",
@@ -152,5 +156,11 @@ __all__ = [
     "HyperspatialTopologyRouter",
     "HyperspatialRoutingPacket",
     "UniversalTelemetryMesh",
-    "UniversalTelemetrySnapshot"
+    "UniversalTelemetrySnapshot",
+    "QiskitQuantumBridge",
+    "QuantumCircuitExecutionResult",
+    "NVIDIAGPUTelemetrySupervisor",
+    "GPUDeviceMetrics",
+    "MCPProtocolServer",
+    "MCPToolDefinition"
 ]
