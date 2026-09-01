@@ -76,6 +76,17 @@ from .provable_alignment_auditor import ProvableAlignmentAuditor, ProvableAlignm
 from .self_evolving_asi_runtime import SelfEvolvingASIRuntime, RuntimeTelemetryPulse
 from .transcendental_logic_prover import TranscendentalLogicProver, FormalSheafProof
 
+
+# v18.0.0 Subsystems #65-#72
+from .neuromorphic_chip_interface import NeuromorphicChipInterface, NeuromorphicExecutionReport
+from .federated_learning_coordinator import FederatedLearningCoordinator, FederatedRoundReport
+from .autonomous_drug_discovery import AutonomousDrugDiscoveryPipeline, DrugCandidateReport
+from .quantum_cryptography_engine import QuantumCryptographyEngine, QKDKeyExchangeReport
+from .planetary_defense_grid import PlanetaryDefenseGrid, NearEarthObject, DeflectionMissionPlan
+from .synthetic_consciousness_validator import SyntheticConsciousnessValidator, ConsciousnessCertificate
+from .hyperdimensional_memory_palace import HyperdimensionalMemoryPalace, HypervectorMemoryTrace
+from .autonomous_materials_scientist import AutonomousMaterialsScientist, MaterialsDiscoveryReport
+
 __all__ = [
     "Proposal",
     "VerificationResult",
@@ -211,5 +222,21 @@ __all__ = [
     "SelfEvolvingASIRuntime",
     "RuntimeTelemetryPulse",
     "TranscendentalLogicProver",
-    "FormalSheafProof"
+    "FormalSheafProof",    "NeuromorphicChipInterface",
+    "NeuromorphicExecutionReport",
+    "FederatedLearningCoordinator",
+    "FederatedRoundReport",
+    "AutonomousDrugDiscoveryPipeline",
+    "DrugCandidateReport",
+    "QuantumCryptographyEngine",
+    "QKDKeyExchangeReport",
+    "PlanetaryDefenseGrid",
+    "NearEarthObject",
+    "DeflectionMissionPlan",
+    "SyntheticConsciousnessValidator",
+    "ConsciousnessCertificate",
+    "HyperdimensionalMemoryPalace",
+    "HypervectorMemoryTrace",
+    "AutonomousMaterialsScientist",
+    "MaterialsDiscoveryReport",
 ]

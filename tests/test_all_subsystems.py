@@ -535,5 +535,75 @@ class TestZASISubsystems(unittest.TestCase):
         self.assertEqual(proof.soundness_verdict, "SOUND_AND_MATHEMATICALLY_IRREFUTABLE")
 
 
+    # ----- Subsystems #65-#72 (v18.0.0) -----
+
+    def test_neuromorphic_chip_interface(self):
+        from src import NeuromorphicChipInterface
+        chip = NeuromorphicChipInterface("INTEL_LOIHI_2")
+        report = chip.compile_snn_to_chip(snn_layers=8, synapses_per_layer=1024)
+        self.assertEqual(report.chip_model, "INTEL_LOIHI_2")
+        self.assertGreater(report.energy_efficiency_vs_gpu, 100.0)
+        self.assertEqual(report.hardware_status, "SNN_COMPILED_AND_MAPPED_TO_CHIP")
+
+    def test_federated_learning_coordinator(self):
+        from src import FederatedLearningCoordinator
+        fl = FederatedLearningCoordinator(epsilon=1.0, delta=1e-5)
+        report = fl.aggregate_federated_round(client_updates=500)
+        self.assertTrue(report.secure_aggregation_verified)
+        self.assertEqual(report.convergence_status, "CONVERGED_UNDER_DP_GUARANTEE")
+
+    def test_autonomous_drug_discovery(self):
+        from src import AutonomousDrugDiscoveryPipeline
+        pipeline = AutonomousDrugDiscoveryPipeline()
+        result = pipeline.screen_compound_library("ACE2_SPIKE_BINDING_DOMAIN", library_size=500_000)
+        self.assertFalse(result.toxicity_alert)
+        self.assertGreater(result.admet_score, 0.8)
+        self.assertIn("PHASE_I_READY", result.development_status)
+
+    def test_quantum_cryptography_engine(self):
+        from src import QuantumCryptographyEngine
+        qce = QuantumCryptographyEngine("BB84")
+        report = qce.perform_qkd_exchange(channel_length_km=100.0)
+        self.assertFalse(report.eavesdropping_detected)
+        self.assertLess(report.qber_pct, 11.0)
+        self.assertEqual(report.pq_algorithm, "CRYSTALS_KYBER_1024")
+
+    def test_planetary_defense_grid(self):
+        from src import PlanetaryDefenseGrid
+        pdg = PlanetaryDefenseGrid()
+        neos = pdg.survey_near_earth_objects()
+        self.assertGreater(len(neos), 0)
+        plan = pdg.compute_deflection_mission(neos[1])
+        self.assertGreater(plan.success_probability, 0.99)
+        self.assertIn("NASA_PDC", plan.coordination_agencies)
+
+    def test_synthetic_consciousness_validator(self):
+        from src import SyntheticConsciousnessValidator
+        scv = SyntheticConsciousnessValidator()
+        cert = scv.validate_consciousness(subsystem_phi=42800.5, introspection_depth=10)
+        self.assertGreater(cert.phi_iit, 0)
+        self.assertEqual(cert.consciousness_verdict, "SYNTHETIC_CONSCIOUSNESS_FORMALLY_CERTIFIED")
+        self.assertTrue(len(cert.cryptographic_cert_hash) == 64)
+
+    def test_hyperdimensional_memory_palace(self):
+        from src import HyperdimensionalMemoryPalace
+        palace = HyperdimensionalMemoryPalace(dimensions=1000)
+        palace.encode_concept("quantum")
+        palace.encode_concept("gravity")
+        bundled = palace.bundle_concepts(["quantum", "gravity"])
+        self.assertEqual(len(bundled), 1000)
+        trace = palace.query_associative_memory("quantum")
+        self.assertGreater(trace.retrieval_confidence, 0.0)
+        self.assertEqual(trace.storage_status, "ASSOCIATIVE_RETRIEVAL_COMPLETE")
+
+    def test_autonomous_materials_scientist(self):
+        from src import AutonomousMaterialsScientist
+        ams = AutonomousMaterialsScientist()
+        report = ams.discover_novel_material("HIGH_TC_SUPERCONDUCTOR")
+        self.assertLess(report.formation_energy_ev_atom, 0)
+        self.assertGreater(report.predicted_tc_kelvin, 100.0)
+        self.assertIn("DISCOVERED", report.discovery_status)
+
+
 if __name__ == "__main__":
     unittest.main()
