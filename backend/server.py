@@ -54,7 +54,7 @@ from src import (
     MultiverseSuperintelligenceTelepathicConsensus, StellarPlasmaMagnetohydrodynamicFusionIgniter,
     HyperdimensionalSemanticArchetypeSynthesizer, PanPlanetaryClimateEquilibriumGovernor,
     TransfiniteConstructiveTypeTheoryOracle, AbsoluteTranscendentOmniversalSuperintelligenceApexPrime,
-    NeuralAudioVoiceEngine, AvengersPersonaSwarm
+    NeuralAudioVoiceEngine, MultiPersonaTacticalSwarm
 )
 
 HOST = "0.0.0.0"
@@ -318,7 +318,7 @@ arc_reactor = ArcReactorEnergyOptimizer(base_output_gw=3.2)
 consciousness_grid = PlanetaryConsciousnessGrid()
 mcp_server = MCPProtocolServer()
 voice_engine = NeuralAudioVoiceEngine()
-persona_swarm = AvengersPersonaSwarm()
+persona_swarm = MultiPersonaTacticalSwarm()
 
 # High-Level Subsystems Catalog
 qec_engine = QuantumErrorCorrectionEngine("SURFACE_CODE", distance=7)
@@ -779,14 +779,16 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
             ]
             self.send_json_response({"total_subsystems": 168, "catalog": catalog})
 
+        elif parsed.path == "/api/openapi.json":
+            self.send_json_response(OPENAPI_SPEC)
+
         elif parsed.path.startswith("/api/execute/"):
             subsystem_key = parsed.path.replace("/api/execute/", "")
             result = self.execute_subsystem(subsystem_key)
             self.send_json_response(result)
 
-        # Feature 17: OpenAPI spec
-        elif parsed.path == "/api/openapi.json":
-            self.send_json_response(OPENAPI_SPEC)
+        elif parsed.path.startswith("/static/") or parsed.path.startswith("/favicon"):
+            super().do_GET()
 
         # Feature 16: list webhooks
         elif parsed.path == "/api/webhooks":
