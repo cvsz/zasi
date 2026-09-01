@@ -605,5 +605,75 @@ class TestZASISubsystems(unittest.TestCase):
         self.assertIn("DISCOVERED", report.discovery_status)
 
 
+    # ----- Subsystems #73-#80 (v19.0.0) -----
+
+    def test_large_multimodal_model_server(self):
+        from src import LargeMultimodalModelServer
+        srv = LargeMultimodalModelServer("ZASI_VLA_72B_APEX")
+        result = srv.serve_multimodal_request(["text", "image", "action"])
+        self.assertLess(result.time_to_first_token_ms, 100.0)
+        self.assertGreater(result.kv_cache_hit_rate, 0.8)
+        self.assertEqual(result.serving_status, "MULTIMODAL_INFERENCE_COMPLETE")
+        self.assertIsNotNone(result.action_sequence)
+
+    def test_autonomous_scientific_researcher(self):
+        from src import AutonomousScientificResearcher
+        researcher = AutonomousScientificResearcher()
+        report = researcher.generate_hypothesis("NEUROSCIENCE")
+        self.assertGreater(report.novelty_score, 0.9)
+        self.assertTrue(report.publication_ready)
+        self.assertEqual(report.peer_review_verdict, "ACCEPT_WITH_MINOR_REVISIONS")
+
+    def test_neural_architecture_search_engine(self):
+        from src import NeuralArchitectureSearchEngine
+        nas = NeuralArchitectureSearchEngine()
+        arch = nas.search_optimal_architecture("NVIDIA_H100", accuracy_target_pct=98.0)
+        self.assertTrue(arch.pareto_optimal)
+        self.assertGreater(arch.top1_accuracy_pct, 98.0)
+        self.assertLess(arch.latency_ms, 50.0)
+
+    def test_protein_folding_simulator(self):
+        from src import ProteinFoldingSimulator
+        sim = ProteinFoldingSimulator()
+        result = sim.fold_protein_complex("MKTAYIAKQRQISFVKSHFSRQ", "ACDEFGHIKLMNPQRSTVWY")
+        self.assertGreater(result.plddt_confidence, 90.0)
+        self.assertEqual(result.chains, 2)
+        self.assertIn("CONVERGED", result.structure_status)
+
+    def test_autonomous_financial_trading_engine(self):
+        from src import AutonomousFinancialTradingEngine
+        engine = AutonomousFinancialTradingEngine()
+        report = engine.run_trading_session(aum_bn=50.0)
+        self.assertGreater(report.sharpe_ratio_annualized, 3.0)
+        self.assertLess(report.max_drawdown_pct, 5.0)
+        self.assertEqual(report.regulatory_compliance_status, "SEC_FINRA_MIFID2_FULLY_COMPLIANT")
+
+    def test_exoplanet_detection_analyzer(self):
+        from src import ExoplanetDetectionAnalyzer
+        analyzer = ExoplanetDetectionAnalyzer("JWST")
+        report = analyzer.analyze_light_curve("TIC-472174959")
+        self.assertTrue(report.habitable_zone_confirmed)
+        self.assertGreater(report.earth_similarity_index, 0.8)
+        self.assertIn("O2", report.atmospheric_biosignatures)
+        self.assertGreater(report.detection_confidence_sigma, 5.0)
+
+    def test_universal_language_translator(self):
+        from src import UniversalLanguageTranslator
+        translator = UniversalLanguageTranslator()
+        self.assertGreater(translator.total_supported, 8000)
+        result = translator.translate("Hello, world!", "EN_US", "ZH_MANDARIN")
+        self.assertGreater(result.back_translation_bleu, 0.9)
+        self.assertGreater(result.translation_confidence, 0.95)
+
+    def test_swarm_robotics_coordinator(self):
+        from src import SwarmRoboticsCoordinator
+        coord = SwarmRoboticsCoordinator(swarm_size=100_000)
+        report = coord.deploy_swarm_mission("ENVIRONMENTAL_MONITORING", area_km2=10000.0)
+        self.assertEqual(report.collision_events, 0)
+        self.assertTrue(report.swarm_consensus_achieved)
+        self.assertGreater(report.coverage_pct, 99.0)
+        self.assertTrue(coord.verify_swarm_safety_invariants(report))
+
+
 if __name__ == "__main__":
     unittest.main()

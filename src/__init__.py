@@ -87,6 +87,17 @@ from .synthetic_consciousness_validator import SyntheticConsciousnessValidator, 
 from .hyperdimensional_memory_palace import HyperdimensionalMemoryPalace, HypervectorMemoryTrace
 from .autonomous_materials_scientist import AutonomousMaterialsScientist, MaterialsDiscoveryReport
 
+
+# v19.0.0 Subsystems #73-#80
+from .large_multimodal_model_server import LargeMultimodalModelServer, MultimodalInferenceResult
+from .autonomous_scientific_researcher import AutonomousScientificResearcher, ScientificDiscoveryReport
+from .neural_architecture_search_engine import NeuralArchitectureSearchEngine, NASArchitectureResult
+from .protein_folding_simulator import ProteinFoldingSimulator, ProteinComplexStructure
+from .autonomous_financial_trading_engine import AutonomousFinancialTradingEngine, TradingPerformanceReport
+from .exoplanet_detection_analyzer import ExoplanetDetectionAnalyzer, ExoplanetReport
+from .universal_language_translator import UniversalLanguageTranslator, TranslationResult
+from .swarm_robotics_coordinator import SwarmRoboticsCoordinator, SwarmMissionReport
+
 __all__ = [
     "Proposal",
     "VerificationResult",
@@ -238,5 +249,20 @@ __all__ = [
     "HyperdimensionalMemoryPalace",
     "HypervectorMemoryTrace",
     "AutonomousMaterialsScientist",
-    "MaterialsDiscoveryReport",
+    "MaterialsDiscoveryReport",    "LargeMultimodalModelServer",
+    "MultimodalInferenceResult",
+    "AutonomousScientificResearcher",
+    "ScientificDiscoveryReport",
+    "NeuralArchitectureSearchEngine",
+    "NASArchitectureResult",
+    "ProteinFoldingSimulator",
+    "ProteinComplexStructure",
+    "AutonomousFinancialTradingEngine",
+    "TradingPerformanceReport",
+    "ExoplanetDetectionAnalyzer",
+    "ExoplanetReport",
+    "UniversalLanguageTranslator",
+    "TranslationResult",
+    "SwarmRoboticsCoordinator",
+    "SwarmMissionReport",
 ]
