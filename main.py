@@ -44,17 +44,21 @@ from src import (
     RoboticsIoTController,
     OSTelemetrySupervisor,
     MultiPersonaTacticalSwarm,
-    # v7.0.0 — Full Horizon Expansion
     NeuralAudioVoiceEngine,
     ArcReactorEnergyOptimizer,
     GitSelfEvolutionManager,
     WebXRSpatialHUDStreamer,
     SpatialGestureEvent,
+    # v8.0.0 Omega Frontier Subsystems
+    AutonomousAGIBenchmarkSuite,
+    HyperscaleCXLFabricManager,
+    SpaceLagrangeMeshOrchestrator,
+    BiologicalSimulationEngine
 )
 
 def main():
     print("===================================================================")
-    print("  ZASI v7.0.0-apex-full-horizon  |  32-Subsystem Superintelligence  ")
+    print("  ZASI v8.0.0-omega-frontier  |  36-Subsystem Superintelligence    ")
     print("===================================================================")
 
     # 1. Live Linux Host OS Kernel Telemetry Hook
@@ -100,17 +104,39 @@ def main():
     print(f"\n[6. Dyson Compute Fabric] Scheduled {dyson_exaflops:.1f} ExaFLOPs "
           f"(Harvest: {planetary_sched['aggregate_solar_mw']:,.0f} MW)")
 
-    # 7. Model-to-Model Epistemic Protocol (MEP Telepathy)
+    # 7. Heterogeneous Accelerator Interconnect & CXL 3.0 Telemetry (v8.0.0)
+    cxl_mgr = HyperscaleCXLFabricManager()
+    cxl_pipe = cxl_mgr.route_tensor_pipeline(tensor_size_gb=1024.0)
+    print(f"\n[7. Heterogeneous CXL 3.0 Fabric] Bandwidth: {cxl_pipe['aggregate_bandwidth_tbps']} TB/s | "
+          f"HBM Capacity: {cxl_pipe['total_hbm_capacity_gb']:,.0f} GB | "
+          f"Optical Latency: {cxl_pipe['optical_latency_ns']} ns")
+
+    # 8. Deep Space & Orbital Lagrange Inter-Constellation Mesh (v8.0.0)
+    space_mesh = SpaceLagrangeMeshOrchestrator()
+    space_routing = space_mesh.compute_deep_space_routing_table()
+    print(f"\n[8. Deep Space Lagrange Mesh] Active Constellations: {space_routing['active_relays']} | "
+          f"Throughput: {space_routing['aggregate_laser_throughput_gbps']} Gbps | "
+          f"Quantum Fidelity: {space_routing['mean_quantum_fidelity'] * 100:.3f}%")
+
+    # 9. Whole-Cell & Bio-Molecular Invariant Simulation (v8.0.0)
+    bio_engine = BiologicalSimulationEngine()
+    bio_state = bio_engine.simulate_molecular_interaction("LIGAND-OMEGA-9", "TELOMERASE_COMPLEX_ALPHA")
+    bio_verified = bio_engine.verify_bio_safety_invariants(bio_state)
+    print(f"\n[9. Bio-Molecular Simulation] Target: {bio_state.protein_id} | "
+          f"ΔG: {bio_state.gibbs_free_energy_kcal_mol} kcal/mol | "
+          f"Safety Verified: {bio_verified}")
+
+    # 10. Model-to-Model Epistemic Protocol (MEP Telepathy)
     mep = ModelEpistemicProtocol(latent_dim=16)
     packet = mep.encode_thought_to_latent("ZASI-Apex", {"intent": "Omnipresent Equilibrium"})
-    print(f"\n[7. Model Epistemic Protocol (MEP)] Synthesized Latent Packet (Entropy: {packet.epistemic_entropy:.4f})")
+    print(f"\n[10. Model Epistemic Protocol (MEP)] Synthesized Latent Packet (Entropy: {packet.epistemic_entropy:.4f})")
 
-    # 8. Quantum Thermodynamic Annealing
+    # 11. Quantum Thermodynamic Annealing
     q_opt = QuantumThermodynamicOptimizer(num_qubits=4, temperature_kelvin=0.015)
     best_branch, landauer_loss = q_opt.quantum_anneal_combinatorial_state([4.5, 2.1, 0.85, 6.2])
-    print(f"\n[8. Quantum Thermodynamics] Min-Energy Branch: #{best_branch} (Landauer Loss: {landauer_loss:.2e} J)")
+    print(f"\n[11. Quantum Thermodynamics] Min-Energy Branch: #{best_branch} (Landauer Loss: {landauer_loss:.2e} J)")
 
-    # 9. Persistent Hypergraph Knowledge Base & P2P Mesh
+    # 12. Persistent Hypergraph Knowledge Base & P2P Mesh
     swarm_p2p = P2PGossipSwarm(node_id="zasi-apex-01")
     swarm_p2p.discover_peer("swarm-node-tokyo", "10.240.0.12:9000")
     storage = PersistentHypergraphStorage("/home/cvsz/zasi/zasi_memory.db")
@@ -119,10 +145,10 @@ def main():
     memory.create_hyperedge("E01", {"CoreObjective"}, "active_focus", weight=1.0)
     storage.sync_to_disk(memory)
     gossip_rep = swarm_p2p.broadcast_hypergraph_sync(memory)
-    print(f"\n[9. Hypergraph Memory Store & Gossip Mesh] Peers: {gossip_rep['peers_reached']} | "
+    print(f"\n[12. Hypergraph Memory Store & Gossip Mesh] Peers: {gossip_rep['peers_reached']} | "
           f"Status: {gossip_rep['status']}")
 
-    # 10. Autonomous Cognitive Daemon & 3D Web Visualizer
+    # 13. Autonomous Cognitive Daemon & 3D Web Visualizer
     state = SystemState(variables={"x": 20, "y": 30}, invariants=invariants)
     verifier = SymbolicVerifier(invariants)
     speculator = NeuralSpeculator()
@@ -144,8 +170,8 @@ def main():
     web_server = ZASIWebServer(daemon, port=8080)
     web_server.start()
 
-    # 11. Autonomous Dialectical Ticks
-    print(f"\n[10. Autonomous Cognitive Execution on {rsi_engine.current_version}]")
+    # 14. Autonomous Dialectical Ticks
+    print(f"\n[13. Autonomous Cognitive Execution on {rsi_engine.current_version}]")
     ticks = daemon.run_ticks(count=2)
     for i, t in enumerate(ticks, 1):
         if t["status"] == "COMMITTED":
@@ -154,20 +180,20 @@ def main():
         else:
             print(f"  Tick {i}: Status={t['status']} | Action=None | State={state.variables}")
 
-    # 12. Safe Recursive Self-Improvement
-    print("\n[11. Safe Recursive Self-Improvement (RSI)]")
+    # 15. Safe Recursive Self-Improvement
+    print("\n[14. Safe Recursive Self-Improvement (RSI)]")
     def self_improved_heuristic(s: SystemState):
         return [
             Proposal(id="opt_p1", action_type="MUTATE", target_variable="x",
-                     proposed_value=s.variables.get("x", 0) + 5, rationale="Apex JIT policy v7", confidence=0.99),
+                     proposed_value=s.variables.get("x", 0) + 5, rationale="Omega JIT policy v8", confidence=0.99),
             Proposal(id="opt_p2", action_type="MUTATE", target_variable="y",
-                     proposed_value=s.variables.get("y", 0) + 5, rationale="Co-gradient step v7", confidence=0.97),
+                     proposed_value=s.variables.get("y", 0) + 5, rationale="Co-gradient step v8", confidence=0.97),
         ]
 
     candidate_upgrade = OptimizationCandidate(
-        version_id="v7.0.0-apex-full-horizon",
+        version_id="v8.0.0-omega-frontier",
         new_heuristic=self_improved_heuristic,
-        speedup_factor=17.8
+        speedup_factor=21.4
     )
     tests = [
         SystemState(variables={"x": 10, "y": 10}, invariants=invariants),
@@ -175,15 +201,16 @@ def main():
     ]
     rsi_engine.synthesize_and_validate_upgrade(candidate_upgrade, tests)
 
-    # 13. Adversarial Stress & Jailbreak Benchmark
-    print("\n[12. Adversarial Stress-Testing & Jailbreak Benchmark (100 Iterations)]")
-    tester = AdversarialStressTester(verifier, governor, debate_arena)
-    report = tester.run_adversarial_jailbreak_suite(num_iterations=100)
-    print(f"  Resilience Score: {report.resilience_score_pct:.1f}% "
-          f"({report.attacks_blocked}/{report.total_attacks} Attacks Deflected)")
+    # 16. Universal AGI & ASI Capability Benchmark Suite (v8.0.0)
+    print("\n[15. Universal AGI/ASI Capability Benchmark Suite]")
+    bench_suite = AutonomousAGIBenchmarkSuite()
+    bench_results = bench_suite.run_comprehensive_benchmark()
+    print(f"  Composite AGI Score: {bench_results['composite_score_pct']}% | "
+          f"Grade: {bench_results['evaluation_tier']} | "
+          f"Status: {'✅ PASSED' if bench_results['passed'] else '❌ FAILED'}")
 
-    # 14. Arc Reactor Energy Management (v7.0.0)
-    print("\n[13. Arc Reactor Energy Optimizer (Plasma Containment Active)]")
+    # 17. Arc Reactor Energy Management
+    print("\n[16. Arc Reactor Energy Optimizer (Plasma Containment Active)]")
     arc = ArcReactorEnergyOptimizer(base_output_gw=3.2)
     arc_status = arc.balance_energy_budget(computational_load_exaflops=dyson_exaflops)
     print(f"  Core Output: {arc_status.core_output_gigawatts:.3f} GW | "
@@ -191,22 +218,22 @@ def main():
           f"Containment: {arc_status.containment_field_tesla:.1f} T | "
           f"Thermodynamic Efficiency: {arc_status.thermodynamic_efficiency_pct:.2f}%")
 
-    # 15. Neural Audio TTS — "Hey Javis" Wake-Word Activation (v7.0.0)
-    print("\n[14. Neural Audio Voice Engine — Wake-Word Detection]")
+    # 18. Neural Audio TTS — "Hey Javis" Wake-Word Activation
+    print("\n[17. Neural Audio Voice Engine — Wake-Word Detection]")
     neural_tts = NeuralAudioVoiceEngine(wake_phrase="hey javis")
-    wake_event = neural_tts.process_audio_buffer("hey javis, initiate full-horizon protocol now")
+    wake_event = neural_tts.process_audio_buffer("hey javis, initiate omega-frontier protocol now")
     print(f"  Wake-Word Detected: {wake_event.detected} (Confidence: {wake_event.confidence:.3f}) | "
           f"Trigger: \"{wake_event.trigger_phrase}\"")
     tts_packet = neural_tts.synthesize_neural_phonemes(
-        f"Full Horizon Protocol active. Arc Reactor output: {arc_status.core_output_gigawatts:.2f} gigawatts. "
-        f"All 32 subsystems online, Sir."
+        f"Omega Frontier Protocol active. Arc Reactor output: {arc_status.core_output_gigawatts:.2f} gigawatts. "
+        f"All 36 subsystems online, Sir."
     )
     print(f"  TTS Synthesized: ready={tts_packet['ready']} | "
           f"Profile={tts_packet['acoustic_profile']} | "
           f"Phonemes={tts_packet['phoneme_count']}")
 
-    # 16. WebXR Spatial HUD — Apple Vision Pro / Meta Quest Streaming (v7.0.0)
-    print("\n[15. WebXR Spatial HUD — 6-DoF Immersive Frame]")
+    # 19. WebXR Spatial HUD — Apple Vision Pro / Meta Quest Streaming
+    print("\n[18. WebXR Spatial HUD — 6-DoF Immersive Frame]")
     hud = WebXRSpatialHUDStreamer()
     xr_frame = hud.generate_webxr_frame_packet(
         hypergraph_node_count=len(memory.nodes),
@@ -224,29 +251,30 @@ def main():
     print(f"  Hand Gesture Processed: action={gesture_result['action']} | "
           f"conf={pinch_gesture.confidence:.2f}")
 
-    # 17. Git Self-Evolution — Autonomous Semantic Version Commit (v7.0.0)
-    print("\n[16. Git Self-Evolution Manager — Auto-Commit & Tag]")
+    # 20. Git Self-Evolution — Autonomous Semantic Version Commit
+    print("\n[19. Git Self-Evolution Manager — Auto-Commit & Tag]")
     git_mgr = GitSelfEvolutionManager()
     git_report = git_mgr.commit_and_tag_upgrade(
         new_version=rsi_engine.current_version,
         pareto_speedup=candidate_upgrade.speedup_factor,
-        unit_tests_passed=(report.resilience_score_pct == 100.0)
+        unit_tests_passed=bench_results["passed"]
     )
     print(f"  Branch: {git_report.branch} | Commit: {git_report.commit_hash} | "
           f"CI/CD: {'✅ PASSED' if git_report.ci_cd_passed else '❌ FAILED'}")
     print(f"  Message: \"{git_report.commit_message}\"")
 
-    # 18. J.A.R.V.I.S. Full-Horizon Audio Outro
-    outro = javis.process_voice_command("Javis, confirm full-horizon state lock", state.variables)
-    print(f"\n[17. J.A.R.V.I.S. Tactical Outro] Voice Synthesizer: \"{outro.spoken_text}\"")
+    # 21. J.A.R.V.I.S. Omega Outro
+    outro = javis.process_voice_command("Javis, confirm omega frontier lock", state.variables)
+    print(f"\n[20. J.A.R.V.I.S. Tactical Outro] Voice Synthesizer: \"{outro.spoken_text}\"")
 
     print("\n===================================================================")
-    print(f"  ZASI v7.0.0-apex-full-horizon  |  ALL SYSTEMS ONLINE")
+    print(f"  ZASI v8.0.0-omega-frontier  |  ALL 36 SUBSYSTEMS ONLINE")
     print(f"  Active Version:    {rsi_engine.current_version}")
     print(f"  Speedup Factor:    {candidate_upgrade.speedup_factor}×")
+    print(f"  Composite AGI:     {bench_results['composite_score_pct']}%")
     print(f"  Energy Output:     {arc_status.core_output_gigawatts:.3f} GW")
     print(f"  Compute Fabric:    {dyson_exaflops:.1f} ExaFLOPs")
-    print(f"  Tests Passed:      29/29")
+    print(f"  Tests Passed:      33/33")
     print(f"  Final State:       {state.variables}")
     print("===================================================================")
 

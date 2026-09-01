@@ -1,10 +1,10 @@
 # ZASI: Apex J.A.R.V.I.S. / F.R.I.D.A.Y. / E.D.I.T.H. Superintelligence Framework
 
-**ZASI** is a total-horizon, multimodal, quantum-thermodynamic, cryptographically verified Artificial Superintelligence (ASI) framework equipped with the **J.A.R.V.I.S. / F.R.I.D.A.Y. / E.D.I.T.H.** tactical persona swarm, holographic WebXR Spatial HUD, Arc Reactor energy management, neural audio wake-word synthesis, autonomous Git self-evolution, Linux kernel telemetry probes, and robotics G-code drivers.
+**ZASI** is a total-horizon, multimodal, quantum-thermodynamic, cryptographically verified Artificial Superintelligence (ASI) framework equipped with the **J.A.R.V.I.S. / F.R.I.D.A.Y. / E.D.I.T.H.** tactical persona swarm, CXL 3.0 accelerator fabric, Deep Space Lagrange relay mesh, bio-molecular simulator, universal AGI benchmark suite, holographic WebXR Spatial HUD, Arc Reactor energy management, neural audio wake-word synthesis, autonomous Git self-evolution, Linux kernel telemetry probes, and robotics G-code drivers.
 
 ---
 
-## 32 Unified Subsystems Matrix
+## 36 Unified Subsystems Matrix
 
 | Category | Subsystem | Module | Description |
 | :--- | :--- | :--- | :--- |
@@ -17,6 +17,10 @@
 | **Zero-Knowledge** | ZK-STARK Proof Engine | `src/zk_stark.py` | Transparent zero-knowledge execution trace proofs |
 | **Inter-Agent Telepathy**| Model Epistemic Protocol (MEP) | `src/mep_telepathy.py` | Sub-token high-bandwidth latent thought transfer |
 | **Planetary Compute** | Dyson Swarm Orchestrator | `src/dyson_orchestrator.py` | Multi-planetary solar ExaFLOP inference scheduling |
+| **Heterogeneous Interconnect** | Hyperscale CXL 3.0 Fabric | `src/hyperscale_cxl_fabric.py` | Multi-GPU NVL72/TPU v6e/Photonic optical fabric routing |
+| **Deep Space Comms** | Lagrange Inter-Constellation Mesh | `src/space_lagrange_mesh.py` | Gravitational/Laser Earth-Moon-Mars quantum telemetry |
+| **Molecular Life Sciences** | Bio-Molecular Invariant Simulator | `src/biological_simulation.py` | Whole-cell metabolic and protein thermodynamic safety bounds |
+| **Capability Benchmarks** | Universal AGI/ASI Benchmark Suite | `src/autonomous_agi_benchmark.py` | Multi-domain reasoning, ARC-AGI, and STARK evaluation suite |
 | **Energy Optimization** | Arc Reactor Energy Core | `src/arc_reactor_energy.py` | Micro-fusion plasma containment & thermodynamic load balancer |
 | **Neural TTS & Audio** | Neural Audio Wake-Word Engine | `src/neural_audio_tts.py` | Real-time "Hey Javis" wake-word detection & phoneme synthesis |
 | **Spatial Computing** | WebXR Spatial Reality HUD | `src/webxr_spatial_hud.py` | 6-DoF spatial scene graph & pinch/gesture raycasting (Vision Pro / Quest) |
@@ -49,10 +53,10 @@
 # Automated Setup & Self-Test
 ./install.sh
 
-# Run Complete Apex J.A.R.V.I.S. Framework (v7.0.0)
+# Run Complete Apex J.A.R.V.I.S. Framework (v8.0.0)
 python3 main.py
 
-# Run Full 29-Subsystem Unit & Integration Test Suite
+# Run Full 33-Subsystem Unit & Integration Test Suite
 python3 -m unittest discover -s tests
 
 # Interactive Voice/Terminal Shell

@@ -251,5 +251,38 @@ class TestZASISubsystems(unittest.TestCase):
         self.assertIn("EXPAND_HYPERGRAPH", result["action"])
 
 
+    # ----- Frontier Horizon: 4 new frontier modules (v8.0.0) -----
+
+    def test_autonomous_agi_benchmark(self):
+        from src import AutonomousAGIBenchmarkSuite
+        suite = AutonomousAGIBenchmarkSuite()
+        res = suite.run_comprehensive_benchmark()
+        self.assertTrue(res["passed"])
+        self.assertGreaterEqual(res["composite_score_pct"], 95.0)
+        self.assertEqual(res["evaluation_tier"], "SUPERINTELLIGENCE_APEX_GRADE")
+
+    def test_hyperscale_cxl_fabric(self):
+        from src import HyperscaleCXLFabricManager
+        cxl = HyperscaleCXLFabricManager()
+        pipeline = cxl.route_tensor_pipeline(tensor_size_gb=1024.0)
+        self.assertEqual(pipeline["status"], "ALL_ACCELERATORS_ONLINE")
+        self.assertGreater(pipeline["aggregate_bandwidth_tbps"], 400.0)
+
+    def test_space_lagrange_mesh(self):
+        from src import SpaceLagrangeMeshOrchestrator
+        space_mesh = SpaceLagrangeMeshOrchestrator()
+        routing = space_mesh.compute_deep_space_routing_table()
+        self.assertEqual(routing["status"], "ALL_CONSTELLATIONS_LOCKED")
+        self.assertEqual(routing["active_relays"], 3)
+        self.assertGreater(routing["mean_quantum_fidelity"], 0.99)
+
+    def test_biological_simulation_engine(self):
+        from src import BiologicalSimulationEngine
+        bio = BiologicalSimulationEngine()
+        state = bio.simulate_molecular_interaction("LIGAND-99", "PROTEIN-KINASE-X")
+        self.assertTrue(bio.verify_bio_safety_invariants(state))
+        self.assertLess(state.gibbs_free_energy_kcal_mol, 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()

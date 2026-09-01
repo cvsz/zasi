@@ -42,6 +42,10 @@ from .neural_audio_tts import NeuralAudioVoiceEngine, WakeWordEvent
 from .arc_reactor_energy import ArcReactorEnergyOptimizer, ArcReactorStatus
 from .git_self_evolution import GitSelfEvolutionManager, GitCommitReport
 from .webxr_spatial_hud import WebXRSpatialHUDStreamer, SpatialGestureEvent
+from .autonomous_agi_benchmark import AutonomousAGIBenchmarkSuite, BenchmarkScore
+from .hyperscale_cxl_fabric import HyperscaleCXLFabricManager, AcceleratorNode
+from .space_lagrange_mesh import SpaceLagrangeMeshOrchestrator, OrbitalRelayStation
+from .biological_simulation import BiologicalSimulationEngine, BioMolecularState
 
 __all__ = [
     "Proposal",
@@ -117,4 +121,12 @@ __all__ = [
     "GitCommitReport",
     "WebXRSpatialHUDStreamer",
     "SpatialGestureEvent",
+    "AutonomousAGIBenchmarkSuite",
+    "BenchmarkScore",
+    "HyperscaleCXLFabricManager",
+    "AcceleratorNode",
+    "SpaceLagrangeMeshOrchestrator",
+    "OrbitalRelayStation",
+    "BiologicalSimulationEngine",
+    "BioMolecularState"
 ]
