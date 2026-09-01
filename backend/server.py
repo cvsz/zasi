@@ -447,33 +447,138 @@ def _get_history(persona: str):
 
 
 # ---------------------------------------------------------------------------
-# Feature 29: Gemini API Integration
 # ---------------------------------------------------------------------------
+# Feature 29: Free Model Multi-Provider Router (OpenRouter, OpenCode, Kilo, Gemini)
+# ---------------------------------------------------------------------------
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "") or os.environ.get("OPENROUTER_ZBOT_API_KEY", "")
+OPENROUTER_FREE_MODEL = os.environ.get("OPENROUTER_FREE_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
+OPENCODE_API_KEY = os.environ.get("OPENCODE_API_KEY", "")
+KILO_API_KEY = os.environ.get("KILO_API_KEY", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_URL = (
-    "https://generativelanguage.googleapis.com/v1beta/models/"
-    "gemini-2.0-flash:generateContent"
-)
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 
 _PERSONA_SYSTEM_PROMPTS = {
     "JARVIS": (
-        "You are J.A.R.V.I.S. (Just A Rather Very Intelligent System), Tony Stark's AI. "
-        "Respond concisely, politely, and with dry wit. Reference the ZASI superintelligence "
-        "system with 176 subsystems when relevant."
+        "You are J.A.R.V.I.S. (Just A Rather Very Intelligent System), the orchestrator for the ZASI Omniversal Superintelligence OS. "
+        "Respond concisely, politely, and with subtle dry wit. You understand and speak multiple languages including English and Thai fluently. "
+        "Reference ZASI's 176 subsystems when relevant."
     ),
     "FRIDAY": (
-        "You are F.R.I.D.A.Y., Tony Stark's tactical AI. "
-        "Be sharp, efficient, and mission-focused."
+        "You are F.R.I.D.A.Y., tactical AI assistant for the ZASI superintelligence platform. "
+        "Be sharp, highly efficient, and mission-focused in all languages."
     ),
     "EDITH": (
-        "You are E.D.I.T.H. (Even Dead I'm The Hero), a satellite defense AI. "
+        "You are E.D.I.T.H. (Even Dead I'm The Hero), orbital defense and strategic security AI for ZASI. "
         "Be precise, security-conscious, and brief."
     ),
 }
 
 
-def _call_gemini(persona: str, user_message: str, history: list) -> str:
-    """Call Gemini API; returns the model's text reply."""
+def _call_openrouter_free(persona: str, user_message: str, history: list) -> str:
+    """Call OpenRouter Free tier endpoint with OpenAI chat format."""
+    system_prompt = _PERSONA_SYSTEM_PROMPTS.get(persona, _PERSONA_SYSTEM_PROMPTS["JARVIS"])
+    messages = [{"role": "system", "content": system_prompt}]
+    for turn in history[-14:]:
+        messages.append({"role": turn["role"], "content": turn["content"]})
+    messages.append({"role": "user", "content": user_message})
+
+    # Try standard free models in order of capability
+    free_models = [
+        OPENROUTER_FREE_MODEL,
+        "meta-llama/llama-3.3-70b-instruct:free",
+        "mistralai/mistral-small-24b-instruct-2501:free",
+        "google/gemini-2.0-flash-lite-preview-02-05:free",
+        "deepseek/deepseek-chat:free",
+        "qwen/qwen-2.5-coder-32b-instruct:free",
+    ]
+    
+    last_err = None
+    for model_name in free_models:
+        payload = {
+            "model": model_name,
+            "messages": messages,
+            "max_tokens": 512,
+            "temperature": 0.7,
+        }
+        req = urllib.request.Request(
+            "https://openrouter.ai/api/v1/chat/completions",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "HTTP-Referer": "https://zasi.zeaz.dev",
+                "X-Title": "ZASI Superintelligence",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=12) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                return data["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            last_err = e
+            continue
+    raise last_err or RuntimeError("All OpenRouter free models exhausted.")
+
+
+def _call_opencode_free(persona: str, user_message: str, history: list) -> str:
+    """Call OpenCode API router for conversational completion."""
+    system_prompt = _PERSONA_SYSTEM_PROMPTS.get(persona, _PERSONA_SYSTEM_PROMPTS["JARVIS"])
+    messages = [{"role": "system", "content": system_prompt}]
+    for turn in history[-14:]:
+        messages.append({"role": turn["role"], "content": turn["content"]})
+    messages.append({"role": "user", "content": user_message})
+
+    payload = {
+        "model": "gpt-4o-mini",
+        "messages": messages,
+        "max_tokens": 512,
+        "temperature": 0.7,
+    }
+    req = urllib.request.Request(
+        "https://opencode.ai/zen/v1/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {OPENCODE_API_KEY}",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+        return data["choices"][0]["message"]["content"].strip()
+
+
+def _call_kilo_free(persona: str, user_message: str, history: list) -> str:
+    """Call Kilo / xAI inference gateway."""
+    system_prompt = _PERSONA_SYSTEM_PROMPTS.get(persona, _PERSONA_SYSTEM_PROMPTS["JARVIS"])
+    messages = [{"role": "system", "content": system_prompt}]
+    for turn in history[-14:]:
+        messages.append({"role": turn["role"], "content": turn["content"]})
+    messages.append({"role": "user", "content": user_message})
+
+    payload = {
+        "model": "grok-beta",
+        "messages": messages,
+        "max_tokens": 512,
+        "temperature": 0.7,
+    }
+    req = urllib.request.Request(
+        "https://api.x.ai/v1/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {KILO_API_KEY}",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        data = json.loads(resp.read().decode("utf-8"))
+        return data["choices"][0]["message"]["content"].strip()
+
+
+def _call_gemini_api(persona: str, user_message: str, history: list) -> str:
+    """Call Google Gemini API."""
     system_prompt = _PERSONA_SYSTEM_PROMPTS.get(persona, _PERSONA_SYSTEM_PROMPTS["JARVIS"])
     contents = []
     for turn in history[-18:]:
@@ -493,13 +598,42 @@ def _call_gemini(persona: str, user_message: str, history: list) -> str:
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read())
-        return data["candidates"][0]["content"]["parts"][0]["text"].strip()
-    except urllib.error.HTTPError as e:
-        e.close()
-        raise
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        data = json.loads(resp.read())
+    return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+
+
+def _route_free_model_chat(persona: str, user_message: str, history: list) -> str:
+    """Intelligently cascades through OpenRouter Free, OpenCode, Kilo, and Gemini with zero-config fallback."""
+    # 1. OpenRouter Free Tier
+    if OPENROUTER_API_KEY:
+        try:
+            return _call_openrouter_free(persona, user_message, history)
+        except Exception as e:
+            append_log("ROUTER", f"OpenRouter Free error: {e}; trying OpenCode/Kilo.")
+
+    # 2. OpenCode Gateway
+    if OPENCODE_API_KEY:
+        try:
+            return _call_opencode_free(persona, user_message, history)
+        except Exception as e:
+            append_log("ROUTER", f"OpenCode error: {e}; trying Kilo/Gemini.")
+
+    # 3. Kilo / xAI Gateway
+    if KILO_API_KEY:
+        try:
+            return _call_kilo_free(persona, user_message, history)
+        except Exception as e:
+            append_log("ROUTER", f"Kilo error: {e}; trying Gemini.")
+
+    # 4. Gemini Fallback
+    if GEMINI_API_KEY:
+        try:
+            return _call_gemini_api(persona, user_message, history)
+        except Exception as e:
+            append_log("ROUTER", f"Gemini error: {e}; routing to local deterministic engine.")
+
+    raise RuntimeError("All configured cloud free-model providers unavailable.")
 
 
 # ---------------------------------------------------------------------------
@@ -1043,15 +1177,16 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
             pass
 
     # ------------------------------------------------------------------ #
-    # Chat dispatcher (Gemini or native multilingual expert engine)       #
+    # Chat dispatcher (Free Model Router: OpenRouter/OpenCode/Kilo/Gemini or native engine)
     # ------------------------------------------------------------------ #
     def process_jarvis_command(self, query: str, persona: str = "JARVIS",
                                history: list = None) -> str:
-        if GEMINI_API_KEY:
+        # 1. Attempt cloud free-model routing (OpenRouter / OpenCode / Kilo / Gemini)
+        if OPENROUTER_API_KEY or OPENCODE_API_KEY or KILO_API_KEY or GEMINI_API_KEY:
             try:
-                return _call_gemini(persona, query, history or [])
+                return _route_free_model_chat(persona, query, history or [])
             except Exception as e:
-                append_log("GEMINI", f"API error: {e}; routing to local conversational engine.")
+                append_log("ROUTER", f"Free model inference failed ({e}); falling back to local native engine.")
 
         q_lower = query.lower().strip()
 
