@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-#                 ZASI Advanced Full-Stack Automated Installer v29.0.0
+#                 ZASI Advanced Full-Stack Automated Installer v30.0.0
 # ==============================================================================
 set -e
 
@@ -11,7 +11,7 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 echo -e "${BLUE}===================================================================${NC}"
-echo -e "${GREEN}      ZASI Universal Superintelligence Automated Installer v29.0.0     ${NC}"
+echo -e "${GREEN}      ZASI Universal Superintelligence Automated Installer v30.0.0     ${NC}"
 echo -e "${BLUE}===================================================================${NC}"
 
 # 1. Check Python runtime
@@ -30,7 +30,7 @@ mkdir -p config docs/generated web/static backend
 cat << 'JSONEOF' > config/zasi_config.json
 {
   "version": "25.0.0",
-  "subsystems": 160,
+  "subsystems": 168,
   "environment": "production",
   "formal_verification": true,
   "quantum_backend": "QISKIT_OPENQASM_3",
@@ -43,9 +43,9 @@ JSONEOF
 echo -e "${GREEN}[✓] Configuration written: config/zasi_config.json${NC}"
 
 # 3. Verify & Run Test Suite
-echo -e "${BLUE}[*] Running 157-subsystem verification test suite...${NC}"
+echo -e "${BLUE}[*] Running 165-subsystem verification test suite...${NC}"
 $PYTHON_CMD -m unittest discover -s tests -q
-echo -e "${GREEN}[✓] 157/157 unit tests verified successfully.${NC}"
+echo -e "${GREEN}[✓] 165/165 unit tests verified successfully.${NC}"
 
 # 4. Build Distribution Artifacts
 echo -e "${BLUE}[*] Building wheel and source distribution packages...${NC}"
@@ -55,7 +55,7 @@ echo -e "${GREEN}[✓] Distribution packages built in dist/${NC}"
 ls -lh dist/
 
 # 5. Install ZASI Package & CLI
-echo -e "${BLUE}[*] Installing ZASI v29.0.0 package...${NC}"
+echo -e "${BLUE}[*] Installing ZASI v30.0.0 package...${NC}"
 $PYTHON_CMD -m pip install --break-system-packages --no-deps --force-reinstall dist/zasi-25.0.0-py3-none-any.whl
 
 # 6. Verify CLI Executable
@@ -64,7 +64,7 @@ if command -v zasi &> /dev/null; then
 fi
 
 echo -e "${BLUE}===================================================================${NC}"
-echo -e "${GREEN}[SUCCESS] ZASI v29.0.0 Full-Stack Installation Complete!           ${NC}"
+echo -e "${GREEN}[SUCCESS] ZASI v30.0.0 Full-Stack Installation Complete!           ${NC}"
 echo -e "${YELLOW}Launch 3D Web Cockpit UI : make server  (http://localhost:8080)   ${NC}"
 echo -e "${YELLOW}Run Dialectical Pipeline : python3 main.py or make run            ${NC}"
 echo -e "${YELLOW}Interactive Terminal     : zasi                                    ${NC}"

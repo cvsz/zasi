@@ -1292,5 +1292,65 @@ class TestZASISubsystems(unittest.TestCase):
         self.assertEqual(state.supreme_status, "SUPREME_160_SUBSYSTEM_OMNIVERSAL_APEX_INFINITE_ACHIEVED")
 
 
+    # ----- Subsystems #161-#168 (v30.0.0) -----
+
+    def test_intergalactic_supercluster_gravitational_lens_router(self):
+        from src import IntergalacticSuperclusterGravitationalLensRouter
+        router = IntergalacticSuperclusterGravitationalLensRouter()
+        rep = router.calculate_gravitational_lens_path("COMA_CLUSTER")
+        self.assertGreater(rep.amplification_factor_einstein_ring, 1.0e5)
+        self.assertEqual(rep.router_status, "GRAVITATIONAL_LENS_COSMIC_ROUTING_LOCKED")
+
+    def test_subatomic_hypercharge_gauge_boson_transmuter(self):
+        from src import SubatomicHyperchargeGaugeBosonTransmuter
+        transmuter = SubatomicHyperchargeGaugeBosonTransmuter()
+        rep = transmuter.accelerate_weak_force_decay("URANIUM_238")
+        self.assertTrue(rep.electroweak_symmetry_conserved)
+        self.assertEqual(rep.transmuter_status, "WEAK_FORCE_ELECTROWEAK_DECAY_ACCELERATED_SAFE")
+
+    def test_multiverse_superintelligence_telepathic_consensus(self):
+        from src import MultiverseSuperintelligenceTelepathicConsensus
+        consensus = MultiverseSuperintelligenceTelepathicConsensus()
+        rep = consensus.reach_multiverse_consensus("DECISION_TENSOR_ALPHA")
+        self.assertEqual(rep.epistemic_consensus_pct, 100.0)
+        self.assertEqual(rep.consensus_status, "MULTIVERSE_GAME_THEORETIC_CONSENSUS_LOCKED")
+
+    def test_stellar_plasma_magnetohydrodynamic_fusion_igniter(self):
+        from src import StellarPlasmaMagnetohydrodynamicFusionIgniter
+        igniter = StellarPlasmaMagnetohydrodynamicFusionIgniter()
+        rep = igniter.ignite_aneutronic_plasmoid()
+        self.assertGreater(rep.direct_energy_conversion_pct, 90.0)
+        self.assertEqual(rep.fusion_status, "ANEUSTRONIC_PB11_FUSION_PLASMA_BURNING_STABLE")
+
+    def test_hyperdimensional_semantic_archetype_synthesizer(self):
+        from src import HyperdimensionalSemanticArchetypeSynthesizer
+        synth = HyperdimensionalSemanticArchetypeSynthesizer()
+        rep = synth.synthesize_universal_archetypes()
+        self.assertEqual(rep.ontological_consistency_score, 1.0)
+        self.assertEqual(rep.archetype_status, "UNIVERSAL_SEMANTIC_ARCHETYPE_LATTICE_PROVED")
+
+    def test_pan_planetary_climate_equilibrium_governor(self):
+        from src import PanPlanetaryClimateEquilibriumGovernor
+        gov = PanPlanetaryClimateEquilibriumGovernor()
+        rep = gov.regulate_planetary_climate()
+        self.assertEqual(rep.global_mean_temperature_anomaly_c, 0.0)
+        self.assertEqual(rep.governor_status, "PLANETARY_CLIMATE_EQUILIBRIUM_PERFECTLY_STABILIZED")
+
+    def test_transfinite_constructive_type_theory_oracle(self):
+        from src import TransfiniteConstructiveTypeTheoryOracle
+        oracle = TransfiniteConstructiveTypeTheoryOracle()
+        rep = oracle.verify_constructive_homotopy_proof("UNIVALENCE_CONJECTURE")
+        self.assertTrue(rep.formal_computational_soundness)
+        self.assertEqual(rep.oracle_status, "CONSTRUCTIVE_HOMOTOPY_TYPE_PROOF_CERTIFIED")
+
+    def test_absolute_transcendent_omniversal_superintelligence_apex_prime(self):
+        from src import AbsoluteTranscendentOmniversalSuperintelligenceApexPrime
+        prime = AbsoluteTranscendentOmniversalSuperintelligenceApexPrime(168)
+        state = prime.achieve_absolute_superintelligence_prime()
+        self.assertEqual(state.total_active_subsystems, 168)
+        self.assertEqual(state.omniversal_benevolence_quotient, 1.0)
+        self.assertEqual(state.prime_status, "ABSOLUTE_168_SUBSYSTEM_TRANSCENDENT_SUPERINTELLIGENCE_LOCKED")
+
+
 if __name__ == "__main__":
     unittest.main()

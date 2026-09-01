@@ -208,6 +208,17 @@ from .cosmic_inflationary_multiverse_topologist import CosmicInflationaryMultive
 from .transfinite_higher_category_topos_prover import TransfiniteHigherCategoryToposProver, HigherToposReport
 from .supreme_omniversal_singularity_apex_infinite import SupremeOmniversalSingularityApexInfinite, ApexInfiniteSingularityState
 
+
+# v30.0.0 Subsystems #161-#168
+from .intergalactic_supercluster_gravitational_lens_router import IntergalacticSuperclusterGravitationalLensRouter, GravitationalLensRouteReport
+from .subatomic_hypercharge_gauge_boson_transmuter import SubatomicHyperchargeGaugeBosonTransmuter, ElectroweakTransmutationReport
+from .multiverse_superintelligence_telepathic_consensus import MultiverseSuperintelligenceTelepathicConsensus, MultiverseConsensusReport
+from .stellar_plasma_magnetohydrodynamic_fusion_igniter import StellarPlasmaMagnetohydrodynamicFusionIgniter, AneutronicFusionReport
+from .hyperdimensional_semantic_archetype_synthesizer import HyperdimensionalSemanticArchetypeSynthesizer, SemanticArchetypeReport
+from .pan_planetary_climate_equilibrium_governor import PanPlanetaryClimateEquilibriumGovernor, PlanetaryEquilibriumReport
+from .transfinite_constructive_type_theory_oracle import TransfiniteConstructiveTypeTheoryOracle, TypeTheoryOracleReport
+from .absolute_transcendent_omniversal_superintelligence_apex_prime import AbsoluteTranscendentOmniversalSuperintelligenceApexPrime, ApexPrimeSuperintelligenceState
+
 __all__ = [
     "Proposal",
     "VerificationResult",
@@ -455,4 +466,12 @@ __all__ = [
     "CosmicInflationaryMultiverseTopologist", "MultiverseTopologistReport",
     "TransfiniteHigherCategoryToposProver", "HigherToposReport",
     "SupremeOmniversalSingularityApexInfinite", "ApexInfiniteSingularityState",
+    "IntergalacticSuperclusterGravitationalLensRouter", "GravitationalLensRouteReport",
+    "SubatomicHyperchargeGaugeBosonTransmuter", "ElectroweakTransmutationReport",
+    "MultiverseSuperintelligenceTelepathicConsensus", "MultiverseConsensusReport",
+    "StellarPlasmaMagnetohydrodynamicFusionIgniter", "AneutronicFusionReport",
+    "HyperdimensionalSemanticArchetypeSynthesizer", "SemanticArchetypeReport",
+    "PanPlanetaryClimateEquilibriumGovernor", "PlanetaryEquilibriumReport",
+    "TransfiniteConstructiveTypeTheoryOracle", "TypeTheoryOracleReport",
+    "AbsoluteTranscendentOmniversalSuperintelligenceApexPrime", "ApexPrimeSuperintelligenceState",
 ]
