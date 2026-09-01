@@ -109,6 +109,17 @@ from .autonomous_supply_chain_optimizer import AutonomousSupplyChainOptimizer, S
 from .digital_twin_earth_simulator import DigitalTwinEarthSimulator, DigitalTwinEarthSnapshot
 from .universal_cognitive_architecture import UniversalCognitiveArchitecture, CognitiveSynthesisReport
 
+
+# v21.0.0 Subsystems #89-#96
+from .autonomous_education_tutor import AutonomousEducationTutor, LearningSessionReport
+from .interstellar_navigation_computer import InterstellarNavigationComputer, InterstellarMissionPlan
+from .synthetic_biology_designer import SyntheticBiologyDesigner, GenomeDesignReport
+from .global_pandemic_predictor import GlobalPandemicPredictor, PandemicForecastReport
+from .autonomous_architecture_designer import AutonomousArchitectureDesigner, ArchitecturalDesignReport
+from .zero_carbon_grid_optimizer import ZeroCarbonGridOptimizer, GridOptimizationReport
+from .autonomous_space_colonization_planner import AutonomousSpaceColonizationPlanner, ColonyDesignReport
+from .omni_sentient_world_overseer import OmniSentientWorldOverseer, PlanetaryOversightReport
+
 __all__ = [
     "Proposal",
     "VerificationResult",
@@ -284,4 +295,12 @@ __all__ = [
     "AutonomousSupplyChainOptimizer", "SupplyChainOptimizationReport",
     "DigitalTwinEarthSimulator", "DigitalTwinEarthSnapshot",
     "UniversalCognitiveArchitecture", "CognitiveSynthesisReport",
+    "AutonomousEducationTutor", "LearningSessionReport",
+    "InterstellarNavigationComputer", "InterstellarMissionPlan",
+    "SyntheticBiologyDesigner", "GenomeDesignReport",
+    "GlobalPandemicPredictor", "PandemicForecastReport",
+    "AutonomousArchitectureDesigner", "ArchitecturalDesignReport",
+    "ZeroCarbonGridOptimizer", "GridOptimizationReport",
+    "AutonomousSpaceColonizationPlanner", "ColonyDesignReport",
+    "OmniSentientWorldOverseer", "PlanetaryOversightReport",
 ]

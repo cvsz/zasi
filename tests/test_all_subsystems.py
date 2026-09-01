@@ -743,5 +743,71 @@ class TestZASISubsystems(unittest.TestCase):
         self.assertEqual(report.orchestration_status, "ALL_SUBSYSTEMS_UNIFIED_UNDER_ACTIVE_INFERENCE")
 
 
+    # ----- Subsystems #89-#96 (v21.0.0) -----
+
+    def test_autonomous_education_tutor(self):
+        from src import AutonomousEducationTutor
+        tutor = AutonomousEducationTutor()
+        rep = tutor.conduct_learning_session("user-001", "QUANTUM_COMPUTING", 45)
+        self.assertGreater(rep.mastery_pct_after, rep.mastery_pct_before)
+        self.assertEqual(rep.session_status, "MASTERY_ACCELERATED_OPTIMAL_TRANSFER")
+
+    def test_interstellar_navigation_computer(self):
+        from src import InterstellarNavigationComputer
+        nav = InterstellarNavigationComputer()
+        plan = nav.plan_mission("PROXIMA_CENTAURI_B", 500.0)
+        self.assertGreater(plan.departure_delta_v_km_s, 0)
+        self.assertGreater(plan.relativistic_time_dilation_factor, 1.0)
+        self.assertIn("READY", plan.mission_status)
+
+    def test_synthetic_biology_designer(self):
+        from src import SyntheticBiologyDesigner
+        synbio = SyntheticBiologyDesigner()
+        rep = synbio.design_gene_circuit("INSULIN_PATHWAY", 10.0)
+        self.assertTrue(rep.kill_switch_verified)
+        self.assertEqual(rep.biosafety_level, "BSL-2")
+        self.assertIn("BIOSAFE_VERIFIED", rep.design_status)
+
+    def test_global_pandemic_predictor(self):
+        from src import GlobalPandemicPredictor
+        predictor = GlobalPandemicPredictor()
+        rep = predictor.forecast_outbreak("VIRAL_PNEUMONIA_X", 1000, 2.5)
+        self.assertGreater(rep.r_effective, 0)
+        self.assertGreater(rep.lives_saved_estimate, 0)
+        self.assertEqual(rep.forecast_status, "PANDEMIC_FORECAST_ENSEMBLE_CONVERGED")
+
+    def test_autonomous_architecture_designer(self):
+        from src import AutonomousArchitectureDesigner
+        arch = AutonomousArchitectureDesigner()
+        rep = arch.design_building("SUSTAINABLE_RESEARCH_TOWER", 5000.0, 40)
+        self.assertGreater(rep.gross_floor_area_m2, 0)
+        self.assertGreater(rep.fem_safety_factor, 2.0)
+        self.assertEqual(rep.design_status, "DESIGN_STRUCTURALLY_VERIFIED_ENERGY_OPTIMIZED")
+
+    def test_zero_carbon_grid_optimizer(self):
+        from src import ZeroCarbonGridOptimizer
+        grid = ZeroCarbonGridOptimizer()
+        rep = grid.optimize_dispatch(100.0, 60.0, 50.0)
+        self.assertEqual(rep.renewable_pct, 100.0)
+        self.assertGreater(rep.vpp_nodes_active, 0)
+        self.assertEqual(rep.grid_status, "ZERO_CARBON_DISPATCH_OPTIMAL_GRID_STABLE")
+
+    def test_autonomous_space_colonization_planner(self):
+        from src import AutonomousSpaceColonizationPlanner
+        colony = AutonomousSpaceColonizationPlanner("MARS")
+        rep = colony.design_colony(1000)
+        self.assertGreater(rep.population_capacity, 0)
+        self.assertGreater(rep.water_recycling_efficiency_pct, 95.0)
+        self.assertEqual(rep.colony_status, "SELF_SUSTAINING_COLONY_DESIGN_VERIFIED")
+
+    def test_omni_sentient_world_overseer(self):
+        from src import OmniSentientWorldOverseer
+        overseer = OmniSentientWorldOverseer(subsystem_count=96)
+        rep = overseer.execute_planetary_oversight_cycle()
+        self.assertTrue(rep.invariants_all_satisfied)
+        self.assertEqual(rep.subsystems_monitored, 96)
+        self.assertEqual(rep.oversight_status, "PLANETARY_STEWARDSHIP_ALL_INVARIANTS_SATISFIED")
+
+
 if __name__ == "__main__":
     unittest.main()
