@@ -1,0 +1,19 @@
+version: "3.9"
+
+services:
+  zasi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: zasi-jarvis:31.0.0
+    container_name: zasi-jarvis
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - ZASI_PORT=8080
+      # Set these in your shell or a .env file:
+      # - ZASI_API_KEY=your-secret-key
+      # - GEMINI_API_KEY=your-gemini-key
+    restart: unless-stopped

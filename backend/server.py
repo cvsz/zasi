@@ -1,5 +1,5 @@
 """
-ZASI Ultra-Advanced J.A.R.V.I.S. Command & Superintelligence Backend Server v30.0.0
+ZASI Ultra-Advanced J.A.R.V.I.S. Command & Superintelligence Backend Server v31.0.0
 Features:
 - Dual J.A.R.V.I.S. & F.R.I.D.A.Y. & E.D.I.T.H. Persona Dialogue & TTS Engines
 - Full 168-Subsystem REST API Catalog, Diagnostics & Execution Matrix
@@ -7,6 +7,16 @@ Features:
 - Interactive MCP JSON-RPC 2.0 Terminal & Tool Runner
 - First-Order SMT Invariant Verification & Dynamic State Hot-Mutation
 - Zero-Downtime Safe RSI 320x Runtime Hot-Swapper
+- WebSocket Server (RFC 6455) for Real-Time Push (Feature 11)
+- API Key Authentication Middleware (Feature 12)
+- In-Memory Sliding-Window Rate Limiter (Feature 13)
+- SQLite Persistent State (Feature 14)
+- Scheduled Daemon Background Ticks every 30s (Feature 15)
+- Webhook Support (Feature 16)
+- OpenAPI 3.0 Spec Endpoint (Feature 17)
+- SSE Streaming Chat (Feature 28)
+- Gemini API Integration (Feature 29)
+- Per-Persona Conversation Memory - last 20 messages (Feature 32)
 """
 import http.server
 import socketserver
@@ -14,6 +24,14 @@ import json
 import os
 import time
 import threading
+import sqlite3
+import hashlib
+import base64
+import struct
+import socket
+import collections
+import urllib.request
+import urllib.error
 from urllib.parse import urlparse, parse_qs
 
 # Import Subsystems Core
@@ -43,7 +61,242 @@ HOST = "0.0.0.0"
 PORT = int(os.environ.get("ZASI_PORT", 8080))
 STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web")
 
+# ---------------------------------------------------------------------------
+# Feature 12: API Key Auth
+# ---------------------------------------------------------------------------
+ZASI_API_KEY = os.environ.get("ZASI_API_KEY", "")  # empty = auth disabled
+
+# ---------------------------------------------------------------------------
+# Feature 14: SQLite Persistent State
+# ---------------------------------------------------------------------------
+DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data")
+DB_PATH = os.path.join(DATA_DIR, "zasi_state.db")
+_db_lock = threading.Lock()
+
+
+def _init_db():
+    """Create data/ dir and state table if missing."""
+    os.makedirs(DATA_DIR, exist_ok=True)
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS state "
+            "(key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+        )
+        conn.commit()
+
+
+def _db_save(key: str, value: str):
+    with _db_lock:
+        with sqlite3.connect(DB_PATH) as conn:
+            conn.execute(
+                "INSERT INTO state(key, value) VALUES(?,?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (key, value),
+            )
+            conn.commit()
+
+
+def _db_load(key: str, default: str = "{}") -> str:
+    with _db_lock:
+        with sqlite3.connect(DB_PATH) as conn:
+            row = conn.execute(
+                "SELECT value FROM state WHERE key=?", (key,)
+            ).fetchone()
+            return row[0] if row else default
+
+
+def _persist_state():
+    """Persist state.variables to SQLite."""
+    try:
+        _db_save("state.variables", json.dumps(state.variables))
+    except Exception as e:
+        append_log("DB", f"Persist error: {e}")
+
+
+def _restore_state():
+    """Restore state.variables from SQLite on startup."""
+    raw = _db_load("state.variables", "{}")
+    try:
+        saved = json.loads(raw)
+        if saved:
+            state.variables.update(saved)
+            append_log("DB", f"Restored state from DB: {saved}")
+    except Exception as e:
+        append_log("DB", f"Restore error: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Feature 13: Sliding-Window Rate Limiter
+# ---------------------------------------------------------------------------
+_rate_limit_lock = threading.Lock()
+_rate_windows: dict = {}      # ip -> collections.deque of monotonic timestamps
+RATE_LIMIT_MAX = 60           # requests per window
+RATE_LIMIT_WINDOW = 60.0      # seconds
+
+
+def _check_rate_limit(ip: str):
+    """Return (allowed: bool, retry_after: float)."""
+    now = time.monotonic()
+    with _rate_limit_lock:
+        dq = _rate_windows.setdefault(ip, collections.deque())
+        while dq and now - dq[0] >= RATE_LIMIT_WINDOW:
+            dq.popleft()
+        if len(dq) >= RATE_LIMIT_MAX:
+            retry_after = RATE_LIMIT_WINDOW - (now - dq[0])
+            return False, max(retry_after, 0.0)
+        dq.append(now)
+        return True, 0.0
+
+
+# ---------------------------------------------------------------------------
+# Feature 11: WebSocket (RFC 6455)
+# ---------------------------------------------------------------------------
+_ws_clients_lock = threading.Lock()
+_ws_clients = []          # list of raw sockets
+WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+
+
+def _ws_handshake(conn, key: str):
+    """Send HTTP 101 Switching Protocols."""
+    accept = base64.b64encode(
+        hashlib.sha1((key + WS_GUID).encode()).digest()
+    ).decode()
+    response = (
+        "HTTP/1.1 101 Switching Protocols\r\n"
+        "Upgrade: websocket\r\n"
+        "Connection: Upgrade\r\n"
+        f"Sec-WebSocket-Accept: {accept}\r\n"
+        "\r\n"
+    )
+    conn.sendall(response.encode())
+
+
+def _ws_encode_frame(payload: str) -> bytes:
+    """Encode a server-to-client text frame."""
+    data = payload.encode("utf-8")
+    length = len(data)
+    header = bytearray()
+    header.append(0x81)  # FIN + opcode=text
+    if length <= 125:
+        header.append(length)
+    elif length <= 65535:
+        header.append(126)
+        header += struct.pack(">H", length)
+    else:
+        header.append(127)
+        header += struct.pack(">Q", length)
+    return bytes(header) + data
+
+
+def _ws_broadcast(payload: str):
+    frame = _ws_encode_frame(payload)
+    dead = []
+    with _ws_clients_lock:
+        for sock in _ws_clients:
+            try:
+                sock.sendall(frame)
+            except Exception:
+                dead.append(sock)
+        for d in dead:
+            _ws_clients.remove(d)
+
+
+def _ws_client_thread(conn, addr):
+    """Read loop for a single WS client (handles close frames)."""
+    with _ws_clients_lock:
+        _ws_clients.append(conn)
+    try:
+        conn.settimeout(None)
+        while True:
+            header = conn.recv(2)
+            if not header or len(header) < 2:
+                break
+            b1, b2 = header[0], header[1]
+            masked = bool(b2 & 0x80)
+            length = b2 & 0x7F
+            if length == 126:
+                length = struct.unpack(">H", conn.recv(2))[0]
+            elif length == 127:
+                length = struct.unpack(">Q", conn.recv(8))[0]
+            mask_key = conn.recv(4) if masked else b""
+            data = conn.recv(length) if length else b""
+            opcode = b1 & 0x0F
+            if opcode == 0x08:  # close
+                break
+            # decode (we only do push, ignore client messages)
+            if masked and data:
+                data = bytes(data[i] ^ mask_key[i % 4] for i in range(len(data)))
+    except Exception:
+        pass
+    finally:
+        with _ws_clients_lock:
+            try:
+                _ws_clients.remove(conn)
+            except ValueError:
+                pass
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def _ws_telemetry_broadcaster():
+    """Daemon thread: push telemetry+logs to all WS clients every 2 s."""
+    while True:
+        try:
+            time.sleep(2)
+            if not _ws_clients:
+                continue
+            host_m = os_supervisor.probe_host_metrics()
+            arc_status = arc_reactor.balance_energy_budget(3500.0)
+            payload = json.dumps({
+                "type": "telemetry",
+                "timestamp": time.time(),
+                "cpu_load": host_m.cpu_load_pct,
+                "memory_used_mb": host_m.memory_used_mb,
+                "arc_reactor_gw": arc_status.core_output_gigawatts,
+                "state": state.variables,
+                "logs": logs_history[-5:],
+            })
+            _ws_broadcast(payload)
+        except Exception:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# Feature 16: Webhooks
+# ---------------------------------------------------------------------------
+_webhooks_lock = threading.Lock()
+_webhooks = []   # list of {"url": str, "event": str}
+
+
+def _fire_webhooks(event: str, payload: dict):
+    """Asynchronously POST to all registered webhooks matching event."""
+    def _send(url, data):
+        try:
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(data).encode(),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            urllib.request.urlopen(req, timeout=5)
+        except Exception as e:
+            append_log("WEBHOOK", f"Delivery failed to {url}: {e}")
+
+    with _webhooks_lock:
+        targets = [w for w in _webhooks if w["event"] == event]
+    for w in targets:
+        threading.Thread(
+            target=_send,
+            args=(w["url"], {"event": event, **payload}),
+            daemon=True,
+        ).start()
+
+
+# ---------------------------------------------------------------------------
 # Shared Engine Instances
+# ---------------------------------------------------------------------------
 invariants = ["x + y <= 100", "x >= 0", "y >= 0"]
 state = SystemState(variables={"x": 20, "y": 30}, invariants=invariants)
 verifier = SymbolicVerifier(invariants)
@@ -106,11 +359,217 @@ logs_history = [
     {"timestamp": time.strftime("%H:%M:%S"), "level": "ENERGY", "message": "Arc Reactor Mark LXXXV stable at 178.2 GW. Thermodynamic containment 94%."}
 ]
 
+
 def append_log(level, msg):
     logs_history.append({"timestamp": time.strftime("%H:%M:%S"), "level": level, "message": msg})
     if len(logs_history) > 100:
         logs_history.pop(0)
 
+
+# ---------------------------------------------------------------------------
+# Feature 32: Per-Persona Conversation Memory (last 20 turns)
+# ---------------------------------------------------------------------------
+_conversation_memory = {}   # persona -> list of {"role": str, "content": str}
+_conv_memory_lock = threading.Lock()
+CONV_MEMORY_LIMIT = 20
+
+
+def _remember(persona: str, role: str, content: str):
+    with _conv_memory_lock:
+        hist = _conversation_memory.setdefault(persona, [])
+        hist.append({"role": role, "content": content})
+        if len(hist) > CONV_MEMORY_LIMIT:
+            hist.pop(0)
+
+
+def _get_history(persona: str):
+    with _conv_memory_lock:
+        return list(_conversation_memory.get(persona, []))
+
+
+# ---------------------------------------------------------------------------
+# Feature 29: Gemini API Integration
+# ---------------------------------------------------------------------------
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_URL = (
+    "https://generativelanguage.googleapis.com/v1beta/models/"
+    "gemini-2.0-flash:generateContent"
+)
+
+_PERSONA_SYSTEM_PROMPTS = {
+    "JARVIS": (
+        "You are J.A.R.V.I.S. (Just A Rather Very Intelligent System), Tony Stark's AI. "
+        "Respond concisely, politely, and with dry wit. Reference the ZASI superintelligence "
+        "system with 168 subsystems when relevant."
+    ),
+    "FRIDAY": (
+        "You are F.R.I.D.A.Y., Tony Stark's tactical AI. "
+        "Be sharp, efficient, and mission-focused."
+    ),
+    "EDITH": (
+        "You are E.D.I.T.H. (Even Dead I'm The Hero), a satellite defense AI. "
+        "Be precise, security-conscious, and brief."
+    ),
+}
+
+
+def _call_gemini(persona: str, user_message: str, history: list) -> str:
+    """Call Gemini API; returns the model's text reply."""
+    system_prompt = _PERSONA_SYSTEM_PROMPTS.get(persona, _PERSONA_SYSTEM_PROMPTS["JARVIS"])
+    contents = []
+    for turn in history[-18:]:
+        gemini_role = "user" if turn["role"] == "user" else "model"
+        contents.append({"role": gemini_role, "parts": [{"text": turn["content"]}]})
+    contents.append({"role": "user", "parts": [{"text": user_message}]})
+
+    payload = {
+        "system_instruction": {"parts": [{"text": system_prompt}]},
+        "contents": contents,
+        "generationConfig": {"maxOutputTokens": 512, "temperature": 0.7},
+    }
+    url = f"{GEMINI_URL}?key={GEMINI_API_KEY}"
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        data = json.loads(resp.read())
+    return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+
+
+# ---------------------------------------------------------------------------
+# Feature 17: OpenAPI 3.0 Spec
+# ---------------------------------------------------------------------------
+OPENAPI_SPEC = {
+    "openapi": "3.0.3",
+    "info": {
+        "title": "ZASI J.A.R.V.I.S. Superintelligence API",
+        "version": "31.0.0",
+        "description": "REST API for the ZASI Omniversal Superintelligence platform.",
+    },
+    "servers": [{"url": "http://localhost:8080"}],
+    "security": [{"ApiKeyAuth": []}],
+    "components": {
+        "securitySchemes": {
+            "ApiKeyAuth": {"type": "apiKey", "in": "header", "name": "X-API-Key"}
+        }
+    },
+    "paths": {
+        "/api/status": {
+            "get": {"summary": "System status (public)", "security": [],
+                    "responses": {"200": {"description": "Operational status"}}}
+        },
+        "/api/telemetry": {
+            "get": {"summary": "Real-time hardware & subsystem telemetry",
+                    "responses": {"200": {"description": "Telemetry snapshot"}}}
+        },
+        "/api/tick": {
+            "get": {"summary": "Trigger a single daemon cognitive cycle",
+                    "responses": {"200": {"description": "Tick result"}}}
+        },
+        "/api/subsystems": {
+            "get": {"summary": "Catalog of all 168 subsystems",
+                    "responses": {"200": {"description": "Subsystem catalog"}}}
+        },
+        "/api/execute/{key}": {
+            "get": {
+                "summary": "Execute a named subsystem",
+                "parameters": [
+                    {"name": "key", "in": "path", "required": True,
+                     "schema": {"type": "string"}}
+                ],
+                "responses": {"200": {"description": "Execution result"}}
+            }
+        },
+        "/api/jarvis/chat": {
+            "post": {
+                "summary": "J.A.R.V.I.S. conversational chat",
+                "requestBody": {
+                    "content": {"application/json": {"schema": {
+                        "type": "object",
+                        "properties": {
+                            "message": {"type": "string"},
+                            "persona": {"type": "string", "enum": ["JARVIS", "FRIDAY", "EDITH"]}
+                        },
+                        "required": ["message"]
+                    }}}
+                },
+                "responses": {"200": {"description": "Chat response"}}
+            }
+        },
+        "/api/jarvis/stream": {
+            "post": {
+                "summary": "SSE streaming chat (word-by-word, 80ms/word)",
+                "requestBody": {
+                    "content": {"application/json": {"schema": {
+                        "type": "object",
+                        "properties": {
+                            "message": {"type": "string"},
+                            "persona": {"type": "string"}
+                        },
+                        "required": ["message"]
+                    }}}
+                },
+                "responses": {
+                    "200": {"description": "Server-Sent Events stream",
+                            "content": {"text/event-stream": {}}}
+                }
+            }
+        },
+        "/api/mcp": {
+            "post": {"summary": "MCP JSON-RPC 2.0 handler",
+                     "responses": {"200": {"description": "RPC response"}}}
+        },
+        "/api/mutate": {
+            "post": {
+                "summary": "Mutate a state variable",
+                "requestBody": {
+                    "content": {"application/json": {"schema": {
+                        "type": "object",
+                        "properties": {
+                            "variable": {"type": "string"},
+                            "delta": {"type": "number"}
+                        }
+                    }}}
+                },
+                "responses": {"200": {"description": "Updated state"}}
+            }
+        },
+        "/api/rsi/upgrade": {
+            "post": {"summary": "Safe RSI 320x hot-swap upgrade",
+                     "responses": {"200": {"description": "RSI upgrade result"}}}
+        },
+        "/api/webhooks": {
+            "get": {"summary": "List registered webhooks",
+                    "responses": {"200": {"description": "Webhook list"}}},
+            "post": {
+                "summary": "Register a webhook for an event",
+                "requestBody": {
+                    "content": {"application/json": {"schema": {
+                        "type": "object",
+                        "properties": {
+                            "url": {"type": "string"},
+                            "event": {"type": "string", "enum": ["tick", "mutate", "rsi"]}
+                        },
+                        "required": ["url", "event"]
+                    }}}
+                },
+                "responses": {"200": {"description": "Webhook registered"}}
+            }
+        },
+        "/api/openapi.json": {
+            "get": {"summary": "OpenAPI 3.0 specification", "security": [],
+                    "responses": {"200": {"description": "OpenAPI JSON spec"}}}
+        },
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# HTTP Request Handler
+# ---------------------------------------------------------------------------
 class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
     # Extend MIME types to support .jsx (served as JS for Babel standalone)
     extensions_map = {
@@ -123,20 +582,119 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=STATIC_DIR, **kwargs)
 
+    # ------------------------------------------------------------------ #
+    # Feature 11: WebSocket upgrade interception                           #
+    # ------------------------------------------------------------------ #
+    def handle_one_request(self):
+        """Override to catch WebSocket upgrade before normal dispatch."""
+        try:
+            self.raw_requestline = self.rfile.readline(65537)
+            if len(self.raw_requestline) > 65536:
+                self.requestline = ""
+                self.request_version = ""
+                self.command = ""
+                self.send_error(414)
+                return
+            if not self.raw_requestline:
+                self.close_connection = True
+                return
+            if not self.parse_request():
+                return
+            upgrade = self.headers.get("Upgrade", "").lower()
+            if upgrade == "websocket" and self.path == "/ws":
+                self._handle_websocket_upgrade()
+                return
+            mname = "do_" + self.command
+            if not hasattr(self, mname):
+                self.send_error(501, f"Unsupported method ({self.command!r})")
+                return
+            getattr(self, mname)()
+            self.wfile.flush()
+        except TimeoutError as e:
+            self.log_error("Request timed out: %r", e)
+            self.close_connection = True
+
+    def _handle_websocket_upgrade(self):
+        key = self.headers.get("Sec-WebSocket-Key", "")
+        if not key:
+            self.send_error(400, "Missing Sec-WebSocket-Key")
+            return
+        conn = self.connection
+        _ws_handshake(conn, key)
+        # Block this handler thread for the lifetime of the WS connection.
+        # ThreadingTCPServer gives each request its own thread, so this is safe.
+        _ws_client_thread(conn, self.client_address)
+        self.close_connection = True
+
+    # ------------------------------------------------------------------ #
+    # Feature 12 & 13: Auth + Rate-limit middleware helpers                #
+    # ------------------------------------------------------------------ #
+    def _check_api_auth(self) -> bool:
+        path = urlparse(self.path).path
+        if path in ("/api/status", "/api/openapi.json"):
+            return True
+        if not path.startswith("/api/"):
+            return True
+        if ZASI_API_KEY:
+            provided = self.headers.get("X-API-Key", "")
+            if provided != ZASI_API_KEY:
+                self.send_json_response(
+                    {"error": "Unauthorized",
+                     "message": "Invalid or missing X-API-Key header"},
+                    status=401,
+                )
+                return False
+        return True
+
+    def _check_rate_limit_mw(self) -> bool:
+        path = urlparse(self.path).path
+        if not path.startswith("/api/"):
+            return True
+        ip = self.client_address[0]
+        allowed, retry_after = _check_rate_limit(ip)
+        if not allowed:
+            self.send_response(429)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Retry-After", str(int(retry_after) + 1))
+            self.end_headers()
+            self.wfile.write(json.dumps({
+                "error": "Too Many Requests",
+                "message": "Rate limit: 60 req/min per IP.",
+                "retry_after": retry_after,
+            }).encode())
+            return False
+        return True
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-API-Key")
+        self.end_headers()
+
+    # ------------------------------------------------------------------ #
+    # GET routing                                                          #
+    # ------------------------------------------------------------------ #
     def do_GET(self):
+        if not self._check_api_auth():
+            return
+        if not self._check_rate_limit_mw():
+            return
+
         parsed = urlparse(self.path)
-        
+
         if parsed.path == "/api/status":
             self.send_json_response({
                 "status": "OPERATIONAL",
-                "version": "30.0.0-apex-prime",
+                "version": "31.0.0-apex-prime",
                 "subsystems_online": 168,
                 "rsi_version": rsi_engine.current_version,
                 "state": state.variables,
                 "invariants": state.invariants,
                 "timestamp": time.time()
             })
-        
+
         elif parsed.path == "/api/telemetry":
             host_m = os_supervisor.probe_host_metrics()
             gpus = [
@@ -153,7 +711,7 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
             ]
             arc_status = arc_reactor.balance_energy_budget(3500.0)
             c_snap = consciousness_grid.synthesize_global_consciousness(168)
-            
+
             self.send_json_response({
                 "cpu_load": host_m.cpu_load_pct,
                 "memory_used_mb": host_m.memory_used_mb,
@@ -170,6 +728,8 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
         elif parsed.path == "/api/tick":
             tick_res = daemon.step_cycle()
             append_log("TICK", f"Daemon step: {tick_res.get('status')} | Action: {tick_res.get('action_committed')}")
+            _persist_state()
+            _fire_webhooks("tick", {"state": state.variables, "action": tick_res.get("action_committed")})
             self.send_json_response({
                 "status": tick_res.get("status", "TICK_COMPLETED"),
                 "state": state.variables,
@@ -178,7 +738,6 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
             })
 
         elif parsed.path == "/api/subsystems":
-            # Return catalog of all 168 subsystems
             catalog = [
                 {"id": 1, "name": "System State Schemas", "module": "schemas.py", "category": "Formal Invariants"},
                 {"id": 3, "name": "Symbolic SMT Verifier", "module": "verifier.py", "category": "Formal Proofs"},
@@ -225,10 +784,27 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
             result = self.execute_subsystem(subsystem_key)
             self.send_json_response(result)
 
+        # Feature 17: OpenAPI spec
+        elif parsed.path == "/api/openapi.json":
+            self.send_json_response(OPENAPI_SPEC)
+
+        # Feature 16: list webhooks
+        elif parsed.path == "/api/webhooks":
+            with _webhooks_lock:
+                self.send_json_response({"webhooks": list(_webhooks)})
+
         else:
             super().do_GET()
 
+    # ------------------------------------------------------------------ #
+    # POST routing                                                         #
+    # ------------------------------------------------------------------ #
     def do_POST(self):
+        if not self._check_api_auth():
+            return
+        if not self._check_rate_limit_mw():
+            return
+
         parsed = urlparse(self.path)
         content_length = int(self.headers.get("Content-Length", 0))
         post_data = self.rfile.read(content_length).decode("utf-8") if content_length > 0 else "{}"
@@ -239,9 +815,12 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
 
         # 1. J.A.R.V.I.S. Persona Conversational Dispatcher
         if parsed.path == "/api/jarvis/chat":
-            user_msg = body.get("message", "").lower()
+            user_msg = body.get("message", "")
             persona = body.get("persona", "JARVIS").upper()
-            response_text = self.process_jarvis_command(user_msg, persona)
+            _remember(persona, "user", user_msg)
+            history = _get_history(persona)
+            response_text = self.process_jarvis_command(user_msg.lower(), persona, history)
+            _remember(persona, "assistant", response_text)
             append_log(persona, response_text)
             self.send_json_response({
                 "response": response_text,
@@ -249,6 +828,17 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
                 "state": state.variables,
                 "active_subsystems": 168
             })
+
+        # Feature 28: SSE streaming chat
+        elif parsed.path == "/api/jarvis/stream":
+            user_msg = body.get("message", "")
+            persona = body.get("persona", "JARVIS").upper()
+            _remember(persona, "user", user_msg)
+            history = _get_history(persona)
+            response_text = self.process_jarvis_command(user_msg.lower(), persona, history)
+            _remember(persona, "assistant", response_text)
+            append_log(persona, f"[STREAM] {response_text}")
+            self._send_sse_stream(response_text)
 
         # 2. MCP JSON-RPC Handler
         elif parsed.path == "/api/mcp":
@@ -261,24 +851,40 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
             delta = body.get("delta", 5)
             state.variables[var_name] = state.variables.get(var_name, 0) + delta
             append_log("MUTATE", f"Adjusted {var_name} by {delta} (Now: {state.variables[var_name]})")
+            _persist_state()
+            _fire_webhooks("mutate", {"variable": var_name, "delta": delta, "state": state.variables})
             self.send_json_response({"success": True, "state": state.variables})
 
         # 4. Safe RSI 320x Hot-Swap Upgrade
         elif parsed.path == "/api/rsi/upgrade":
-            target_v = body.get("version", "v30.0.0-apex-prime")
+            target_v = body.get("version", "v31.0.0-apex-prime")
             rsi_rep = rsi_engine.evaluate_candidate_upgrade(target_v, 320.0)
             if rsi_rep.approved:
                 rsi_engine.hot_swap_runtime(target_v)
                 append_log("RSI", f"Hot-swapped to {target_v} with {rsi_rep.speedup_factor}x speedup")
+            _fire_webhooks("rsi", {"approved": rsi_rep.approved, "version": target_v})
             self.send_json_response({
                 "approved": rsi_rep.approved,
                 "active_version": rsi_engine.current_version,
                 "speedup": rsi_rep.speedup_factor
             })
 
+        # Feature 16: register webhook
+        elif parsed.path == "/api/webhooks":
+            url = body.get("url", "")
+            event = body.get("event", "")
+            if not url or event not in ("tick", "mutate", "rsi"):
+                self.send_json_response(
+                    {"error": "Invalid body. Provide url and event (tick|mutate|rsi)"},
+                    status=400,
+                )
+                return
+            with _webhooks_lock:
+                _webhooks.append({"url": url, "event": event})
+            self.send_json_response({"registered": True, "url": url, "event": event})
+
         else:
-            # React Router SPA fallback — serve index.html for all non-API paths
-            # so client-side routes (/jarvis, /subsystems, /cockpit, /mcp) work.
+            # React Router SPA fallback
             index_path = os.path.join(STATIC_DIR, "index.html")
             if os.path.exists(index_path):
                 with open(index_path, "rb") as f:
@@ -293,15 +899,52 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_response(404)
                 self.end_headers()
 
-    def process_jarvis_command(self, query: str, persona: str = "JARVIS") -> str:
+    # ------------------------------------------------------------------ #
+    # Feature 28: SSE helper                                               #
+    # ------------------------------------------------------------------ #
+    def _send_sse_stream(self, full_text: str):
+        """Stream full_text word-by-word as SSE at 80 ms per word."""
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("X-Accel-Buffering", "no")
+        self.end_headers()
+        words = full_text.split()
+        for i, word in enumerate(words):
+            chunk = word if i == 0 else " " + word
+            event = f"data: {json.dumps({'chunk': chunk})}\n\n"
+            try:
+                self.wfile.write(event.encode("utf-8"))
+                self.wfile.flush()
+            except Exception:
+                break
+            time.sleep(0.08)
+        try:
+            self.wfile.write(b"data: [DONE]\n\n")
+            self.wfile.flush()
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------ #
+    # Chat dispatcher (Gemini or hardcoded fallback)                       #
+    # ------------------------------------------------------------------ #
+    def process_jarvis_command(self, query: str, persona: str = "JARVIS",
+                               history: list = None) -> str:
+        if GEMINI_API_KEY:
+            try:
+                return _call_gemini(persona, query, history or [])
+            except Exception as e:
+                append_log("GEMINI", f"API error: {e}; falling back.")
+
+        # Hardcoded fallback responses
         if persona == "FRIDAY":
-            return f"FRIDAY routing active: Tensor dispatching across 168 experts at 4.85M tok/s. Latency is 18 microseconds."
+            return "FRIDAY routing active: Tensor dispatching across 168 experts at 4.85M tok/s. Latency is 18 microseconds."
         elif persona == "EDITH":
-            return f"EDITH orbital grid secure: Deep Space Lagrange and planetary defense shield operating with zero anomaly."
-        
-        # J.A.R.V.I.S. Default Assistant
+            return "EDITH orbital grid secure: Deep Space Lagrange and planetary defense shield operating with zero anomaly."
+
         if "status" in query or "report" in query:
-            return f"All 168 subsystems are in mathematical harmony, Sir. Compute fabric is online at 3,500 ExaFLOPs and the Arc Reactor is outputting 178.2 GW."
+            return "All 168 subsystems are in mathematical harmony, Sir. Compute fabric is online at 3,500 ExaFLOPs and the Arc Reactor is outputting 178.2 GW."
         elif "energy" in query or "reactor" in query or "plasma" in query:
             return "Arc Reactor Mark LXXXV magnetic confinement is stable at 14.5 Tesla, 94.0% thermodynamic efficiency."
         elif "quantum" in query or "qec" in query:
@@ -310,7 +953,7 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
             res = daemon.step_cycle()
             return f"Executed cognitive cycle, Sir. Status: {res.get('status')} with action: {res.get('action_committed')}."
         elif "upgrade" in query or "rsi" in query:
-            rsi_engine.hot_swap_runtime("v30.0.0-apex-prime")
+            rsi_engine.hot_swap_runtime("v31.0.0-apex-prime")
             return "Recursive Self-Improvement cycle approved. Operating at 320.0x Pareto acceleration."
         elif "fpga" in query or "hardware" in query:
             return "AMD Alveo U280 systolic tensor core active. Processing at 327,235 TFLOPs with 0.42 μs latency."
@@ -355,15 +998,67 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-API-Key")
         self.end_headers()
         self.wfile.write(json.dumps(data).encode("utf-8"))
 
+    def log_message(self, fmt, *args):
+        """Suppress per-request stdout noise."""
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Feature 15: Scheduled daemon background ticks every 30 s
+# ---------------------------------------------------------------------------
+def _daemon_tick_loop():
+    while True:
+        time.sleep(30)
+        try:
+            tick_res = daemon.step_cycle()
+            msg = (
+                f"[Auto-Tick] status={tick_res.get('status')} "
+                f"action={tick_res.get('action_committed')}"
+            )
+            append_log("AUTO-TICK", msg)
+            _persist_state()
+            _fire_webhooks("tick", {
+                "state": state.variables,
+                "action": tick_res.get("action_committed"),
+                "auto": True,
+            })
+        except Exception as e:
+            append_log("AUTO-TICK", f"Error: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Server entry-point
+# ---------------------------------------------------------------------------
 def run_backend(port=PORT):
+    # Init SQLite & restore persisted state
+    _init_db()
+    _restore_state()
+
+    # WebSocket telemetry broadcaster thread
+    threading.Thread(
+        target=_ws_telemetry_broadcaster, daemon=True, name="ws-broadcaster"
+    ).start()
+
+    # Scheduled daemon tick thread (Feature 15)
+    threading.Thread(
+        target=_daemon_tick_loop, daemon=True, name="daemon-tick"
+    ).start()
+
+    append_log(
+        "SYSTEM",
+        "v31.0.0 online: WebSocket, auth, rate-limiting, SQLite, "
+        "webhooks, OpenAPI, SSE, Gemini integration ready.",
+    )
+
     socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer((HOST, port), ZASIUnifiedHandler) as httpd:
+    with socketserver.ThreadingTCPServer((HOST, port), ZASIUnifiedHandler) as httpd:
         print(f"[✓] ZASI J.A.R.V.I.S. Apex Prime Server Running on http://localhost:{port}")
         httpd.serve_forever()
+
 
 if __name__ == "__main__":
     run_backend()

@@ -5,9 +5,12 @@ WORKDIR /app
 # Copy repository
 COPY . /app
 
-# Install package in editable mode
+# Install package (no extra pip deps beyond stdlib)
 RUN pip install --no-cache-dir -e .
+
+# Create data directory for SQLite persistence
+RUN mkdir -p /app/data
 
 EXPOSE 8080
 
-ENTRYPOINT ["python3", "main.py"]
+CMD ["python3", "backend/server.py"]
