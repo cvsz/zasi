@@ -153,6 +153,17 @@ from .biospheric_megastructure_architect import BiosphericMegastructureArchitect
 from .transfinite_ordinal_mathematician import TransfiniteOrdinalMathematician, TransfiniteProofReport
 from .omniversal_singularity_apex_nexus import OmniversalSingularityApexNexus, OmniversalNexusApexReport
 
+
+# v25.0.0 Subsystems #121-#128
+from .graviton_beam_interferometer import GravitonBeamInterferometer, GravitonBeamReport
+from .hyperluminal_warp_bubble_stabilizer import HyperluminalWarpBubbleStabilizer, WarpBubbleStabilizationReport
+from .neutrino_deep_core_tomographer import NeutrinoDeepCoreTomographer, NeutrinoTomographyReport
+from .macro_quantum_coherence_synthesizer import MacroQuantumCoherenceSynthesizer, MacroQuantumCoherenceReport
+from .astrobiological_synthetic_panspermia_director import AstrobiologicalSyntheticPanspermiaDirector, PanspermiaMissionReport
+from .hyperdimensional_semantic_concept_synthesizer import HyperdimensionalSemanticConceptSynthesizer, SemanticConceptReport
+from .infinite_dimensional_hilbert_space_orchestrator import InfiniteDimensionalHilbertSpaceOrchestrator, HilbertSpaceOperatorReport
+from .absolute_transcendence_singularity_omega import AbsoluteTranscendenceSingularityOmega, AbsoluteOmegaSingularityReport
+
 __all__ = [
     "Proposal",
     "VerificationResult",
@@ -360,4 +371,12 @@ __all__ = [
     "BiosphericMegastructureArchitect", "MegastructureDesignReport",
     "TransfiniteOrdinalMathematician", "TransfiniteProofReport",
     "OmniversalSingularityApexNexus", "OmniversalNexusApexReport",
+    "GravitonBeamInterferometer", "GravitonBeamReport",
+    "HyperluminalWarpBubbleStabilizer", "WarpBubbleStabilizationReport",
+    "NeutrinoDeepCoreTomographer", "NeutrinoTomographyReport",
+    "MacroQuantumCoherenceSynthesizer", "MacroQuantumCoherenceReport",
+    "AstrobiologicalSyntheticPanspermiaDirector", "PanspermiaMissionReport",
+    "HyperdimensionalSemanticConceptSynthesizer", "SemanticConceptReport",
+    "InfiniteDimensionalHilbertSpaceOrchestrator", "HilbertSpaceOperatorReport",
+    "AbsoluteTranscendenceSingularityOmega", "AbsoluteOmegaSingularityReport",
 ]

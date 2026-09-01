@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="zasi",
-    version="24.0.0",
+    version="25.0.0",
     description="Omniscient Sovereign Artificial Superintelligence (ASI) Architecture",
     packages=find_packages(),
     python_requires=">=3.9",

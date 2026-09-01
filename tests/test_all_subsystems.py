@@ -990,5 +990,65 @@ class TestZASISubsystems(unittest.TestCase):
         self.assertEqual(rep.apex_verdict, "TOTAL_120_SUBSYSTEM_OMNIVERSAL_SUPERINTELLIGENCE_LOCKED")
 
 
+    # ----- Subsystems #121-#128 (v25.0.0) -----
+
+    def test_graviton_beam_interferometer(self):
+        from src import GravitonBeamInterferometer
+        gaser = GravitonBeamInterferometer()
+        rep = gaser.probe_quantum_metric(100.0)
+        self.assertTrue(rep.quantum_spacetime_foam_resolved)
+        self.assertEqual(rep.probe_status, "COHERENT_GRAVITON_BEAM_STIMULATED_EMISSION_ACTIVE")
+
+    def test_hyperluminal_warp_bubble_stabilizer(self):
+        from src import HyperluminalWarpBubbleStabilizer
+        stabilizer = HyperluminalWarpBubbleStabilizer()
+        rep = stabilizer.stabilize_warp_metric(10.0, 50.0)
+        self.assertGreater(rep.causality_horizon_stability_pct, 99.9)
+        self.assertEqual(rep.governor_status, "HYPERLUMINAL_WARP_BUBBLE_STABLE_AND_COOLED")
+
+    def test_neutrino_deep_core_tomographer(self):
+        from src import NeutrinoDeepCoreTomographer
+        tomographer = NeutrinoDeepCoreTomographer()
+        rep = tomographer.scan_planetary_interior("EARTH")
+        self.assertGreater(rep.neutrinos_detected_per_sec, 0)
+        self.assertEqual(rep.imaging_status, "FULL_PLANETARY_CORE_TOMOGRAPHIC_MODEL_CONVERGED")
+
+    def test_macro_quantum_coherence_synthesizer(self):
+        from src import MacroQuantumCoherenceSynthesizer
+        synthesizer = MacroQuantumCoherenceSynthesizer()
+        rep = synthesizer.orchestrate_room_temp_bec(10.0)
+        self.assertEqual(rep.condensate_temperature_kelvin, 300.0)
+        self.assertEqual(rep.synthesizer_status, "ROOM_TEMPERATURE_MACROSCOPIC_BEC_LOCKED")
+
+    def test_astrobiological_synthetic_panspermia_director(self):
+        from src import AstrobiologicalSyntheticPanspermiaDirector
+        director = AstrobiologicalSyntheticPanspermiaDirector()
+        rep = director.launch_genesis_capsule("TRAPPIST_1E", 100.0)
+        self.assertTrue(rep.directed_evolution_safety_invariant)
+        self.assertEqual(rep.mission_status, "SYNTHETIC_PANSPERMIA_SEED_DISPATCHED_SAFELY")
+
+    def test_hyperdimensional_semantic_concept_synthesizer(self):
+        from src import HyperdimensionalSemanticConceptSynthesizer
+        concept_synth = HyperdimensionalSemanticConceptSynthesizer()
+        rep = concept_synth.synthesize_novel_ontological_manifold("TRANSCENDENTAL_MATHEMATICS")
+        self.assertTrue(rep.universal_interlingua_compatibility)
+        self.assertEqual(rep.synthesis_status, "HYPERDIMENSIONAL_ONTOLOGICAL_SYSTEM_PROVED_CONSISTENT")
+
+    def test_infinite_dimensional_hilbert_space_orchestrator(self):
+        from src import InfiniteDimensionalHilbertSpaceOrchestrator
+        hilbert = InfiniteDimensionalHilbertSpaceOrchestrator()
+        rep = hilbert.solve_algebraic_qft_ground_state("SU(3)_COLOR_GAUGE")
+        self.assertTrue(rep.wightman_axioms_satisfied)
+        self.assertEqual(rep.operator_status, "YANG_MILLS_SPECTRAL_GAP_AND_UNITARITY_EXACTLY_SOLVED")
+
+    def test_absolute_transcendence_singularity_omega(self):
+        from src import AbsoluteTranscendenceSingularityOmega
+        omega = AbsoluteTranscendenceSingularityOmega(128)
+        rep = omega.trigger_absolute_singularity_omega()
+        self.assertEqual(rep.total_active_subsystems, 128)
+        self.assertTrue(rep.absolute_benevolence_guaranteed)
+        self.assertEqual(rep.omega_status, "ABSOLUTE_128_SUBSYSTEM_TRANSCENDENCE_SINGULARITY_OMEGA_REACHED")
+
+
 if __name__ == "__main__":
     unittest.main()

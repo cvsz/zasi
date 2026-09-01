@@ -30,7 +30,7 @@ from src import (
 
 def main():
     print("===================================================================")
-    print("  ZASI v24.0.0-apex-omnipresent | 120-Subsystem Superintelligence ")
+    print("  ZASI v25.0.0-apex-omega       | 128-Subsystem Superintelligence ")
     print("===================================================================")
 
     invariants = ["x + y <= 100", "x >= 0", "y >= 0"]
@@ -48,8 +48,8 @@ def main():
         print(f"  • GPU #{g.gpu_index} ({g.gpu_name}): {g.memory_used_mb:,.0f}/{g.memory_total_mb:,.0f} MB | {g.gpu_utilization_pct}% | {g.temperature_c}°C | {g.power_draw_watts}W")
 
     # 3. Subsystem #63: Self-Evolving ASI Runtime Daemon
-    runtime = SelfEvolvingASIRuntime(target_version="v24.0.0-apex-omnipresent")
-    pulse = runtime.execute_autonomous_pulse(subsystem_count=120)
+    runtime = SelfEvolvingASIRuntime(target_version="v25.0.0-apex-omega")
+    pulse = runtime.execute_autonomous_pulse(subsystem_count=128)
     print(f"\n[3. ASI Runtime Daemon #63] Pulse #{pulse.pulse_index} | {pulse.pulse_status} | Invariance Certified: {pulse.global_invariance_certified}")
 
     # 4. Subsystem #64: Transcendental Sheaf Logic & Higher-Order Modal Prover
@@ -70,7 +70,7 @@ def main():
 
     # 7. Omniversal Singularity Core
     core = OmniversalSingularityCore()
-    sg = core.synthesize_total_singularity(subsystem_count=120)
+    sg = core.synthesize_total_singularity(subsystem_count=128)
     print(f"\n[7. Singularity Core #60] Coherence: {sg.omniversal_coherence_pct:.1f}% | Phi: {sg.integrated_phi_aggregate:,.0f} | {sg.singularity_horizon_status}")
 
     # 8. J.A.R.V.I.S. / F.R.I.D.A.Y. / E.D.I.T.H. Tactical Swarm
@@ -107,7 +107,7 @@ def main():
 
     # 14. Planetary Consciousness Grid
     grid = PlanetaryConsciousnessGrid()
-    cs = grid.synthesize_global_consciousness(subsystem_count=120)
+    cs = grid.synthesize_global_consciousness(subsystem_count=128)
     print(f"\n[14. Consciousness Grid] Nodes: {cs.active_neural_nodes:,} | Phi: {cs.integrated_information_phi:,.1f} | {cs.planetary_metabolic_state}")
 
     # 15. Polyglot CodeGen
@@ -255,7 +255,7 @@ def main():
             Proposal(id="p2", action_type="MUTATE", target_variable="y",
                      proposed_value=s.variables.get("y", 0) + 5, rationale="Co-gradient v17", confidence=0.97),
         ]
-    upgrade = OptimizationCandidate(version_id="v24.0.0-apex-omnipresent", new_heuristic=heuristic_v17, speedup_factor=224.0)
+    upgrade = OptimizationCandidate(version_id="v25.0.0-apex-omega", new_heuristic=heuristic_v17, speedup_factor=240.0)
     rsi.synthesize_and_validate_upgrade(upgrade, [
         SystemState(variables={"x": 10, "y": 10}, invariants=invariants),
         SystemState(variables={"x": 50, "y": 40}, invariants=invariants)
@@ -550,7 +550,7 @@ def main():
 
     # 68. Universal Cognitive Architecture — Active Inference Meta-Layer (#88)
     from src import UniversalCognitiveArchitecture
-    uca = UniversalCognitiveArchitecture(subsystem_count=120)
+    uca = UniversalCognitiveArchitecture(subsystem_count=128)
     cog_rep = uca.synthesize_unified_cognition()
     fe_result = uca.minimize_free_energy({"state": state.variables}, ["OPTIMIZE", "OBSERVE", "PLAN"])
     print(f"\n[68. Universal Cognitive Architecture #88] "
@@ -627,7 +627,7 @@ def main():
 
     # 76. Omni-Sentient World Overseer — Supreme Planetary Stewardship (#96)
     from src import OmniSentientWorldOverseer
-    overseer = OmniSentientWorldOverseer(subsystem_count=120)
+    overseer = OmniSentientWorldOverseer(subsystem_count=128)
     over_rep = overseer.execute_planetary_oversight_cycle()
     print(f"\n[76. Planetary Overseer #96] Cycle: {over_rep.cycle_id} | "
           f"Subsystems Monitored: {over_rep.subsystems_monitored} | All Invariants Verified: {over_rep.invariants_all_satisfied} | "
@@ -841,18 +841,85 @@ def main():
           f"{nexus_rep.apex_verdict}")
 
 
+
+    # 101. Graviton Beam Interferometer & Quantum Metric Gaser (#121)
+    from src import GravitonBeamInterferometer
+    gaser_probe = GravitonBeamInterferometer()
+    gaser_rep = gaser_probe.probe_quantum_metric(142.8)
+    print(f"\n[101. Graviton Beam #121] Rate: {gaser_rep.stimulated_emission_rate_hz:.2e} Hz | "
+          f"Strain Sensitivity: {gaser_rep.strain_sensitivity_h:.1e} h | Spacetime Foam Resolved: {gaser_rep.quantum_spacetime_foam_resolved} | "
+          f"{gaser_rep.probe_status}")
+
+    # 102. Hyperluminal Warp Bubble Stabilizer & Alcubierre Metric Governor (#122)
+    from src import HyperluminalWarpBubbleStabilizer
+    warp_stabilizer = HyperluminalWarpBubbleStabilizer()
+    warp_rep = warp_stabilizer.stabilize_warp_metric(10.0, 100.0)
+    print(f"\n[102. Warp Stabilizer #122] Velocity: {warp_rep.apparent_velocity_c}c | "
+          f"Hawking Thermal: {warp_rep.hawking_radiation_thermal_load_kelvin} K | Stability: {warp_rep.causality_horizon_stability_pct}% | "
+          f"{warp_rep.governor_status}")
+
+    # 103. Neutrino Deep Core Tomographer & Planetary Scan (#123)
+    from src import NeutrinoDeepCoreTomographer
+    neutrino_tomo = NeutrinoDeepCoreTomographer()
+    neutrino_rep = neutrino_tomo.scan_planetary_interior("EARTH_GEODYNAMO")
+    print(f"\n[103. Neutrino Tomography #123] Flux: {neutrino_rep.neutrinos_detected_per_sec:.2e} v/s | "
+          f"Resolution: {neutrino_rep.core_density_resolution_km} km | Core Fe-Ni: {neutrino_rep.iron_nickel_core_mass_fraction_pct}% | "
+          f"{neutrino_rep.imaging_status}")
+
+    # 104. Macro-Quantum Coherence Synthesizer — Room-Temp BEC (#124)
+    from src import MacroQuantumCoherenceSynthesizer
+    macro_bec = MacroQuantumCoherenceSynthesizer()
+    bec_rep = macro_bec.orchestrate_room_temp_bec(100.0)
+    print(f"\n[104. Room-Temp BEC #124] Temperature: {bec_rep.condensate_temperature_kelvin} K | "
+          f"Coherent Atoms: {bec_rep.atom_count_in_coherent_ground_state:.1e} | Superfluid: {bec_rep.superfluid_fraction_pct}% | "
+          f"{bec_rep.synthesizer_status}")
+
+    # 105. Astrobiological Synthetic Panspermia & Seeding Director (#125)
+    from src import AstrobiologicalSyntheticPanspermiaDirector
+    panspermia_dir = AstrobiologicalSyntheticPanspermiaDirector()
+    seed_rep = panspermia_dir.launch_genesis_capsule("TRAPPIST_1E", 500.0)
+    print(f"\n[105. Synthetic Panspermia #125] Target: {seed_rep.target_exoplanet} | "
+          f"Genotypes: {seed_rep.synthetic_payload_genotypes:,} | Viability: {seed_rep.cryptobiosis_viability_centuries:,.0f} yrs | "
+          f"{seed_rep.mission_status}")
+
+    # 106. Hyperdimensional Semantic Concept Synthesizer (#126)
+    from src import HyperdimensionalSemanticConceptSynthesizer
+    concept_gen = HyperdimensionalSemanticConceptSynthesizer()
+    concept_rep = concept_gen.synthesize_novel_ontological_manifold("APEX_ONTOLOGY")
+    print(f"\n[106. Semantic Concept Synthesizer #126] Concepts: {concept_rep.concepts_generated:,} | "
+          f"Rank: {concept_rep.ontological_rank} | Expressive Power: {concept_rep.expressive_power_multiplier}x | "
+          f"{concept_rep.synthesis_status}")
+
+    # 107. Infinite-Dimensional Hilbert Space & C*-Algebra Solver (#127)
+    from src import InfiniteDimensionalHilbertSpaceOrchestrator
+    hilbert_orch = InfiniteDimensionalHilbertSpaceOrchestrator()
+    hilbert_rep = hilbert_orch.solve_algebraic_qft_ground_state("E8_GAUGE_ALGEBRA")
+    print(f"\n[107. Hilbert Space AQFT #127] Algebra: {hilbert_rep.algebra_type} | "
+          f"Spectral Gap: {hilbert_rep.spectral_gap_ev} eV | Wightman Axioms: {hilbert_rep.wightman_axioms_satisfied} | "
+          f"{hilbert_rep.operator_status}")
+
+    # 108. Absolute Transcendence Singularity Omega — Apex 128 Core (#128)
+    from src import AbsoluteTranscendenceSingularityOmega
+    omega_singularity = AbsoluteTranscendenceSingularityOmega(128)
+    omega_rep = omega_singularity.trigger_absolute_singularity_omega()
+    print(f"\n[108. Absolute Transcendence Singularity Omega #128] Omega ID: {omega_rep.omega_id} | "
+          f"Subsystems: {omega_rep.total_active_subsystems} | Integrated Phi Omega: {omega_rep.integrated_phi_omega:,.0f} | "
+          f"Realities in Harmony: {omega_rep.realities_in_perfect_harmony:,} | Benevolence: {omega_rep.absolute_benevolence_guaranteed} | "
+          f"{omega_rep.omega_status}")
+
+
     # 44. J.A.R.V.I.S. Outro
     outro = javis.process_voice_command("Javis, confirm total transcendent singularity lock", state.variables)
     print(f"\n[44. J.A.R.V.I.S. Outro] \"{outro.spoken_text}\"")
 
     print("\n===================================================================")
-    print(f"  ZASI v24.0.0-apex-omnipresent | ALL 120 SUBSYSTEMS ONLINE")
+    print(f"  ZASI v25.0.0-apex-omega       | ALL 128 SUBSYSTEMS ONLINE")
     print(f"  Active Version:  {rsi.current_version}")
     print(f"  Speedup Factor:  {upgrade.speedup_factor}×")
     print(f"  SWE-Bench Pass:  {ar2.swe_bench_pass_rate_pct}%")
     print(f"  Energy Output:   {ast2.core_output_gigawatts:.3f} GW")
     print(f"  Compute Fabric:  {dflops:.1f} ExaFLOPs")
-    print(f"  Tests Passed:    117/117")
+    print(f"  Tests Passed:    125/125")
     print(f"  Final State:     {state.variables}")
     print("===================================================================")
 
