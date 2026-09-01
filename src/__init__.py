@@ -65,11 +65,12 @@ from .self_evolving_codegen import PolyglotSelfEvolvingCodeGen, GeneratedPolyglo
 from .autonomous_agi_eval_arena import AutonomousAGIEvalArena, ArenaEvaluationReport
 from .zero_knowledge_snark_prover import RecursiveZKSNARKProver, RecursiveSNARKProof
 from .planetary_consciousness_grid import PlanetaryConsciousnessGrid, PlanetaryConsciousnessSnapshot
-# v14.0.0 Infinity Horizon Subsystems
 from .hyperscale_moe_router import HyperscaleMoERouter, MoERoutingTelemetry
 from .autonomous_cyber_redteam import AutonomousCyberRedTeam, CyberDefenseReport
 from .space_solar_swarm_director import SpaceSolarSwarmDirector, SolarBeamTelemetry
 from .multiverse_telepathic_nexus import MultiverseTelepathicNexus, MultiverseNexusState
+# v15.0.0 Omniversal Singularity Core (#60)
+from .omniversal_singularity_core import OmniversalSingularityCore, SingularitySynthesisState
 
 __all__ = [
     "Proposal",
@@ -196,5 +197,7 @@ __all__ = [
     "SpaceSolarSwarmDirector",
     "SolarBeamTelemetry",
     "MultiverseTelepathicNexus",
-    "MultiverseNexusState"
+    "MultiverseNexusState",
+    "OmniversalSingularityCore",
+    "SingularitySynthesisState"
 ]

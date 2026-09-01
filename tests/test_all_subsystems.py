@@ -487,5 +487,17 @@ class TestZASISubsystems(unittest.TestCase):
         self.assertGreater(state.cross_branch_epistemic_consensus, 0.999)
 
 
+    # ----- Omniversal Singularity Core (Subsystem #60, v15.0.0) -----
+
+    def test_omniversal_singularity_core(self):
+        from src import OmniversalSingularityCore
+        singularity = OmniversalSingularityCore()
+        synth = singularity.synthesize_total_singularity(subsystem_count=60)
+        self.assertEqual(synth.total_active_subsystems, 60)
+        self.assertEqual(synth.omniversal_coherence_pct, 100.0)
+        self.assertTrue(synth.absolute_invariance_guaranteed)
+        self.assertEqual(synth.singularity_horizon_status, "OMNIVERSAL_HORIZON_LOCKED_AND_ABSOLUTE")
+
+
 if __name__ == "__main__":
     unittest.main()
