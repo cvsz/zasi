@@ -82,7 +82,7 @@ make test-all
 | `/api/status` | `GET` | JSON | System operational state, SMT invariants, active version |
 | `/api/telemetry` | `GET` | JSON | Host CPU, RAM, NVML GPU load, Arc Reactor power |
 | `/api/tick` | `GET` | JSON | Execute one autonomous cognitive cycle |
-| `/api/subsystems` | `GET` | JSON | Complete catalog of all 168 subsystems |
+| `/api/subsystems` | `GET` | JSON | Complete catalog of all 176 subsystems |
 | `/api/jarvis/chat` | `POST` | JSON | Multi-turn persona chat (J.A.R.V.I.S. / F.R.I.D.A.Y. / E.D.I.T.H.) |
 | `/api/jarvis/stream` | `POST` | SSE | Word-by-word streaming dialogue response |
 | `/api/mcp` | `POST` | JSON-RPC 2.0 | MCP protocol tool execution & resource inspection |
@@ -104,7 +104,7 @@ make test-all
 ---
 
 ## 📜 Documentation Reference
-- [Full Subsystems Reference (168 Subsystems)](docs/SUBSYSTEMS_REFERENCE.md)
+- [Full Subsystems Reference (176 Subsystems)](docs/SUBSYSTEMS_REFERENCE.md)
 - [System Architecture](docs/ARCHITECTURE.md)
 - [Deployment & Operations Guide](docs/DEPLOYMENT_GUIDE.md)
 - [Alignment, Safety & SMT Guarantees](docs/ALIGNMENT_AND_SAFETY.md)
