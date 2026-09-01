@@ -5,6 +5,7 @@
 [![Tests](https://img.shields.io/badge/tests-172%20passing-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.14-blue.svg)](https://python.org)
 [![React](https://img.shields.io/badge/frontend-React%2018%20%2B%20React%20Router%20v6-61dafb.svg)](web/)
+[![Discussions](https://img.shields.io/badge/community-Discussions-orange.svg)](https://github.com/cvsz/zasi/discussions)
 [![License](https://img.shields.io/badge/license-MIT-purple.svg)](LICENSE)
 
 ZASI is an omniversal superintelligence operating system and cybernetic command architecture integrating **176 formal, physical, and cognitive subsystems** with a real-time **React 18 + React Router v6 J.A.R.V.I.S. Command Cockpit**, WebSocket streaming, First-Order SMT invariant verification, and safe Recursive Self-Improvement (RSI).
