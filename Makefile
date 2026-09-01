@@ -2,12 +2,14 @@
 
 PYTHON ?= python3
 PIP ?= $(PYTHON) -m pip
+PIP_FLAGS ?= --break-system-packages
 PORT ?= 8080
 
 all: setup test build
 
 setup:
-	$(PIP) install --upgrade pip build wheel setuptools coverage
+	$(PIP) install $(PIP_FLAGS) --upgrade build coverage
+	$(PIP) install $(PIP_FLAGS) --no-deps wheel setuptools 2>/dev/null || true
 
 test:
 	$(PYTHON) -m unittest discover -s tests -q
@@ -31,7 +33,7 @@ build: clean
 	$(PYTHON) -m build
 
 install: build
-	$(PIP) install --break-system-packages --no-deps --force-reinstall dist/*.whl
+	$(PIP) install $(PIP_FLAGS) --no-deps --force-reinstall dist/*.whl 2>/dev/null || $(PIP) install --no-deps --force-reinstall dist/*.whl
 
 server:
 	ZASI_PORT=$(PORT) $(PYTHON) backend/server.py
@@ -40,10 +42,10 @@ run:
 	$(PYTHON) main.py
 
 docker-build:
-	docker build -t zasi:31.0.0 .
+	docker build -t zasi:32.0.0 .
 
 docker-run:
-	docker run -p 8080:8080 zasi:31.0.0
+	docker run -p 8080:8080 zasi:32.0.0
 
 ci: test-all docker-build
 
