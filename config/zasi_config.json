@@ -1,1 +1,10 @@
-{"version": "25.0.0", "subsystems": 128, "environment": "production", "formal_verification": true}
+{
+  "version": "25.0.0",
+  "subsystems": 128,
+  "environment": "production",
+  "formal_verification": true,
+  "quantum_backend": "QISKIT_OPENQASM_3",
+  "telemetry_prober": "NVIDIA_NVML",
+  "plan_a_compliance": true,
+  "omniversal_equilibrium": 1.0
+}
