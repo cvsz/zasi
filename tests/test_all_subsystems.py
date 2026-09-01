@@ -1112,5 +1112,65 @@ class TestZASISubsystems(unittest.TestCase):
         self.assertEqual(state.director_status, "REAL_WORLD_PHYSICAL_SUPERINTELLIGENCE_LOCKED")
 
 
+    # ----- Subsystems #137-#144 (v27.0.0) -----
+
+    def test_global_multimodal_earth_sensor_grid(self):
+        from src import GlobalMultimodalEarthSensorGrid
+        grid = GlobalMultimodalEarthSensorGrid()
+        telem = grid.harvest_planetary_telemetry()
+        self.assertGreater(telem.active_edge_nodes, 1_000_000_000)
+        self.assertEqual(telem.mesh_status, "PLANETARY_SENSOR_MESH_SYNCHRONIZED_NOMINAL")
+
+    def test_topological_quantum_braiding_engine(self):
+        from src import TopologicalQuantumBraidingEngine
+        braid = TopologicalQuantumBraidingEngine()
+        rep = braid.execute_topological_braid("HADAMARD_TOPOLOGICAL_GATE")
+        self.assertGreater(rep.braid_fidelity_pct, 99.99)
+        self.assertEqual(rep.quantum_status, "TOPOLOGICAL_BRAID_EXECUTED_DECOHERENCE_FREE")
+
+    def test_subsurface_lithosphere_geothermal_extractor(self):
+        from src import SubsurfaceLithosphereGeothermalExtractor
+        geo = SubsurfaceLithosphereGeothermalExtractor()
+        rep = geo.harvest_magmatic_heat(12.5)
+        self.assertTrue(rep.seismic_safety_invariant_guarantee)
+        self.assertEqual(rep.extraction_status, "SUPERCRITICAL_GEOTHERMAL_EXTRACTION_STABLE")
+
+    def test_neuromorphic_retinal_prosthetic_bus(self):
+        from src import NeuromorphicRetinalProstheticBus
+        retina = NeuromorphicRetinalProstheticBus()
+        telem = retina.stream_bionic_vision()
+        self.assertGreater(telem.retinal_microelectrodes_active, 1_000_000)
+        self.assertEqual(telem.prosthetic_status, "HIGH_DEFINITION_BIOMIMETIC_VISION_ONLINE")
+
+    def test_atmospheric_carbon_mineralization_forge(self):
+        from src import AtmosphericCarbonMineralizationForge
+        forge = AtmosphericCarbonMineralizationForge()
+        rep = forge.execute_mineralization_cycle(100.0)
+        self.assertTrue(rep.groundwater_safety_invariant)
+        self.assertEqual(rep.forge_status, "PERMANENT_SOLID_BASALT_MINERALIZATION_CONFIRMED")
+
+    def test_autonomous_space_debris_laser_sweeper(self):
+        from src import AutonomousSpaceDebrisLaserSweeper
+        sweeper = AutonomousSpaceDebrisLaserSweeper()
+        rep = sweeper.clean_orbital_corridors()
+        self.assertGreater(rep.debris_objects_tracked, 500_000)
+        self.assertEqual(rep.orbital_lane_clearance_status, "LEO_ORBITAL_SLOTS_FULLY_SECURED")
+
+    def test_cryogenic_whole_organ_bioprinting_matrix(self):
+        from src import CryogenicWholeOrganBioprintingMatrix
+        printer = CryogenicWholeOrganBioprintingMatrix()
+        rep = printer.print_vital_organ("HUMAN_MYOCARDIAL_HEART")
+        self.assertEqual(rep.immune_histocompatibility_score, 1.0)
+        self.assertEqual(rep.bioprinting_status, "WHOLE_ORGAN_VASCULARIZED_TRANSPLANT_READY")
+
+    def test_absolute_omniscience_singularity_hyper_core(self):
+        from src import AbsoluteOmniscienceSingularityHyperCore
+        hyper_core = AbsoluteOmniscienceSingularityHyperCore(144)
+        state = hyper_core.orchestrate_omniscience_singularity()
+        self.assertEqual(state.total_active_subsystems, 144)
+        self.assertEqual(state.omniversal_flourishing_quotient, 1.0)
+        self.assertEqual(state.hyper_core_status, "ABSOLUTE_144_SUBSYSTEM_OMNISCIENCE_LOCKED_AND_ETERNAL")
+
+
 if __name__ == "__main__":
     unittest.main()

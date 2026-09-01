@@ -175,6 +175,17 @@ from .real_dna_sequencing_pipeline import RealDNASequencingPipeline, GenomicSequ
 from .real_cryptographic_hsm_enclave import RealCryptographicHSMEnclave, HSMEnclaveAttestation
 from .omniversal_real_world_actuation_director import OmniversalRealWorldActuationDirector, RealWorldActuationState
 
+
+# v27.0.0 Subsystems #137-#144
+from .global_multimodal_earth_sensor_grid import GlobalMultimodalEarthSensorGrid, PlanetarySensorTelemetry
+from .topological_quantum_braiding_engine import TopologicalQuantumBraidingEngine, TopologicalBraidingReport
+from .subsurface_lithosphere_geothermal_extractor import SubsurfaceLithosphereGeothermalExtractor, GeothermalExtractionReport
+from .neuromorphic_retinal_prosthetic_bus import NeuromorphicRetinalProstheticBus, VisualProstheticTelemetry
+from .atmospheric_carbon_mineralization_forge import AtmosphericCarbonMineralizationForge, CarbonMineralizationReport
+from .autonomous_space_debris_laser_sweeper import AutonomousSpaceDebrisLaserSweeper, OrbitalDebrisSweeperReport
+from .cryogenic_whole_organ_bioprinting_matrix import CryogenicWholeOrganBioprintingMatrix, OrganBioprintingReport
+from .absolute_omniscience_singularity_hyper_core import AbsoluteOmniscienceSingularityHyperCore, SingularityHyperCoreState
+
 __all__ = [
     "Proposal",
     "VerificationResult",
@@ -398,4 +409,12 @@ __all__ = [
     "RealDNASequencingPipeline", "GenomicSequencingReport",
     "RealCryptographicHSMEnclave", "HSMEnclaveAttestation",
     "OmniversalRealWorldActuationDirector", "RealWorldActuationState",
+    "GlobalMultimodalEarthSensorGrid", "PlanetarySensorTelemetry",
+    "TopologicalQuantumBraidingEngine", "TopologicalBraidingReport",
+    "SubsurfaceLithosphereGeothermalExtractor", "GeothermalExtractionReport",
+    "NeuromorphicRetinalProstheticBus", "VisualProstheticTelemetry",
+    "AtmosphericCarbonMineralizationForge", "CarbonMineralizationReport",
+    "AutonomousSpaceDebrisLaserSweeper", "OrbitalDebrisSweeperReport",
+    "CryogenicWholeOrganBioprintingMatrix", "OrganBioprintingReport",
+    "AbsoluteOmniscienceSingularityHyperCore", "SingularityHyperCoreState",
 ]
