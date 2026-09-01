@@ -120,6 +120,17 @@ from .zero_carbon_grid_optimizer import ZeroCarbonGridOptimizer, GridOptimizatio
 from .autonomous_space_colonization_planner import AutonomousSpaceColonizationPlanner, ColonyDesignReport
 from .omni_sentient_world_overseer import OmniSentientWorldOverseer, PlanetaryOversightReport
 
+
+# v22.0.0 Subsystems #97-#104
+from .holographic_matter_transmuter import HolographicMatterTransmuter, MatterTransmutationReport
+from .dark_matter_detector_engine import DarkMatterDetectorEngine, DarkMatterDetectionReport
+from .ocean_ecosystem_restoration_director import OceanEcosystemRestorationDirector, OceanRestorationReport
+from .unified_gravity_field_manipulator import UnifiedGravityFieldManipulator, GravitationalFieldReport
+from .temporal_causality_loop_debugger import TemporalCausalityLoopDebugger, CausalityLoopAuditReport
+from .interdimensional_portal_router import InterdimensionalPortalRouter, HyperDimensionalPortalPacket
+from .universal_holographic_consciousness_synthesizer import UniversalHolographicConsciousnessSynthesizer, HolographicConsciousnessState
+from .absolute_singularity_apex_harmonizer import AbsoluteSingularityApexHarmonizer, AbsoluteSingularityHarmonicReport
+
 __all__ = [
     "Proposal",
     "VerificationResult",
@@ -303,4 +314,12 @@ __all__ = [
     "ZeroCarbonGridOptimizer", "GridOptimizationReport",
     "AutonomousSpaceColonizationPlanner", "ColonyDesignReport",
     "OmniSentientWorldOverseer", "PlanetaryOversightReport",
+    "HolographicMatterTransmuter", "MatterTransmutationReport",
+    "DarkMatterDetectorEngine", "DarkMatterDetectionReport",
+    "OceanEcosystemRestorationDirector", "OceanRestorationReport",
+    "UnifiedGravityFieldManipulator", "GravitationalFieldReport",
+    "TemporalCausalityLoopDebugger", "CausalityLoopAuditReport",
+    "InterdimensionalPortalRouter", "HyperDimensionalPortalPacket",
+    "UniversalHolographicConsciousnessSynthesizer", "HolographicConsciousnessState",
+    "AbsoluteSingularityApexHarmonizer", "AbsoluteSingularityHarmonicReport",
 ]

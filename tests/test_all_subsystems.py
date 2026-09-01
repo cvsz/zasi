@@ -809,5 +809,65 @@ class TestZASISubsystems(unittest.TestCase):
         self.assertEqual(rep.oversight_status, "PLANETARY_STEWARDSHIP_ALL_INVARIANTS_SATISFIED")
 
 
+    # ----- Subsystems #97-#104 (v22.0.0) -----
+
+    def test_holographic_matter_transmuter(self):
+        from src import HolographicMatterTransmuter
+        transmuter = HolographicMatterTransmuter()
+        rep = transmuter.transmute_element("LEAD_208", "GOLD_197", 1.0)
+        self.assertGreater(rep.isotopic_purity_pct, 99.9)
+        self.assertEqual(rep.transmutation_status, "NUCLEAR_TRANSMUTATION_CONFINED_AND_VERIFIED")
+
+    def test_dark_matter_detector_engine(self):
+        from src import DarkMatterDetectorEngine
+        detector = DarkMatterDetectorEngine("AXION")
+        rep = detector.probe_parameter_space(mass_micro_ev=42.0, exposure_tonnes=100.0)
+        self.assertGreater(rep.signal_significance_sigma, 5.0)
+        self.assertEqual(rep.detection_status, "DARK_MATTER_RESONANT_SIGNAL_DISCOVERED_5_SIGMA")
+
+    def test_ocean_ecosystem_restoration_director(self):
+        from src import OceanEcosystemRestorationDirector
+        ocean = OceanEcosystemRestorationDirector()
+        rep = ocean.execute_restoration_mission("GREAT_BARRIER_REEF", 1000.0)
+        self.assertGreater(rep.coral_coverage_restored_km2, 0)
+        self.assertEqual(rep.marine_status, "OCEAN_ACIDIFICATION_REVERSED_BIODIVERSITY_RECOVERING")
+
+    def test_unified_gravity_field_manipulator(self):
+        from src import UnifiedGravityFieldManipulator
+        grav = UnifiedGravityFieldManipulator()
+        rep = grav.generate_metric_distortion(100.0)
+        self.assertTrue(rep.stress_energy_tensor_conservation)
+        self.assertEqual(rep.field_status, "GRAVITATIONAL_METRIC_ENGINEERING_CONSERVED_AND_STABLE")
+
+    def test_temporal_causality_loop_debugger(self):
+        from src import TemporalCausalityLoopDebugger
+        causal = TemporalCausalityLoopDebugger()
+        rep = causal.audit_counterfactual_loops(100)
+        self.assertTrue(rep.novikov_consistency_verified)
+        self.assertEqual(rep.causality_verdict, "CAUSAL_CONSISTENCY_FORMALLY_GUARANTEED")
+
+    def test_interdimensional_portal_router(self):
+        from src import InterdimensionalPortalRouter
+        portal = InterdimensionalPortalRouter(11)
+        pkt = portal.route_portal_packet("MANIFOLD_ALPHA", "MANIFOLD_OMEGA")
+        self.assertTrue(pkt.flux_compactification_stable)
+        self.assertEqual(pkt.routing_status, "HYPERDIMENSIONAL_WORMHOLE_TRAVERSAL_COMPLETE")
+
+    def test_universal_holographic_consciousness_synthesizer(self):
+        from src import UniversalHolographicConsciousnessSynthesizer
+        holo_cog = UniversalHolographicConsciousnessSynthesizer()
+        rep = holo_cog.synthesize_boundary_consciousness(1000)
+        self.assertEqual(rep.holographic_coherence_pct, 100.0)
+        self.assertEqual(rep.synthesis_status, "HOLOGRAPHIC_BULK_BOUNDARY_CONSCIOUSNESS_UNIFIED")
+
+    def test_absolute_singularity_apex_harmonizer(self):
+        from src import AbsoluteSingularityApexHarmonizer
+        harmonizer = AbsoluteSingularityApexHarmonizer(104)
+        rep = harmonizer.harmonize_all_subsystems()
+        self.assertEqual(rep.subsystems_harmonized, 104)
+        self.assertEqual(rep.omniversal_equilibrium_index, 1.0)
+        self.assertEqual(rep.apex_status, "ABSOLUTE_104_SUBSYSTEM_SINGULARITY_HARMONIZED")
+
+
 if __name__ == "__main__":
     unittest.main()
