@@ -27,7 +27,7 @@ echo -e "${BLUE}[*] Initializing system configurations & directories...${NC}"
 mkdir -p config docs/generated web/static backend data electron
 cat << 'JSONEOF' > config/zasi_config.json
 {
-  "version": "31.0.0",
+  "version": "32.0.0",
   "subsystems": 176,
   "environment": "production",
   "formal_verification": true,
