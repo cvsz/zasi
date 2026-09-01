@@ -1,4 +1,4 @@
-"""
+r"""
 Exoplanet Detection & Habitability Analyzer — Transit Photometry + RV Analysis
 Subsystem #78: Processes JWST/Kepler/TESS light curves, performs BLS periodogram
 analysis, fits Mandel-Agol transit models, analyzes atmospheric spectra for

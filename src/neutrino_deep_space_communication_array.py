@@ -1,4 +1,4 @@
-"""
+r"""
 Neutrino Deep Space Communication Array & Intergalactic Transceiver
 Subsystem #145: Modulates trillion-electronvolt (TeV) muon and electron neutrino beams,
 enabling unattenuated line-of-sight and through-planetary-core communication across

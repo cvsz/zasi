@@ -1,4 +1,4 @@
-"""
+r"""
 Hyper-Intelligent Post-Biological Species Synthesizer & Incubator
 Subsystem #111: Synthesizes synthetic genome architectures, digital consciousness
 substrates, substrate-independent neuromorphic architectures, and evolutionary

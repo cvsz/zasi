@@ -1,4 +1,4 @@
-"""
+r"""
 Subquantum Vacuum Polarization & Room-Temperature Ambient Superconductor Forge
 Subsystem #154: Engineers non-equilibrium vacuum polarization states within hydride-based
 clathrate superlattices, achieving stable room-temperature ($373\text{ K}$) and

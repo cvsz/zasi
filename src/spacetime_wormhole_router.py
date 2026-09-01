@@ -1,4 +1,4 @@
-"""
+r"""
 Subsystem #175: Hyperbolic Spacetime Geodesic Wormhole Router
 Traversable Morris-Thorne metric geometry stress-energy calculations.
 """

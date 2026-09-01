@@ -1,4 +1,4 @@
-"""
+r"""
 Universal Cognitive Architecture — Meta-Learning World Model Integrating All 88 Subsystems
 Subsystem #88: The apex cognitive layer that unifies all 88 ZASI subsystems under
 a single meta-cognitive framework using active inference, free energy minimization,

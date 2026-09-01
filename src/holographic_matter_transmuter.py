@@ -1,4 +1,4 @@
-"""
+r"""
 Holographic Matter Transmuter — Subatomic Particle & Nuclear Isotope Synthesizer
 Subsystem #97: Simulates beam-target spallation, laser-plasma wakefield acceleration,
 and low-energy nuclear reactions (LENR) to synthesize ultra-pure radioisotopes,

@@ -1,4 +1,4 @@
-"""
+r"""
 Quantum Entanglement Power Beamer & Non-Local Wireless Energy Grid
 Subsystem #114: Harnesses quantum telecloning, macroscopic EPR entangled Bell pairs,
 and non-radiative near-field resonant optical waveguides to transmit multi-gigawatt

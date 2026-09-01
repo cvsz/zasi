@@ -1,4 +1,4 @@
-"""
+r"""
 Autonomous Cyber Red-Team & Zero-Day Exploit Neutralizer
 Executes automated symbolic taint analysis, fuzzing coverage generation,
 and kernel patch synthesis against CVE-class exploit vectors.

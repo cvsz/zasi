@@ -1,4 +1,4 @@
-"""
+r"""
 Subsystem #172: Quantum Vacuum Casimir Force Actuator Core
 Sub-nanometer nanomechanical energy harvester modulating QED zero-point fluctuations.
 """

@@ -1,4 +1,4 @@
-"""
+r"""
 Stellar Plasma Magnetohydrodynamic (MHD) Direct Fusion Igniter
 Subsystem #164: Sustains proton-boron ($p\text{-}^{11}\text{B}$) aneutronic fusion
 in a high-beta field-reversed configuration (FRC) plasmoid, generating direct electrical

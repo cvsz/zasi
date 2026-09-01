@@ -1,4 +1,4 @@
-"""
+r"""
 Direct Cortical Optical BCI (Brain-Computer Interface) & Neural Signal Bus
 Decodes high-channel cortical electrophysiology, micro-LED optogenetic stimulation arrays,
 and neural thought vector quantization under safe specific absorption rate (SAR) limits.

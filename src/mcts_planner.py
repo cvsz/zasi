@@ -1,4 +1,4 @@
-"""
+r"""
 Monte Carlo Tree Search (MCTS) & Search-over-Thoughts Engine
 """
 import math

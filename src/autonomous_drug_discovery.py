@@ -1,4 +1,4 @@
-"""
+r"""
 Autonomous Drug Discovery Pipeline — AlphaFold + Molecular Docking + ADMET
 Subsystem #67: End-to-end AI-driven drug discovery: protein structure prediction,
 virtual screening, ADMET property filtering, and clinical trial outcome prediction.

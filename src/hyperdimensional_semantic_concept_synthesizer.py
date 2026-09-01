@@ -1,4 +1,4 @@
-"""
+r"""
 Hyperdimensional Semantic Concept Synthesizer & Universal Ontological Generator
 Subsystem #126: Synthesizes novel mathematical concepts, meta-languages, and
 higher-order ontological frameworks beyond standard human semantic representation,

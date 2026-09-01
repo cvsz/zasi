@@ -1,4 +1,4 @@
-"""
+r"""
 Superstring & M-Theory 11D Calabi-Yau Compactification Integrator
 Subsystem #105: Computes topological invariants (Euler characteristic, Hodge diamonds,
 Chern classes) for 10D/11D superstring manifolds, simulating D-brane configurations,

@@ -1,4 +1,4 @@
-"""
+r"""
 Holographic Non-Locality & Multiverse Bell Entanglement Hub
 Subsystem #151: Coordinates macroscopic $10^{18}$ GHZ entangled states across
 astronomical baselines, verifying Clauser-Horne-Shimony-Holt (CHSH) Bell inequality

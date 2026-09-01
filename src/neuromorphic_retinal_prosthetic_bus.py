@@ -1,4 +1,4 @@
-"""
+r"""
 High-Resolution Neuromorphic Retinal & Optic Nerve Neural Prosthetic Bus
 Subsystem #140: Decodes high-bandwidth event-camera visual data (1,000,000 pixels at
 10,000 fps) into biomimetic retinal ganglion cell spike trains, transmitting directly

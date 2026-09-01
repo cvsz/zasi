@@ -1,4 +1,4 @@
-"""
+r"""
 F.R.I.D.A.Y. & E.D.I.T.H. Multi-Persona Tactical Swarm
 """
 from dataclasses import dataclass

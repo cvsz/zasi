@@ -1,4 +1,4 @@
-"""
+r"""
 Universal Entropy Reversal & Poincare Recurrence Accelerator
 Subsystem #109: Synthesizes Maxwell demon feedback loops at macroscopic scales,
 local thermodynamic phase space compression, and non-equilibrium steady state (NESS)

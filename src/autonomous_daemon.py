@@ -1,4 +1,4 @@
-"""
+r"""
 Continuous Autonomous Telemetry & Adaptive Optimizer Loop
 """
 import time

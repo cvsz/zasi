@@ -1,4 +1,4 @@
-"""
+r"""
 Subsystem #174: Non-Hermitian Exceptional Point Sensor Lattice
 10^6 x amplified ultra-weak signal detection via non-Hermitian parity-time symmetry.
 """

@@ -1,4 +1,4 @@
-"""
+r"""
 Climate Change Prediction Engine — CMIP6-class Earth System Model
 Subsystem #82: Full Earth System Model with atmospheric chemistry, ocean circulation
 (AMOC), ice sheet dynamics, carbon cycle feedbacks, and tipping point detection

@@ -1,4 +1,4 @@
-"""
+r"""
 Autonomous Materials Scientist — Crystal Structure Prediction & Property Optimization
 Subsystem #72: Combines GNoME (DeepMind), VASP DFT simulation, and reinforcement
 learning to discover novel stable crystal structures, predict band gaps, superconducting

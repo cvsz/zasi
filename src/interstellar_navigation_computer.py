@@ -1,4 +1,4 @@
-"""
+r"""
 Interstellar Navigation Computer — Relativistic Trajectory Optimization
 Subsystem #90: Plans and executes deep space missions using relativistic mechanics,
 multi-body gravitational trajectory optimization (patched conics + GMAT), solar

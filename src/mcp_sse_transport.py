@@ -1,4 +1,4 @@
-"""
+r"""
 Server-Sent Events (SSE) & HTTP Streaming Transport for MCP Protocol Server
 Provides persistent HTTP SSE event streams for web clients, microservices, and distributed agents.
 """

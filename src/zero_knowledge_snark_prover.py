@@ -1,4 +1,4 @@
-"""
+r"""
 Recursive Zero-Knowledge zk-SNARK / Halo2 Proof Aggregator
 Aggregates heterogeneous execution trace proofs into a single succinct $O(1)$ recursive verification envelope.
 """

@@ -1,4 +1,4 @@
-"""
+r"""
 Subsystem #170: Stellar-Mass Gravitational Wave Interferometer Array
 Space-based nano-Hz and micro-Hz cosmological spacetime metric tensor survey.
 """

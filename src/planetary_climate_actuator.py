@@ -1,4 +1,4 @@
-"""
+r"""
 Planetary Geoengineering & Climate Feedback Actuator
 Simulates stratospheric aerosol injection (SAI), solar radiation management (SRM),
 and ocean alkalinity enhancement under thermodynamic planetary boundary constraints.

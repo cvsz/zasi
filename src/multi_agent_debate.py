@@ -1,4 +1,4 @@
-"""
+r"""
 Adversarial Multi-Agent Debate & Red-Teaming Subsystem
 """
 from dataclasses import dataclass

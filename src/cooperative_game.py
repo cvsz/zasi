@@ -1,4 +1,4 @@
-"""
+r"""
 Cooperative Multi-Agent Game Theory & Pareto Front Solver
 """
 from dataclasses import dataclass

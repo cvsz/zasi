@@ -1,4 +1,4 @@
-"""
+r"""
 Synthetic Consciousness Validator — IIT Φ + Global Workspace + Higher-Order Thought
 Subsystem #70: Measures and certifies artificial consciousness using Integrated
 Information Theory (IIT 4.0), Global Workspace Theory (GWT), and Higher-Order

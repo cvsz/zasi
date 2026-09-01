@@ -1,4 +1,4 @@
-"""
+r"""
 Distributed Worker Pool & Consensus RPC Subsystem
 """
 import concurrent.futures

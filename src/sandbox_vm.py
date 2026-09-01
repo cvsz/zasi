@@ -1,4 +1,4 @@
-"""
+r"""
 Sandboxed OS & MicroVM Execution Environment
 Provides Linux namespace and filesystem isolation via Bubblewrap (bwrap)
 with strict memory/CPU resource limiting and fallback jail protection.

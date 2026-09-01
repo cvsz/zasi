@@ -1,4 +1,4 @@
-"""
+r"""
 Universal Supercluster Telemetry & Telepathic Multiverse Mesh
 Aggregates telemetry from all 44 subsystems, orchestrates planetary-to-cosmic telemetry,
 and computes global thermodynamic efficiency across all constellations.

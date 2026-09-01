@@ -1,4 +1,4 @@
-"""
+r"""
 Autonomous Scientific Researcher — Hypothesis Generation to Peer Review
 Subsystem #74: Full closed-loop autonomous science: reads arXiv/PubMed corpus,
 generates novel falsifiable hypotheses, designs experiments, interprets results,

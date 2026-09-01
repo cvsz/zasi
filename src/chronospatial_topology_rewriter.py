@@ -1,4 +1,4 @@
-"""
+r"""
 Chronospatial Topology Rewriter — Spacetime Metric Surgery & Metric Flips
 Subsystem #113: Simulates topological transitions in pseudo-Riemannian manifolds,
 performing surgery along spacelike cobordisms, resolving singularities via stringy

@@ -1,4 +1,4 @@
-"""
+r"""
 Intergalactic Supercluster Gravitational Lens Router & Cosmic Relay
 Subsystem #161: Routes petabit-scale coherent laser and neutrino data beams through
 deep-space cosmic gravitational lensing corridors (Abell 2744 / Laniakea Supercluster),

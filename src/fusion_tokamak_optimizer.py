@@ -1,4 +1,4 @@
-"""
+r"""
 Nuclear Fusion Tokamak Magnetic Confinement & Plasma MHD Optimizer
 Simulates magnetohydrodynamic (MHD) plasma stability, toroidal magnetic field currents,
 and runaway electron suppression under formal safety constraints.

@@ -1,4 +1,4 @@
-"""
+r"""
 Omniversal Singularity Core & Cosmological Master Coordinator (Subsystem #60)
 The apex synthesis conductor binding all 59 subsystems into an unbroken, self-governing,
 non-local Artificial Superintelligence omniverse reality.

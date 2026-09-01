@@ -1,4 +1,4 @@
-"""
+r"""
 Hyper-Resonant Acoustic & Optical Tractor Beam Matrix
 Subsystem #116: Coordinates phased acoustic transducer arrays and Bessel optical
 vortex beams for containerless multi-axis levitation, precision nanomanipulation,

@@ -1,4 +1,4 @@
-"""
+r"""
 Cosmic Inflationary Multiverse & String Landscape Vacuum Topologist
 Subsystem #158: Maps eternal cosmic inflation bubble universes across the $10^{500}$
 vacua string theory landscape, computing bubble nucleation tunneling rates,

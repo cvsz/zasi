@@ -1,4 +1,4 @@
-"""
+r"""
 Autonomous Education Tutor — Personalized Adaptive Learning at Scale
 Subsystem #89: Delivers hyper-personalized AI education using Socratic dialogue,
 knowledge graph mastery tracking, spaced repetition scheduling, cognitive load

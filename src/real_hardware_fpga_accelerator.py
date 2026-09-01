@@ -1,4 +1,4 @@
-"""
+r"""
 Real Hardware FPGA High-Throughput Tensor Accelerator (AMD Xilinx / Intel Stratix)
 Subsystem #129: Interfaces with real PCIe / AXI4-Stream FPGA bitstreams, compiling
 custom systolic arrays, low-precision fixed-point matrix multiplication units,

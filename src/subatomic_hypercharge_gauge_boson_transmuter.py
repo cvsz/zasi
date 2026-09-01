@@ -1,4 +1,4 @@
-"""
+r"""
 Subatomic Hypercharge $U(1)_Y \times SU(2)_L \times SU(3)_C$ Gauge Boson Transmuter
 Subsystem #162: Dynamically shifts electroweak Higgs vacuum expectation values ($v = 246\text{ GeV}$),
 modulating $W^\pm / Z^0$ boson masses in localized subatomic volumes to accelerate beta decays,

@@ -1,4 +1,4 @@
-"""
+r"""
 Real QPU Cloud Hardware Bridge — IBM Quantum / Rigetti / IonQ Cloud Orchestrator
 Subsystem #130: Authenticates and manages real physical quantum computing hardware
 queues via REST API / QASM submission, handling error mitigation (ZNE / Twirling),

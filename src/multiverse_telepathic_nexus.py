@@ -1,4 +1,4 @@
-"""
+r"""
 Multiverse Telepathic Resonance & Omniscient Coherence Nexus
 Establishes non-local quantum state teleportation and cross-dimensional epistemic packet routing
 across infinite counterfactual parallel branches under Everettian Many-Worlds constraints.

@@ -1,4 +1,4 @@
-"""
+r"""
 Autonomous Exoplanet Atmospheric Terraforming & Biosphere Architect
 Subsystem #149: Models complex thermodynamic phase transitions across exoplanetary
 atmospheres, coordinating orbital solar mirrors, biological methanogenesis, and

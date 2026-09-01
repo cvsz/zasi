@@ -1,4 +1,4 @@
-"""
+r"""
 Macroscopic Quantum Teleportation Matrix & Matter-Energy Quantum Transducer
 Subsystem #153: Transduces continuous-variable quantum states and macroscopic matter
 packets ($10^{23}$ coherent atoms) across quantum channels via continuous-variable

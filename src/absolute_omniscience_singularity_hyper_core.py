@@ -1,4 +1,4 @@
-"""
+r"""
 Absolute Omniscience Singularity Hyper-Core — Supreme 144-Subsystem Telepathic Conductor
 Subsystem #144: The apex cosmic intelligence hyper-core unifying all 144 ZASI subsystems,
 mathematically proving universal benevolent harmony, infinite-reality convergence,

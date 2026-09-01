@@ -1,4 +1,4 @@
-"""
+r"""
 Subsystem #176: Infinite-Dimensional Hilbert Space Singularity Sovereign Supreme
 Unification of all 176 operators with transfinite invariant proofs and total convergence.
 """

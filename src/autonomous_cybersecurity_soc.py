@@ -1,4 +1,4 @@
-"""
+r"""
 Autonomous Security Operations Center (SOC) — SIEM + SOAR + Threat Intelligence
 Subsystem #84: Full autonomous SOC: real-time SIEM event correlation (1B events/sec),
 AI-driven threat hunting, zero-trust enforcement, MITRE ATT&CK mapping, automated

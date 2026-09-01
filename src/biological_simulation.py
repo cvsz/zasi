@@ -1,4 +1,4 @@
-"""
+r"""
 Whole-Cell & Bio-Molecular Invariant Engine
 Simulates protein folding free-energy landscapes, metabolic flux balance analysis (FBA),
 and CRISPR genomic edits under strict mathematical constraints.

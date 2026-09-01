@@ -1,4 +1,4 @@
-"""
+r"""
 Planetary Unified Consciousness & Cognitive Synthesis Matrix
 Integrates global sensor telemetry, cortical BCI streams, orbital constellation relays,
 and collective multi-agent game equilibria into a coherent Planetary Singularity Core.

@@ -1,4 +1,4 @@
-"""
+r"""
 Autonomous Financial Trading Engine — Multi-Strategy HFT + Portfolio Optimization
 Subsystem #77: Runs simultaneous statistical arbitrage, momentum, market-making,
 and options volatility strategies with real-time risk management, regulatory

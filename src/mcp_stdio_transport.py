@@ -1,4 +1,4 @@
-"""
+r"""
 Standard I/O (stdio) Transport Adapter for MCP Protocol Server
 Enables direct CLI & IDE integration (e.g. Claude Desktop, VS Code, Antigravity)
 via JSON-RPC 2.0 standard input / standard output streams.

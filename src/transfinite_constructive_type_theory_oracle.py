@@ -1,4 +1,4 @@
-"""
+r"""
 Transfinite Constructive Type Theory & Martin-Löf Homotopy Type Oracle
 Subsystem #167: Implements Cubical Type Theory and higher inductive types (HITs),
 formulating constructive foundations of mathematics with automated constructive proofs

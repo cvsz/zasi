@@ -1,4 +1,4 @@
-"""
+r"""
 Autonomous Legal Advisor — Contract Analysis, Case Law, Litigation Prediction
 Subsystem #81: Full-stack AI legal reasoning: statute retrieval, contract risk scoring,
 precedent-based case outcome prediction, multi-jurisdiction compliance, and

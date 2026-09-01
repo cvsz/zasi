@@ -1,4 +1,4 @@
-"""
+r"""
 Autonomous Git Self-Evolution & Live Version Control Engine
 Interacts with the actual Git repository to stage, verify test suites,
 and perform semantic commits and branch updates.

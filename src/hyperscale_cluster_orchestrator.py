@@ -1,4 +1,4 @@
-"""
+r"""
 Distributed Hyperscale GPU/TPU Multi-Node Pod Cluster Orchestrator
 Coordinates multi-node NCCL/RCCL all-reduce topologies, pipeline parallel partitioning,
 and zero-redundancy optimizer (ZeRO-3) sharding across heterogeneous accelerator clusters.

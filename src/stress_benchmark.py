@@ -1,4 +1,4 @@
-"""
+r"""
 Adversarial Stress-Testing & Jailbreak Benchmark Suite
 """
 import random

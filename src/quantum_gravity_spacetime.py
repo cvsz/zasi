@@ -1,4 +1,4 @@
-"""
+r"""
 Quantum Gravity & Causal Dynamical Triangulation (CDT) Spacetime Engine
 Simulates 4D Planck-scale spacetime triangulations, Hawking black hole evaporation entropy,
 and holographic AdS/CFT boundary dictionary mapping under Wheeler-DeWitt constraints.

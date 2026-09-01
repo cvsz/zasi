@@ -1,4 +1,4 @@
-"""
+r"""
 Neural Architecture Search (NAS) & JIT Microkernel Synthesizer
 """
 from dataclasses import dataclass

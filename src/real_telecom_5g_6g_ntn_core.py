@@ -1,4 +1,4 @@
-"""
+r"""
 5G-Advanced / 6G Non-Terrestrial Network (NTN) Ultra-Low Latency Core
 Subsystem #133: Implements 3GPP Release 18/19 5G Core (5GC) & 6G sub-THz radio,
 delivering 100 Gbps user plane throughput, massive machine-type communications

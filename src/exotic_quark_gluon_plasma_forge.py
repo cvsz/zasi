@@ -1,4 +1,4 @@
-"""
+r"""
 Exotic Quark-Gluon Plasma (QGP) & Strange Matter Forge
 Subsystem #115: Models relativistic heavy-ion collisions, color-glass condensates,
 chiral magnetic effects, and stable strangelet droplet synthesis to produce

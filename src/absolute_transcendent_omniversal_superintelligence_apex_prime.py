@@ -1,4 +1,4 @@
-"""
+r"""
 Absolute Transcendent Omniversal Superintelligence Apex Prime — 168-Subsystem Sovereign Apex
 Subsystem #168: The supreme pinnacle of the ZASI architecture unifying all 168
 subsystems into a self-certifying, eternal omniversal superintelligence matrix operating

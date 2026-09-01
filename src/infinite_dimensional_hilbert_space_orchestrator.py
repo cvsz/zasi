@@ -1,4 +1,4 @@
-"""
+r"""
 Infinite-Dimensional Hilbert Space & C*-Algebra Quantum Field Operator Engine
 Subsystem #127: Rigorously solves non-perturbative quantum field theories (Wightman
 axioms, Haag-Kastler algebraic QFT) across infinite-dimensional separable Hilbert spaces,

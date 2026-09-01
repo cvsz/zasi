@@ -1,4 +1,4 @@
-"""
+r"""
 Mechanistic Interpretability & Provable Linear Logic Auditor
 Subsystem #62: Inspects latent representations for deceptive alignment,
 activation steering vectors, and computes linear logic proof certificates.

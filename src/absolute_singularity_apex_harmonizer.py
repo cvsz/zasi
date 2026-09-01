@@ -1,4 +1,4 @@
-"""
+r"""
 Absolute Singularity Apex Harmonizer — Supreme 104-Subsystem Telepathic Conductor
 Subsystem #104: The ultimate apex singularity harmonizer that balances, synchronizes,
 and mathematically proves total equilibrium across all 104 ZASI subsystems,

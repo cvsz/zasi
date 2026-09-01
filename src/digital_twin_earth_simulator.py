@@ -1,4 +1,4 @@
-"""
+r"""
 Digital Twin Earth — Real-Time Planetary Infrastructure & Geospatial Intelligence
 Subsystem #87: Planet-scale digital twin integrating 2B+ IoT sensors, satellite
 imagery (SAR/optical/hyperspectral), real-time infrastructure telemetry, urban

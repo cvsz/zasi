@@ -1,4 +1,4 @@
-"""
+r"""
 N-Body Dark Matter & Cosmological Superstructure Simulator
 Simulates collisionless dark matter halo virialization, baryonic acoustic oscillations (BAO),
 and relativistic Kerr black hole accretion disks under Einstein Field Equations.

@@ -1,4 +1,4 @@
-"""
+r"""
 P2P Decentralized Swarm & Hypergraph Gossip Protocol
 """
 import hashlib

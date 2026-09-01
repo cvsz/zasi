@@ -1,4 +1,4 @@
-"""
+r"""
 Quantum Computing Simulation & Thermodynamic Entropy Optimizer
 """
 import math

@@ -1,4 +1,4 @@
-"""
+r"""
 Synthetic Biology Designer — CRISPR Gene Circuit Engineering & Biosafety
 Subsystem #91: Designs and simulates synthetic gene circuits, CRISPR base editors,
 metabolic pathway engineering, protein expression optimization, and formal

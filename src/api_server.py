@@ -1,4 +1,4 @@
-"""
+r"""
 ZASI Secure Holographic J.A.R.V.I.S. HUD & Authenticated REST API
 Includes Bearer Token Auth, RBAC (Admin/Operator/Auditor), Audit Logging, and Mutation Approval Gates.
 """

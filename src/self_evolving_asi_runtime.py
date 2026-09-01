@@ -1,4 +1,4 @@
-"""
+r"""
 Self-Evolving Autonomous ASI Production Daemon & Multi-Node Cluster Runtime
 Subsystem #63: Continuously monitors global telemetry, schedules self-directed
 recursive improvement cycles, and enforces formal mathematical safety boundaries in real-time.

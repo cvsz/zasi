@@ -1,4 +1,4 @@
-"""
+r"""
 Quantum Annealing & Adiabatic State Transversal Engine
 Simulates transverse-field Ising Hamiltonians H = -sum(J_ij * s_i * s_j) - sum(h_i * s_i)
 for NP-hard combinatorial trajectory optimization under quantum tunneling constraints.

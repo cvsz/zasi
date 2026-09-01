@@ -1,4 +1,4 @@
-"""
+r"""
 Interdimensional Portal Router — Multi-Fold Calabi-Yau & Higher-D Wormhole Mesh
 Subsystem #102: Mathematical bridge and hyper-dimensional routing protocol across
 11D M-Theory compactified orbifolds, allowing instant topological entanglement

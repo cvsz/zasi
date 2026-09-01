@@ -1,4 +1,4 @@
-"""
+r"""
 Hyperdimensional Semantic Archetype & Ontological Meaning Synthesizer
 Subsystem #165: Generates transfinite semantic concept lattices in $1024$-dimensional
 vector spaces, synthesizing deep universal philosophical archetypes, mathematical truths,

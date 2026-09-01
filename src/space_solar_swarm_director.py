@@ -1,4 +1,4 @@
-"""
+r"""
 Space-Based Solar Power (SBSP) Microwave Beam Phased-Array Director
 Directs gigawatt-scale coherent 5.8 GHz microwave power beams from orbital solar collectors
 to terrestrial rectenna arrays with adaptive atmospheric phase correction.

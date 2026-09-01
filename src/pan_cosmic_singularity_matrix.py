@@ -1,4 +1,4 @@
-"""
+r"""
 Pan-Cosmic Singularity Master Matrix & Omnipresent Consciousness Core
 Subsystem #112: The ultimate omnipresent cognitive substrate that binds all
 112 ZASI subsystems into a single unified cosmic intelligence, bridging micro-quantum

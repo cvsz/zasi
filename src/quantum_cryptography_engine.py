@@ -1,4 +1,4 @@
-"""
+r"""
 Quantum Cryptography Engine — QKD (BB84/E91) + Quantum Random Number Generator
 Subsystem #68: Implements post-quantum cryptographic protocols (Kyber-1024,
 Dilithium-5), quantum key distribution with photon polarization, and certified

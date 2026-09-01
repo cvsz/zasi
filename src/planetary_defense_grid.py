@@ -1,4 +1,4 @@
-"""
+r"""
 Planetary Defense Grid — NEO Asteroid Tracking & Kinetic Impactor Coordinator
 Subsystem #69: Monitors Near-Earth Objects, computes Torino scale impact probability,
 calculates DART-class kinetic impactor trajectories, and coordinates global deflection missions.

@@ -1,4 +1,4 @@
-"""
+r"""
 Autonomous Space Colonization Planner — Mars/Moon Base Design & Life Support
 Subsystem #95: Plans self-sustaining off-world colonies with ISRU (in-situ resource
 utilization), closed-loop life support (ECLSS) design, habitat structural analysis

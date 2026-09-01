@@ -1,4 +1,4 @@
-"""
+r"""
 Neural Foundation Model & Vector Embedding Adapter
 """
 import os

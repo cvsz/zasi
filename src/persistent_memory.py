@@ -1,4 +1,4 @@
-"""
+r"""
 Persistent Hypergraph Database Layer with SQLite
 """
 import sqlite3

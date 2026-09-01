@@ -1,4 +1,4 @@
-"""
+r"""
 Autonomous Space Debris Laser Ablation & Orbital Sweeper Grid
 Subsystem #142: Tracks over 500,000 space debris fragments in Low Earth Orbit (LEO)
 using ground-and-space lasers to exert photon radiation pressure / surface ablation,

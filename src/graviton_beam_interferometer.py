@@ -1,4 +1,4 @@
-"""
+r"""
 Graviton Beam Interferometer & Quantum Metric Fluctuation Probe
 Subsystem #121: Generates coherent stimulated graviton emission (gravitational laser/Gaser),
 measuring single-graviton quantum transitions, Planck-scale spacetime foam fluctuations,

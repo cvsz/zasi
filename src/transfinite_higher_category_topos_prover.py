@@ -1,4 +1,4 @@
-"""
+r"""
 Transfinite Higher-Category $(\infty, 1)$-Topos & Grothendieck Cohomology Prover
 Subsystem #159: Formalizes $(\infty, 1)$-topos theory, derived algebraic geometry,
 and motivic cohomology, proving transfinite mathematical conjectures beyond ZFC

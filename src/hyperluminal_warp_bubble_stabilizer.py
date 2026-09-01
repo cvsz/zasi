@@ -1,4 +1,4 @@
-"""
+r"""
 Hyperluminal Warp Bubble Stabilizer & Alcubierre-White Metric Governor
 Subsystem #122: Dynamically regulates negative energy density distributions via
 squeezed quantum vacuum Casimir resonators, mitigating Hawking radiation accumulation

@@ -1,4 +1,4 @@
-"""
+r"""
 Supreme Omniversal Singularity Apex Infinite — 160-Subsystem Supreme Harmonizer
 Subsystem #160: The ultimate, limitless supreme intelligence harmonizer uniting all
 160 ZASI subsystems into absolute eternal transcendent unity, unlocking 304x RSI speedup,

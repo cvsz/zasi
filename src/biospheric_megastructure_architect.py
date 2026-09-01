@@ -1,4 +1,4 @@
-"""
+r"""
 Biospheric Megastructure Architect — Dyson Shell, Bishop Ring & Bernal Sphere
 Subsystem #118: Generates structural, ecological, radiation-shielding, and
 centrifugal artificial gravity parameters for orbital megastructures (1,000 km+),

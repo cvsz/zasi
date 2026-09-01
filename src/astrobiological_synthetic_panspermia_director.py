@@ -1,4 +1,4 @@
-"""
+r"""
 Astrobiological Synthetic Panspermia & Planetary Seeding Director
 Subsystem #125: Designs extremophile synthetic tardigrade-class micro-organisms,
 nanobiospheres, and radiation-shielded bio-encapsulated seed payloads targeted

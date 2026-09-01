@@ -1,4 +1,4 @@
-"""
+r"""
 Subsystem #173: Trans-Galactic Dark Matter Axion Haloscope Detector
 Primordial axion field resonance and Sikivie microwave resonant cavity array.
 """

@@ -1,4 +1,4 @@
-"""
+r"""
 Topological Quantum Braiding Engine & Non-Abelian Anyon Processor
 Subsystem #138: Manipulates Majorana zero modes and Fibonacci non-abelian anyons in
 fractional quantum Hall 2D electron gases, achieving fault-tolerant quantum computation

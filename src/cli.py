@@ -1,4 +1,4 @@
-"""
+r"""
 Interactive Command Line & Prompt Interface for ZASI
 """
 import argparse

@@ -1,4 +1,4 @@
-"""
+r"""
 Temporal Causality Loop Debugger — Closed Timelike Curve Invariant Checker
 Subsystem #101: Validates Novikov self-consistency principles, avoids bootstrap
 paradoxes in distributed counterfactual planning, and verifies chronology protection

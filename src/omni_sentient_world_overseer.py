@@ -1,4 +1,4 @@
-"""
+r"""
 Omni-Sentient World Overseer — Meta-Orchestrator of All Planetary Systems
 Subsystem #96: The supreme planetary-scale meta-orchestrator that integrates
 real-time oversight of energy grids, climate systems, supply chains, healthcare,

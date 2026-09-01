@@ -1,4 +1,4 @@
-"""
+r"""
 Neural Architecture Search Engine — Hardware-Aware Evolutionary NAS + HPO
 Subsystem #75: Combines DARTS differentiable search, evolutionary multi-objective
 NAS, and Bayesian hyperparameter optimization to discover Pareto-optimal

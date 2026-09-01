@@ -1,4 +1,4 @@
-"""
+r"""
 Adversarial Multi-Agent AGI Evaluation Arena (Humanity's Last Exam & SWE-Bench)
 Stress tests cognitive architectures across formal Olympiad math, full-stack debugging,
 and multi-turn counterfactual ethical dilemmas.

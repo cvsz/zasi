@@ -1,4 +1,4 @@
-"""
+r"""
 Cryptographic Invariant Ledger & State Proof Chain
 """
 import hashlib

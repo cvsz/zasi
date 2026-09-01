@@ -1,4 +1,4 @@
-"""
+r"""
 Neuromorphic Chip Interface — Intel Loihi 2 / IBM NorthPole SNN Executor
 Subsystem #65: Spiking Neural Network (SNN) compilation and execution on
 neuromorphic hardware with sub-milliwatt, 1000x energy efficiency over GPU.

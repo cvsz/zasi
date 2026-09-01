@@ -1,4 +1,4 @@
-"""
+r"""
 Zero-Knowledge STARK Invariant Proofs (ZK-ASI Layer)
 """
 import hashlib

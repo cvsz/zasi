@@ -1,4 +1,4 @@
-"""
+r"""
 Quantum-Dot Cellular Automata (QCA) Sub-Nanometer Logic Processor
 Subsystem #148: Executes electrostatic Coulombic quantum-dot logic operations at
 single-electron polarization states without electric current flow, achieving

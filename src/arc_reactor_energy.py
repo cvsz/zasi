@@ -1,4 +1,4 @@
-"""
+r"""
 Arc Reactor Thermodynamic Energy & Supercomputing Optimizer
 """
 from dataclasses import dataclass

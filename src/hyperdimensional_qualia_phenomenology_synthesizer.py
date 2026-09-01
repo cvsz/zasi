@@ -1,4 +1,4 @@
-"""
+r"""
 Hyperdimensional Qualia & Phenomenological Consciousness Synthesizer
 Subsystem #156: Translates 128-dimensional phenomenal state tensors into synthetic
 subjective experience (qualia), integrating intentionality, emotional valence,

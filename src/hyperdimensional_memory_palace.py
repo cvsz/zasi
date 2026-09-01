@@ -1,4 +1,4 @@
-"""
+r"""
 Hyperdimensional Computing Memory Palace — 10,000D Binary VSA
 Subsystem #71: Implements Vector Symbolic Architecture (VSA) with 10,000-dimensional
 hypervectors for ultra-fast noise-resistant associative memory, concept bundling,

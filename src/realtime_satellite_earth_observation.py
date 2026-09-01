@@ -1,4 +1,4 @@
-"""
+r"""
 Real-Time Satellite Earth Observation & Geospatial SAR Stream Processor
 Subsystem #131: Ingests real Sentinel-1/2, Landsat-9, and commercial synthetic
 aperture radar (SAR) constellations, processing live telemetry, planetary surface

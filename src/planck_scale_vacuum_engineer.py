@@ -1,4 +1,4 @@
-"""
+r"""
 Planck-Scale Vacuum Energy Extraction & Zero-Point Fluctuations Harvester
 Subsystem #107: Uses dynamic Casimir effect cavities, high-Q superconducting
 resonators, and squeezed quantum vacuum states to extract zero-point energy

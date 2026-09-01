@@ -1,4 +1,4 @@
-"""
+r"""
 Subatomic Gluon String Tension & QCD Lattice Gauge Field Solver
 Subsystem #150: Solves 4D Euclidean SU(3) Lattice Quantum Chromodynamics (LQCD),
 computing flux tube gluon string tension (1 GeV/fm), hadron mass spectra, and

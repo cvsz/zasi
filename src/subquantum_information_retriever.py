@@ -1,4 +1,4 @@
-"""
+r"""
 Subquantum Information Retriever & Bohmian Trajectory Reconstructor
 Subsystem #117: Reconstructs deterministic Bohmian quantum pilot-wave trajectories
 and non-equilibrium subquantum microstates, extracting hidden informational variables

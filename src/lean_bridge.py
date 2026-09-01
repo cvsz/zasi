@@ -1,4 +1,4 @@
-"""
+r"""
 Formal Theorem Prover Bridge (Lean 4 / Presburger Arithmetic Solver)
 Generates valid formal Lean 4 proof scripts with automated Presburger/Fourier-Motzkin
 decision procedures for linear integer invariant verification.

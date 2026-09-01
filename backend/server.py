@@ -77,32 +77,41 @@ _db_lock = threading.Lock()
 def _init_db():
     """Create data/ dir and state table if missing."""
     os.makedirs(DATA_DIR, exist_ok=True)
-    with sqlite3.connect(DB_PATH) as conn:
+    conn = sqlite3.connect(DB_PATH)
+    try:
         conn.execute(
             "CREATE TABLE IF NOT EXISTS state "
             "(key TEXT PRIMARY KEY, value TEXT NOT NULL)"
         )
         conn.commit()
+    finally:
+        conn.close()
 
 
 def _db_save(key: str, value: str):
     with _db_lock:
-        with sqlite3.connect(DB_PATH) as conn:
+        conn = sqlite3.connect(DB_PATH)
+        try:
             conn.execute(
                 "INSERT INTO state(key, value) VALUES(?,?) "
                 "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                 (key, value),
             )
             conn.commit()
+        finally:
+            conn.close()
 
 
 def _db_load(key: str, default: str = "{}") -> str:
     with _db_lock:
-        with sqlite3.connect(DB_PATH) as conn:
+        conn = sqlite3.connect(DB_PATH)
+        try:
             row = conn.execute(
                 "SELECT value FROM state WHERE key=?", (key,)
             ).fetchone()
             return row[0] if row else default
+        finally:
+            conn.close()
 
 
 def _persist_state():

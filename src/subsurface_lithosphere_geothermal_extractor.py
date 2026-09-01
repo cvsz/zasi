@@ -1,4 +1,4 @@
-"""
+r"""
 Subsurface Lithosphere Geothermal & Magma Energy Extraction Director
 Subsystem #139: Simulates supercritical hydro-thermal fracturing and closed-loop
 superdeep drilling (10 km+ depth) to harvest gigawatt-scale base-load geothermal

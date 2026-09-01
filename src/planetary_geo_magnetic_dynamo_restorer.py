@@ -1,4 +1,4 @@
-"""
+r"""
 Planetary Geo-Magnetic Dynamo Restorer & Core Convection Modulator
 Subsystem #147: Injects deep electromagnetic stator induction waves into molten outer
 iron-nickel cores to stabilize planetary geomagnetic dynamos, shield magnetospheres

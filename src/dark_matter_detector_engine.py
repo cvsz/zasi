@@ -1,4 +1,4 @@
-"""
+r"""
 Dark Matter Detector Engine — WIMP, Axion & Primordial Black Hole Prober
 Subsystem #98: Interfaces with cryogenic noble liquid detectors (XENONnT / LZ),
 resonant microwave axion cavities (ADMX), and gravitational lensing arrays to

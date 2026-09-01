@@ -1,4 +1,4 @@
-"""
+r"""
 Omni-Dimensional Qualia Cognitive Mapper & Phenomenology Field Synthesizer
 Subsystem #108: Maps high-dimensional phenomenological experience spaces,
 qualia topologies, cross-modal synesthesia manifolds, and subjective conscious states

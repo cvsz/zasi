@@ -1,4 +1,4 @@
-"""
+r"""
 Model-to-Model Epistemic Protocol (MEP) & Synthetic Telepathy
 """
 import math

@@ -1,4 +1,4 @@
-"""
+r"""
 Holographic WebXR Spatial Reality Streaming & Gesture Interface
 """
 from dataclasses import dataclass

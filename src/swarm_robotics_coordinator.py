@@ -1,4 +1,4 @@
-"""
+r"""
 Swarm Robotics Coordinator — 100,000-Agent Emergent Behavior Orchestrator
 Subsystem #80: Coordinates massive heterogeneous robot swarms (aerial, ground,
 aquatic, micro) using stigmergy, bio-inspired flocking (Reynolds rules),

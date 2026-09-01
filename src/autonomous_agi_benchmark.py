@@ -1,4 +1,4 @@
-"""
+r"""
 Universal AGI & ASI Capability Benchmark Suite
 Evaluates reasoning, ARC-AGI pattern extrapolation, mathematical theorem verification,
 multi-agent game theory, and formal invariant preservation.

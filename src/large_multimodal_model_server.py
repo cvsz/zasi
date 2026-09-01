@@ -1,4 +1,4 @@
-"""
+r"""
 Large Multimodal Model Server — Vision-Language-Action (VLA) Unified Inference Engine
 Subsystem #73: Serves unified VLA models (Gemini Ultra / GPT-4o class) across
 text, image, video, audio, and action modalities with dynamic batching, KV-cache,

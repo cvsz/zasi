@@ -1,4 +1,4 @@
-"""
+r"""
 Planetary & Dyson Swarm Distributed Compute Orchestrator
 """
 from dataclasses import dataclass

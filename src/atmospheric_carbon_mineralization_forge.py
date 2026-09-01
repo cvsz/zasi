@@ -1,4 +1,4 @@
-"""
+r"""
 Atmospheric Carbon Mineralization & Direct Air Basalt Carbonation Forge
 Subsystem #141: Coordinates direct air capture (DAC) arrays with underground basalt
 in-situ carbon mineralization, permanently turning captured CO2 into solid calcite

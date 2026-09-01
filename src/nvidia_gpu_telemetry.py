@@ -1,4 +1,4 @@
-"""
+r"""
 NVIDIA NVML / GPU Real-Hardware Telemetry Supervisor
 Probes live host NVIDIA GPUs via nvidia-smi / NVML C-library bindings,
 monitoring Tensor Core utilization, HBM3e temperature, PCIe/NVLink bandwidth, and wattage.

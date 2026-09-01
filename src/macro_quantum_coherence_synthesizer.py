@@ -1,4 +1,4 @@
-"""
+r"""
 Macro-Quantum Coherence Synthesizer & Room-Temperature BEC Orchestrator
 Subsystem #124: Sustains macroscopic quantum entanglement and Bose-Einstein
 condensation (BEC) at room temperature (300K) across trillion-atom polariton

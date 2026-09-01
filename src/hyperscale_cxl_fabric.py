@@ -1,4 +1,4 @@
-"""
+r"""
 Heterogeneous Accelerator Interconnect & CXL 3.0 Telemetry Mesh
 Simulates multi-GPU (H100/B200/Blackwell), TPU v6e, and Optical Photonic mesh routing.
 """

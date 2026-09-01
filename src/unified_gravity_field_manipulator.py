@@ -1,4 +1,4 @@
-"""
+r"""
 Unified Gravity Field Manipulator — Micro-Gravitational Metric & Frame-Dragging Control
 Subsystem #100: Simulates metric engineering via negative energy density Casimir
 cavities, rotating superconductor frame-dragging, and high-frequency gravitational

@@ -1,4 +1,4 @@
-"""
+r"""
 Relativistic Kerr Black Hole Penrose Process & Ergosphere Energy Harvester
 Subsystem #155: Simulates magnetohydrodynamic plasma particle injection into the
 ergosphere of rotating Kerr black holes, harvesting rotational energy via the Penrose

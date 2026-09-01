@@ -1,4 +1,4 @@
-"""
+r"""
 Global Pandemic Predictor & Vaccine Deployment Optimizer
 Subsystem #92: Runs SEIR+ epidemiological models across 8B+ agents, predicts
 viral variant emergence using phylogenetic AI, optimizes vaccine cold-chain

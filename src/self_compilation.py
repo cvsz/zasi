@@ -1,4 +1,4 @@
-"""
+r"""
 Self-Compilation & AST-Isolated Code Generator Pipeline
 Enforces strict AST safety audits (banning eval/exec/os/subprocess mutations)
 and compiles in an isolated execution namespace.

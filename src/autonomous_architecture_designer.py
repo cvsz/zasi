@@ -1,4 +1,4 @@
-"""
+r"""
 Autonomous Architecture & Urban Planner — Generative Design + FEM + BIM
 Subsystem #93: Generates structurally sound, energy-efficient buildings and
 urban plans using multi-objective generative design, FEM structural analysis,

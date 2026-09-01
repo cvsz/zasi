@@ -1,4 +1,4 @@
-"""
+r"""
 Tachyon Hyperluminal Information Relay & Cherenkov Waveguide Director
 Subsystem #106: Simulates tachyonic scalar fields with negative imaginary mass,
 guiding hyperluminal phase-velocity wave-packets through engineered metamaterial

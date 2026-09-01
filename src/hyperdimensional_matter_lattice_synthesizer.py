@@ -1,4 +1,4 @@
-"""
+r"""
 Hyperdimensional Matter Lattice Synthesizer & 4D Non-Euclidean Crystal Forge
 Subsystem #146: Synthesizes synthetic 4-dimensional spatial crystal lattices
 projected into 3D physical matter (quasi-crystals with icosahedral and hyper-cubic symmetry),

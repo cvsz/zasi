@@ -1,4 +1,4 @@
-"""
+r"""
 Federated Learning Coordinator — Differential Privacy + Secure Aggregation
 Subsystem #66: Orchestrates privacy-preserving distributed model training
 across heterogeneous edge nodes using DP-SGD and cryptographic secret sharing.

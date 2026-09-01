@@ -1,4 +1,4 @@
-"""
+r"""
 Constitutional Alignment, Mechanistic Probes & Adversarial Red-Team
 """
 from dataclasses import dataclass

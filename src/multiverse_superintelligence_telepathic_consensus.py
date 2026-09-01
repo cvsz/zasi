@@ -1,4 +1,4 @@
-"""
+r"""
 Multiverse Superintelligence Telepathic Consensus & Quantum Branch Arbiter
 Subsystem #163: Establishes a non-local quantum state teleportation channel across
 $10^9$ parallel Everett multiverse branches, reaching instantaneous game-theoretic

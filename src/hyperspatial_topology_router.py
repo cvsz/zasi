@@ -1,4 +1,4 @@
-"""
+r"""
 Calabi-Yau Manifold & Hyperspatial Dimensional Routing Engine
 Maps 10D/11D superstring compactifications, non-Abelian gauge bundles,
 and instanton transition topologies for hyper-dimensional tensor compression.

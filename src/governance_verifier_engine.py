@@ -1,4 +1,4 @@
-"""
+r"""
 AI 2040 Plan A Automated Compliance & Compute Governance Verifier
 Subsystem #61: Implements automated hardware attestation, global compute audit logging,
 verifiable FLOP monitoring, and dual-use risk containment metrics as outlined in Plan A.

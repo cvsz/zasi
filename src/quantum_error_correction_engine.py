@@ -1,4 +1,4 @@
-"""
+r"""
 Quantum Error Correction Engine — Surface Code Logical Qubits + Fault-Tolerant QC
 Subsystem #85: Implements distance-7 surface code error correction, minimum-weight
 perfect matching (MWPM) decoding, magic state distillation, transversal gates, and

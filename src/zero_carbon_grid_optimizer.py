@@ -1,4 +1,4 @@
-"""
+r"""
 Zero-Carbon Smart Grid Optimizer — 100% Renewable Dispatch & Storage
 Subsystem #94: Optimizes electricity grids with 100% renewables (solar/wind/
 hydro/geothermal), forecasts demand with 99.4% accuracy, dispatches battery

@@ -1,4 +1,4 @@
-"""
+r"""
 Transfinite Ordinal & Large Cardinal Formal Theorem Solver
 Subsystem #119: Proves consistency strengths, determinacy axioms, and inner model
 theories across ZFC, Woodin cardinals, Supercompact cardinals, and transfinite ordinal

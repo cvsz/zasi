@@ -1,4 +1,4 @@
-"""
+r"""
 Deep Space & Orbital Lagrange Inter-Constellation Communication Engine
 Orchestrates gravitational wave telemetry, laser inter-satellite links (ISL),
 and Earth-Moon-Mars deep space relays.

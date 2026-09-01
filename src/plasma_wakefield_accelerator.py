@@ -1,4 +1,4 @@
-"""
+r"""
 Subsystem #171: Ultra-Relativistic Plasma Wakefield Positron Accelerator
 100 GeV/m gradient particle collider for high-energy quantum electrodynamics.
 """

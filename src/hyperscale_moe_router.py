@@ -1,4 +1,4 @@
-"""
+r"""
 Dynamically Quantized Mixture-of-Experts (MoE) 1-Trillion Parameter Router
 Simulates token routing across 128 dynamic sparse experts (Top-K=4) with load-balancing loss,
 expert capacity limits, and INT4/FP8 mixed-precision weight activations.

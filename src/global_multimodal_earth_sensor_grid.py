@@ -1,4 +1,4 @@
-"""
+r"""
 Global Multimodal Earth Sensor Grid & Planetary Neuro-Telemetry Mesh
 Subsystem #137: Ingests 50 Billion multimodal environmental IoT, seismic, atmospheric,
 and oceanographic sensors worldwide, performing distributed sub-millisecond edge fusion

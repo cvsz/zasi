@@ -1,4 +1,4 @@
-"""
+r"""
 Neutrino Deep Core Tomographer & Stellar Planetary Imaging Array
 Subsystem #123: Detects high-flux solar, geoneutrino, and ultra-high-energy cosmic
 neutrino oscillations across ice-Cherenkov arrays, rendering sub-kilometer real-time

@@ -1,4 +1,4 @@
-"""
+r"""
 Stellar Engineering & Hydrodynamic Star Lifting Engine
 Subsystem #110: Simulates magnetic confinement star-lifting, helioseismic resonance
 mass ejection, and main-sequence stellar lifespan extension to extract raw fusion

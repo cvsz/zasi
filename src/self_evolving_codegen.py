@@ -1,4 +1,4 @@
-"""
+r"""
 Polyglot Self-Evolving Code Synthesizer (Rust, C++, Triton, CUDA, Mojo)
 Autonomous syntax synthesis engine generating zero-cost memory-safe kernels,
 SIMD vectorization loops, and native foreign function interface (FFI) bindings.

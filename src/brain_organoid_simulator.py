@@ -1,4 +1,4 @@
-"""
+r"""
 Brain Organoid In-Silico Simulator — 100M Neuron Connectome + Neuroplasticity
 Subsystem #83: High-fidelity in-silico brain organoid simulation with 100M
 multi-compartmental neurons, biophysical synapse dynamics, Hebbian+STDP learning,

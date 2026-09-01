@@ -1,4 +1,4 @@
-"""
+r"""
 Real-Time Nanopore / Next-Gen DNA Sequencing & Genomic Basecaller
 Subsystem #134: Processes raw electrical ionic current squiggles from Oxford
 Nanopore / PacBio HiFi sequencers, basecalling genomic reads in real-time,

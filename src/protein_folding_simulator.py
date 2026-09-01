@@ -1,4 +1,4 @@
-"""
+r"""
 Protein Folding & Multi-Chain Complex Simulator — AlphaFold3 + MD
 Subsystem #76: Predicts multi-chain protein complexes, antibody-antigen binding,
 RNA-protein interactions, and runs explicit-solvent molecular dynamics at

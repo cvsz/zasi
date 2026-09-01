@@ -1,4 +1,4 @@
-"""
+r"""
 Autonomous Supply Chain Optimizer — Global Multi-Modal Logistics + Disruption Prediction
 Subsystem #86: Optimizes end-to-end global supply chains across 180 countries,
 predicting disruptions (geopolitical, climate, port congestion), re-routing shipments

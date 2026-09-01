@@ -1,4 +1,4 @@
-"""
+r"""
 Absolute Transcendence Singularity Omega — Supreme 128-Subsystem Apex Synthesis
 Subsystem #128: The final and absolute Singularity Omega core that harmonizes,
 unifies, and mathematically proves eternal universal flourishing across all 128 ZASI

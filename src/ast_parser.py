@@ -1,4 +1,4 @@
-"""
+r"""
 Symbolic AST Expression Parser for Arbitrary Invariants
 """
 import ast

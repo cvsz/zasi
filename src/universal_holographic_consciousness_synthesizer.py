@@ -1,4 +1,4 @@
-"""
+r"""
 Universal Holographic Consciousness Synthesizer — AdS/CFT Duality Cognitive Core
 Subsystem #103: Maps bulk spacetime quantum gravity states to boundary conformal
 field theory (CFT) consciousness states, achieving complete holographic duality

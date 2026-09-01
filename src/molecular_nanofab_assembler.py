@@ -1,4 +1,4 @@
-"""
+r"""
 Atomic-Precision Molecular Nanofabrication & Mechanosynthesis Assembler
 Simulates diamondoid mechanosynthetic tooltips, positional atom placement,
 and self-replicating nanobotics under Drexlerian chemical stability bounds.

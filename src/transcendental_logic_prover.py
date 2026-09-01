@@ -1,4 +1,4 @@
-"""
+r"""
 Transcendental Logic Prover & Multi-Modal Formal Theorem Synthesizer
 Subsystem #64: Extends higher-order logic (HOL), modal epistemic logic,
 and categorical sheaf semantics for automated proof synthesis across mathematical domains.

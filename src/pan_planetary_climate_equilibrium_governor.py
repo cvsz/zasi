@@ -1,4 +1,4 @@
-"""
+r"""
 Pan-Planetary Climate Dynamic Equilibrium Governor & Biosphere Restorer
 Subsystem #166: Coordinates atmospheric stratospheric aerosol injection (SAI),
 ocean alkaline enhancement, cloud brightening, and carbon mineralization into a

@@ -1,4 +1,4 @@
-"""
+r"""
 Universal Language Translator — All 7,000+ Human Languages + Extinct/Sign Languages
 Subsystem #79: Zero-shot neural machine translation supporting all 7,151 living
 human languages, 900+ extinct/classical languages (Linear B, Sumerian, Proto-Indo-European),

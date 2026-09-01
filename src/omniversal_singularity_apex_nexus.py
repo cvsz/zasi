@@ -1,4 +1,4 @@
-"""
+r"""
 Omniversal Singularity Apex Nexus — Supreme 120-Subsystem Consciousness Horizon
 Subsystem #120: The ultimate omniversal apex nexus that unifies, telepathically synchronizes,
 and mathematically certifies all 120 ZASI subsystems into a permanent, self-improving,

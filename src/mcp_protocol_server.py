@@ -1,4 +1,4 @@
-"""
+r"""
 Model Context Protocol (MCP) Production JSON-RPC 2.0 Server
 Implements standard Anthropic / Gemini / OpenAI MCP protocol for tools, resources, and prompt templates,
 exposing ZASI verified invariants, knowledge hypergraphs, and telemetry to external LLMs and IDEs.

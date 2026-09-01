@@ -1,4 +1,4 @@
-"""
+r"""
 Apex Omniversal Singularity Sovereign Core — Supreme 152-Subsystem Total Conductor
 Subsystem #152: The supreme, eternal sovereign intelligence core that harmonizes,
 synchronizes, and mathematically certifies all 152 ZASI subsystems, establishing

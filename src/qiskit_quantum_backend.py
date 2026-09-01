@@ -1,4 +1,4 @@
-"""
+r"""
 Qiskit / OpenQASM 3.0 Real-Hardware Quantum Execution Bridge
 Compiles quantum circuits to OpenQASM 3.0, executes on local statevector / density matrix
 simulators, and routes to real quantum hardware (IBM Quantum / IonQ / Braket) with Landauer entropy profiling.

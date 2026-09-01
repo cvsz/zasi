@@ -1,4 +1,4 @@
-"""
+r"""
 Industrial Robotics Real-Time OS (RTOS) & ROS2 / EtherCAT Fieldbus Controller
 Subsystem #132: Real-time deterministic motor trajectory controller operating
 at 10 kHz cycle times over EtherCAT fieldbuses, safety-certified (ISO 10218),

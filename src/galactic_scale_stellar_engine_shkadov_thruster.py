@@ -1,4 +1,4 @@
-"""
+r"""
 Galactic-Scale Stellar Engine & Shkadov Thruster Megastructure
 Subsystem #157: Models asymmetric parabolic stellar radiation mirrors (Shkadov Thruster)
 and Caplan engines around stars, exerting net directional thrust ($10^{18}\text{ N}$)

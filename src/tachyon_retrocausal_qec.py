@@ -1,4 +1,4 @@
-"""
+r"""
 Subsystem #169: Tachyon-Mediated Retrocausal Error Mitigation Matrix
 Pre-decoherence quantum error cancellation and acausal parity stabilization.
 """
