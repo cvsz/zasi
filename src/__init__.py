@@ -69,8 +69,10 @@ from .hyperscale_moe_router import HyperscaleMoERouter, MoERoutingTelemetry
 from .autonomous_cyber_redteam import AutonomousCyberRedTeam, CyberDefenseReport
 from .space_solar_swarm_director import SpaceSolarSwarmDirector, SolarBeamTelemetry
 from .multiverse_telepathic_nexus import MultiverseTelepathicNexus, MultiverseNexusState
-# v15.0.0 Omniversal Singularity Core (#60)
 from .omniversal_singularity_core import OmniversalSingularityCore, SingularitySynthesisState
+# v16.0.0 Plan A Compliance & Provable Alignment Subsystems (#61, #62)
+from .governance_verifier_engine import GovernanceVerifierEngine, PlanAComplianceReport
+from .provable_alignment_auditor import ProvableAlignmentAuditor, ProvableAlignmentCertificate
 
 __all__ = [
     "Proposal",
@@ -199,5 +201,9 @@ __all__ = [
     "MultiverseTelepathicNexus",
     "MultiverseNexusState",
     "OmniversalSingularityCore",
-    "SingularitySynthesisState"
+    "SingularitySynthesisState",
+    "GovernanceVerifierEngine",
+    "PlanAComplianceReport",
+    "ProvableAlignmentAuditor",
+    "ProvableAlignmentCertificate"
 ]

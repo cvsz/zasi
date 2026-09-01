@@ -499,5 +499,23 @@ class TestZASISubsystems(unittest.TestCase):
         self.assertEqual(synth.singularity_horizon_status, "OMNIVERSAL_HORIZON_LOCKED_AND_ABSOLUTE")
 
 
+    # ----- Plan A Compliance & Provable Alignment (Subsystems #61, #62) -----
+
+    def test_governance_verifier_engine(self):
+        from src import GovernanceVerifierEngine
+        gov = GovernanceVerifierEngine()
+        rep = gov.audit_global_compute_run(total_accelerators=512, aggregate_mw=120.0)
+        self.assertTrue(rep.global_compute_accounting_active)
+        self.assertTrue(rep.transparency_audit_passed)
+        self.assertEqual(rep.macd_treaty_compliance_status, "FULLY_COMPLIANT_WITH_PLAN_A_2040")
+
+    def test_provable_alignment_auditor(self):
+        from src import ProvableAlignmentAuditor
+        auditor = ProvableAlignmentAuditor()
+        cert = auditor.audit_neural_activations([0.12, 0.45, 0.89, 0.03])
+        self.assertTrue(cert.is_mechanistically_aligned)
+        self.assertEqual(cert.audit_verdict, "PROVABLY_ALIGNED_CERTIFIED")
+
+
 if __name__ == "__main__":
     unittest.main()
