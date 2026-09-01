@@ -165,9 +165,20 @@ async function sendJarvisCommand() {
 
 function appendChatMessage(speaker, text, className) {
     const chatBox = document.getElementById('jarvis-chat-messages');
+    if (!chatBox) return;
     const msgDiv = document.createElement('div');
     msgDiv.className = `chat-msg ${className}`;
-    msgDiv.innerHTML = `<span class="speaker">${speaker}</span><span class="text">${text}</span>`;
+    
+    const speakerSpan = document.createElement('span');
+    speakerSpan.className = 'speaker';
+    speakerSpan.textContent = speaker;
+    
+    const textSpan = document.createElement('span');
+    textSpan.className = 'text';
+    textSpan.textContent = text;
+    
+    msgDiv.appendChild(speakerSpan);
+    msgDiv.appendChild(textSpan);
     chatBox.appendChild(msgDiv);
     chatBox.scrollTop = chatBox.scrollHeight;
 }
