@@ -50,6 +50,10 @@ from .fusion_tokamak_optimizer import FusionTokamakOptimizer, TokamakPlasmaState
 from .planetary_climate_actuator import PlanetaryClimateActuator, ClimateActuationPlan
 from .optical_bci_neural_bus import OpticalBCINeuralBus, NeuralSignalFrame
 from .synthetic_galaxy_sim import SyntheticGalaxySimulator, CosmicSimulationSlice
+from .quantum_gravity_spacetime import QuantumGravitySpacetimeEngine, SpacetimeManifoldState
+from .molecular_nanofab_assembler import MolecularNanofabAssembler, NanofabricationBatch
+from .hyperspatial_topology_router import HyperspatialTopologyRouter, HyperspatialRoutingPacket
+from .universal_telemetry_mesh import UniversalTelemetryMesh, UniversalTelemetrySnapshot
 
 __all__ = [
     "Proposal",
@@ -140,5 +144,13 @@ __all__ = [
     "OpticalBCINeuralBus",
     "NeuralSignalFrame",
     "SyntheticGalaxySimulator",
-    "CosmicSimulationSlice"
+    "CosmicSimulationSlice",
+    "QuantumGravitySpacetimeEngine",
+    "SpacetimeManifoldState",
+    "MolecularNanofabAssembler",
+    "NanofabricationBatch",
+    "HyperspatialTopologyRouter",
+    "HyperspatialRoutingPacket",
+    "UniversalTelemetryMesh",
+    "UniversalTelemetrySnapshot"
 ]

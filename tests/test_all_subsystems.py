@@ -315,5 +315,36 @@ class TestZASISubsystems(unittest.TestCase):
         self.assertGreater(slice_res.particle_count, 1_000_000)
 
 
+    # ----- Singularity Omniverse Frontier: 4 new modules (v10.0.0) -----
+
+    def test_quantum_gravity_spacetime(self):
+        from src import QuantumGravitySpacetimeEngine
+        engine = QuantumGravitySpacetimeEngine()
+        state = engine.evolve_spacetime_geometry(cosmological_constant_lambda=1.1e-52)
+        self.assertTrue(engine.verify_holographic_bound(state))
+        self.assertGreater(state.simplex_count, 10_000_000)
+
+    def test_molecular_nanofab_assembler(self):
+        from src import MolecularNanofabAssembler
+        assembler = MolecularNanofabAssembler()
+        batch = assembler.synthesize_nanomachine("DIAMONDOID_NANOROBOTIC_ACTUATOR")
+        self.assertTrue(assembler.verify_mechanosynthetic_bounds(batch))
+        self.assertLess(batch.positional_error_picometers, 1.0)
+
+    def test_hyperspatial_topology_router(self):
+        from src import HyperspatialTopologyRouter
+        router = HyperspatialTopologyRouter()
+        packet = router.route_hyperdimensional_tensor(raw_tensor_rank=16)
+        self.assertEqual(packet.euler_characteristic, -200)
+        self.assertGreater(packet.hyperdimensional_compression_ratio, 1000.0)
+
+    def test_universal_telemetry_mesh(self):
+        from src import UniversalTelemetryMesh
+        mesh = UniversalTelemetryMesh()
+        snapshot = mesh.harvest_universal_telemetry(dyson_gw=120.0, arc_gw=178.2)
+        self.assertEqual(snapshot.active_subsystem_count, 44)
+        self.assertEqual(snapshot.system_status, "COSMIC_SINGULARITY_REACHED")
+
+
 if __name__ == "__main__":
     unittest.main()
