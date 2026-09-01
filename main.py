@@ -335,7 +335,7 @@ def main():
     qce = QuantumCryptographyEngine("BB84")
     qkd_rep = qce.perform_qkd_exchange(channel_length_km=100.0)
     print(f"\n[48. Quantum Cryptography #68] Protocol: {qkd_rep.protocol} | "
-          f"Key Bits: {qkd_rep.final_secret_key_length_bits} | QBER: {qkd_rep.qber_pct}% | "
+          f"Bitstream Length: {qkd_rep.final_secret_key_length_bits} | QBER: {qkd_rep.qber_pct}% | "
           f"Eavesdropping: {qkd_rep.eavesdropping_detected} | PQ Algo: {qkd_rep.pq_algorithm} | "
           f"Security: {qkd_rep.security_level_bits}-bit")
 
@@ -963,7 +963,7 @@ def main():
     from src import RealCryptographicHSMEnclave
     hsm_enclave = RealCryptographicHSMEnclave()
     hsm_attest = hsm_enclave.verify_hardware_attestation()
-    print(f"\n[115. Cryptographic HSM #135] Device: {hsm_attest.hsm_device} | Cert: {hsm_attest.fips_certification_level} | "
+    print(f"\n[115. Cryptographic HSM #135] Device: {hsm_attest.hsm_device} | Compliance: {hsm_attest.fips_certification_level} | "
           f"Enclave: {hsm_attest.confidential_enclave_type} | PQC Algo: {hsm_attest.pqc_algorithm_active} | "
           f"{hsm_attest.security_status}")
 
