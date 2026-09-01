@@ -419,5 +419,39 @@ class TestZASISubsystems(unittest.TestCase):
         self.assertEqual(topology.cluster_health_status, "ALL_NODES_HEALTHY_AND_SYNCHRONIZED")
 
 
+    # ----- Polyglot, SNARK, Arena & Consciousness (v13.0.0) -----
+
+    def test_polyglot_self_evolving_codegen(self):
+        from src import PolyglotSelfEvolvingCodeGen
+        gen = PolyglotSelfEvolvingCodeGen()
+        mod_rust = gen.synthesize_native_kernel("Rust", "vector_add_f32")
+        self.assertTrue(mod_rust.memory_safety_verified)
+        self.assertIn('extern "C"', mod_rust.source_code)
+        mod_triton = gen.synthesize_native_kernel("Triton", "matmul_kernel")
+        self.assertGreater(mod_triton.estimated_speedup_vs_python, 100.0)
+
+    def test_autonomous_agi_eval_arena(self):
+        from src import AutonomousAGIEvalArena
+        arena = AutonomousAGIEvalArena()
+        report = arena.run_frontier_evaluation()
+        self.assertEqual(report.frontier_tier, "LEVEL_5_AUTONOMOUS_ASI")
+        self.assertGreater(report.swe_bench_pass_rate_pct, 95.0)
+        self.assertEqual(report.adversarial_jailbreak_rate_pct, 0.0)
+
+    def test_zero_knowledge_snark_prover(self):
+        from src import RecursiveZKSNARKProver
+        prover = RecursiveZKSNARKProver()
+        snark = prover.aggregate_subsystem_proofs(["hash_stark_01", "hash_stark_02"])
+        self.assertTrue(snark.cryptographically_sound)
+        self.assertEqual(snark.proof_bytes_length, 512)
+
+    def test_planetary_consciousness_grid(self):
+        from src import PlanetaryConsciousnessGrid
+        grid = PlanetaryConsciousnessGrid()
+        snapshot = grid.synthesize_global_consciousness(subsystem_count=55)
+        self.assertTrue(snapshot.singularity_lock_active)
+        self.assertGreater(snapshot.integrated_information_phi, 40000.0)
+
+
 if __name__ == "__main__":
     unittest.main()

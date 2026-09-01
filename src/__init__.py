@@ -57,11 +57,15 @@ from .universal_telemetry_mesh import UniversalTelemetryMesh, UniversalTelemetry
 from .qiskit_quantum_backend import QiskitQuantumBridge, QuantumCircuitExecutionResult
 from .nvidia_gpu_telemetry import NVIDIAGPUTelemetrySupervisor, GPUDeviceMetrics
 from .mcp_protocol_server import MCPProtocolServer, MCPToolDefinition
-# v12.0.0 Transports, Annealers, and Pod Orchestration
 from .mcp_stdio_transport import MCPStdioTransport
 from .mcp_sse_transport import MCPSSETransport
 from .qiskit_quantum_annealer import QuantumAnnealingEngine, AnnealingTrajectoryResult
 from .hyperscale_cluster_orchestrator import HyperscaleClusterOrchestrator, ClusterPodTopology
+# v13.0.0 Polyglot, SNARK, Arena, and Consciousness Grid
+from .self_evolving_codegen import PolyglotSelfEvolvingCodeGen, GeneratedPolyglotModule
+from .autonomous_agi_eval_arena import AutonomousAGIEvalArena, ArenaEvaluationReport
+from .zero_knowledge_snark_prover import RecursiveZKSNARKProver, RecursiveSNARKProof
+from .planetary_consciousness_grid import PlanetaryConsciousnessGrid, PlanetaryConsciousnessSnapshot
 
 __all__ = [
     "Proposal",
@@ -172,5 +176,13 @@ __all__ = [
     "QuantumAnnealingEngine",
     "AnnealingTrajectoryResult",
     "HyperscaleClusterOrchestrator",
-    "ClusterPodTopology"
+    "ClusterPodTopology",
+    "PolyglotSelfEvolvingCodeGen",
+    "GeneratedPolyglotModule",
+    "AutonomousAGIEvalArena",
+    "ArenaEvaluationReport",
+    "RecursiveZKSNARKProver",
+    "RecursiveSNARKProof",
+    "PlanetaryConsciousnessGrid",
+    "PlanetaryConsciousnessSnapshot"
 ]
