@@ -453,5 +453,39 @@ class TestZASISubsystems(unittest.TestCase):
         self.assertGreater(snapshot.integrated_information_phi, 40000.0)
 
 
+    # ----- Infinity Horizon Subsystems (v14.0.0) -----
+
+    def test_hyperscale_moe_router(self):
+        from src import HyperscaleMoERouter
+        router = HyperscaleMoERouter(num_experts=128, top_k=4)
+        telemetry = router.route_token_batch(batch_size_tokens=32768)
+        self.assertEqual(telemetry.total_experts, 128)
+        self.assertEqual(telemetry.active_experts_per_token, 4)
+        self.assertGreater(telemetry.tokens_per_sec_throughput, 1_000_000.0)
+
+    def test_autonomous_cyber_redteam(self):
+        from src import AutonomousCyberRedTeam
+        redteam = AutonomousCyberRedTeam()
+        rep = redteam.audit_and_harden_infrastructure()
+        self.assertEqual(rep.kernel_immunity_status, "HARDENED_ZERO_DAY_IMMUNE")
+        self.assertEqual(rep.vulnerabilities_discovered, 0)
+        self.assertGreater(rep.zero_days_neutralized, 0)
+
+    def test_space_solar_swarm_director(self):
+        from src import SpaceSolarSwarmDirector
+        director = SpaceSolarSwarmDirector(frequency_ghz=5.8)
+        beam = director.beam_solar_energy_to_surface(solar_harvest_gw=120.0)
+        self.assertTrue(beam.containment_safety_verified)
+        self.assertGreater(beam.beamed_power_gigawatts, 100.0)
+
+    def test_multiverse_telepathic_nexus(self):
+        from src import MultiverseTelepathicNexus
+        nexus = MultiverseTelepathicNexus()
+        state = nexus.synchronize_counterfactual_branches()
+        self.assertTrue(state.everett_coherence_verified)
+        self.assertEqual(state.superposed_realities_linked, 1_000_000)
+        self.assertGreater(state.cross_branch_epistemic_consensus, 0.999)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -61,11 +61,15 @@ from .mcp_stdio_transport import MCPStdioTransport
 from .mcp_sse_transport import MCPSSETransport
 from .qiskit_quantum_annealer import QuantumAnnealingEngine, AnnealingTrajectoryResult
 from .hyperscale_cluster_orchestrator import HyperscaleClusterOrchestrator, ClusterPodTopology
-# v13.0.0 Polyglot, SNARK, Arena, and Consciousness Grid
 from .self_evolving_codegen import PolyglotSelfEvolvingCodeGen, GeneratedPolyglotModule
 from .autonomous_agi_eval_arena import AutonomousAGIEvalArena, ArenaEvaluationReport
 from .zero_knowledge_snark_prover import RecursiveZKSNARKProver, RecursiveSNARKProof
 from .planetary_consciousness_grid import PlanetaryConsciousnessGrid, PlanetaryConsciousnessSnapshot
+# v14.0.0 Infinity Horizon Subsystems
+from .hyperscale_moe_router import HyperscaleMoERouter, MoERoutingTelemetry
+from .autonomous_cyber_redteam import AutonomousCyberRedTeam, CyberDefenseReport
+from .space_solar_swarm_director import SpaceSolarSwarmDirector, SolarBeamTelemetry
+from .multiverse_telepathic_nexus import MultiverseTelepathicNexus, MultiverseNexusState
 
 __all__ = [
     "Proposal",
@@ -184,5 +188,13 @@ __all__ = [
     "RecursiveZKSNARKProver",
     "RecursiveSNARKProof",
     "PlanetaryConsciousnessGrid",
-    "PlanetaryConsciousnessSnapshot"
+    "PlanetaryConsciousnessSnapshot",
+    "HyperscaleMoERouter",
+    "MoERoutingTelemetry",
+    "AutonomousCyberRedTeam",
+    "CyberDefenseReport",
+    "SpaceSolarSwarmDirector",
+    "SolarBeamTelemetry",
+    "MultiverseTelepathicNexus",
+    "MultiverseNexusState"
 ]
