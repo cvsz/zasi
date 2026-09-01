@@ -334,10 +334,11 @@ def main():
     from src import QuantumCryptographyEngine
     qce = QuantumCryptographyEngine("BB84")
     qkd_rep = qce.perform_qkd_exchange(channel_length_km=100.0)
+    # Operational status only — no cryptographic material logged
+    qkd_status = "SECURE" if not qkd_rep.eavesdropping_detected else "EAVESDROPPING_DETECTED"
     print(f"\n[48. Quantum Cryptography #68] Protocol: {qkd_rep.protocol} | "
-          f"Bitstream Length: {qkd_rep.final_secret_key_length_bits} | QBER: {qkd_rep.qber_pct}% | "
-          f"Eavesdropping: {qkd_rep.eavesdropping_detected} | PQ Algo: {qkd_rep.pq_algorithm} | "
-          f"Security: {qkd_rep.security_level_bits}-bit")
+          f"QBER: {qkd_rep.qber_pct}% | PQ Algo: {qkd_rep.pq_algorithm} | "
+          f"Status: {qkd_status}")
 
     # 49. Planetary Defense Grid — NEO Tracking & Deflection Planning
     from src import PlanetaryDefenseGrid
@@ -963,8 +964,9 @@ def main():
     from src import RealCryptographicHSMEnclave
     hsm_enclave = RealCryptographicHSMEnclave()
     hsm_attest = hsm_enclave.verify_hardware_attestation()
-    print(f"\n[115. Cryptographic HSM #135] Device: {hsm_attest.hsm_device} | Compliance: {hsm_attest.fips_certification_level} | "
-          f"Enclave: {hsm_attest.confidential_enclave_type} | PQC Algo: {hsm_attest.pqc_algorithm_active} | "
+    # Operational status only — no hardware attestation measurements logged
+    print(f"\n[115. Cryptographic HSM #135] Device: {hsm_attest.hsm_device} | "
+          f"Compliance: {hsm_attest.fips_certification_level} | "
           f"{hsm_attest.security_status}")
 
     # 116. Omniversal Real-World Actuation Director (#136)
