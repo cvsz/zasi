@@ -108,6 +108,7 @@ make test-all
 ## 📜 Documentation Reference
 - [Full Subsystems Reference (176 Subsystems)](docs/SUBSYSTEMS_REFERENCE.md)
 - [System Architecture](docs/ARCHITECTURE.md)
+- [RACER AI Governance Architecture](docs/RACER_Governance_Architecture.md)
 - [Deployment & Operations Guide](docs/DEPLOYMENT_GUIDE.md)
 - [Alignment, Safety & SMT Guarantees](docs/ALIGNMENT_AND_SAFETY.md)
 - [Changelog](CHANGELOG.md)
