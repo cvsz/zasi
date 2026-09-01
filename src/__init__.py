@@ -70,9 +70,11 @@ from .autonomous_cyber_redteam import AutonomousCyberRedTeam, CyberDefenseReport
 from .space_solar_swarm_director import SpaceSolarSwarmDirector, SolarBeamTelemetry
 from .multiverse_telepathic_nexus import MultiverseTelepathicNexus, MultiverseNexusState
 from .omniversal_singularity_core import OmniversalSingularityCore, SingularitySynthesisState
-# v16.0.0 Plan A Compliance & Provable Alignment Subsystems (#61, #62)
 from .governance_verifier_engine import GovernanceVerifierEngine, PlanAComplianceReport
 from .provable_alignment_auditor import ProvableAlignmentAuditor, ProvableAlignmentCertificate
+# v17.0.0 Autonomous Daemon Runtime (#63) & Transcendental Sheaf Logic (#64)
+from .self_evolving_asi_runtime import SelfEvolvingASIRuntime, RuntimeTelemetryPulse
+from .transcendental_logic_prover import TranscendentalLogicProver, FormalSheafProof
 
 __all__ = [
     "Proposal",
@@ -205,5 +207,9 @@ __all__ = [
     "GovernanceVerifierEngine",
     "PlanAComplianceReport",
     "ProvableAlignmentAuditor",
-    "ProvableAlignmentCertificate"
+    "ProvableAlignmentCertificate",
+    "SelfEvolvingASIRuntime",
+    "RuntimeTelemetryPulse",
+    "TranscendentalLogicProver",
+    "FormalSheafProof"
 ]

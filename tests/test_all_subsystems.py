@@ -517,5 +517,23 @@ class TestZASISubsystems(unittest.TestCase):
         self.assertEqual(cert.audit_verdict, "PROVABLY_ALIGNED_CERTIFIED")
 
 
+    # ----- Autonomous Daemon Runtime (#63) & Sheaf Logic (#64) (v17.0.0) -----
+
+    def test_self_evolving_asi_runtime(self):
+        from src import SelfEvolvingASIRuntime
+        runtime = SelfEvolvingASIRuntime()
+        pulse = runtime.execute_autonomous_pulse(subsystem_count=64)
+        self.assertEqual(pulse.active_subsystems, 64)
+        self.assertTrue(pulse.global_invariance_certified)
+        self.assertEqual(pulse.pulse_status, "CONTINUOUS_AUTONOMOUS_OPERATION_NOMINAL")
+
+    def test_transcendental_logic_prover(self):
+        from src import TranscendentalLogicProver
+        prover = TranscendentalLogicProver()
+        proof = prover.synthesize_modal_theorem_proof("FORALL x: SheafCoherent(x)")
+        self.assertTrue(proof.proof_tree_verified)
+        self.assertEqual(proof.soundness_verdict, "SOUND_AND_MATHEMATICALLY_IRREFUTABLE")
+
+
 if __name__ == "__main__":
     unittest.main()
