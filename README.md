@@ -1,0 +1,60 @@
+# ZASI: Apex J.A.R.V.I.S. / F.R.I.D.A.Y. / E.D.I.T.H. Superintelligence Framework
+
+**ZASI** is a total-horizon, multimodal, quantum-thermodynamic, cryptographically verified Artificial Superintelligence (ASI) framework equipped with the **J.A.R.V.I.S. / F.R.I.D.A.Y. / E.D.I.T.H.** tactical persona swarm, holographic WebXR Spatial HUD, Arc Reactor energy management, neural audio wake-word synthesis, autonomous Git self-evolution, Linux kernel telemetry probes, and robotics G-code drivers.
+
+---
+
+## 32 Unified Subsystems Matrix
+
+| Category | Subsystem | Module | Description |
+| :--- | :--- | :--- | :--- |
+| **Tactical Persona Swarm** | J.A.R.V.I.S. / F.R.I.D.A.Y. / E.D.I.T.H. | `src/avengers_persona_swarm.py` | Multi-persona strategic, compute, and security swarm |
+| **Voice & Multimodal** | J.A.R.V.I.S. Audio/Vision Deck | `src/javis_voice_multimodal.py` | Neural audio waveform synthesis and visual HUD tracking |
+| **Host Telemetry** | Live Linux Kernel Supervisor | `src/os_telemetry_supervisor.py` | Real-time `/proc` metrics (CPU load, RAM, PIDs) |
+| **Hardware Actuation** | Robotics & Smart Facility IoT | `src/robotics_iot.py` | Formally verified G-code generator & facility sensor monitor |
+| **Cognitive Core** | Neural Speculator & Reasoner | `src/cognitive_core.py` | High-dimensional hypothesis proposing and reasoning |
+| **Formal Logic** | Symbolic SMT & AST Engine | `src/verifier.py`, `src/ast_parser.py` | Strict mathematical invariant preservation |
+| **Zero-Knowledge** | ZK-STARK Proof Engine | `src/zk_stark.py` | Transparent zero-knowledge execution trace proofs |
+| **Inter-Agent Telepathy**| Model Epistemic Protocol (MEP) | `src/mep_telepathy.py` | Sub-token high-bandwidth latent thought transfer |
+| **Planetary Compute** | Dyson Swarm Orchestrator | `src/dyson_orchestrator.py` | Multi-planetary solar ExaFLOP inference scheduling |
+| **Energy Optimization** | Arc Reactor Energy Core | `src/arc_reactor_energy.py` | Micro-fusion plasma containment & thermodynamic load balancer |
+| **Neural TTS & Audio** | Neural Audio Wake-Word Engine | `src/neural_audio_tts.py` | Real-time "Hey Javis" wake-word detection & phoneme synthesis |
+| **Spatial Computing** | WebXR Spatial Reality HUD | `src/webxr_spatial_hud.py` | 6-DoF spatial scene graph & pinch/gesture raycasting (Vision Pro / Quest) |
+| **Autonomous CI/CD** | Git Self-Evolution Manager | `src/git_self_evolution.py` | Autonomous semantic versioning, commit generation, & CI/CD validation |
+| **Search & Planning** | MCTS Planner | `src/mcts_planner.py` | Search-over-thoughts across combinatorial paths |
+| **Physics & Rollouts** | Counterfactual World Model | `src/world_model.py` | Multi-step dynamic coupled forecasting |
+| **Causal Induction** | Causal DAG Engine | `src/causal_discovery.py` | Observational causal inference and do-calculus |
+| **Game Theory** | Multi-Agent Game Solver | `src/cooperative_game.py` | Nash Bargaining Solution and Pareto front allocation |
+| **Code Synthesis** | Autonomous Code Synthesizer | `src/code_synthesizer.py` | Compile-time invariant-enforcing code generation |
+| **Bytecode JIT** | Autonomous Self-Compiler | `src/self_compilation.py` | Dynamic isolated AST bytecode compilation |
+| **Hardware JIT** | NAS & Microkernel Synthesizer | `src/nas_optimizer.py` | CUDA/Triton/AVX512 tensor kernel synthesis |
+| **Memory** | Neural-Symbolic Hypergraph | `src/memory_hypergraph.py` | Relational hypergraph knowledge storage |
+| **Persistence** | SQLite CXL Memory Store | `src/persistent_memory.py` | Zero-latency disk persistence layer |
+| **P2P Swarm** | Decentralized Gossip Mesh | `src/p2p_swarm.py` | Multi-node discovery and federated memory sync |
+| **Quantum Physics** | Quantum-Thermodynamic Engine | `src/quantum_thermo.py` | Superposition branch annealing & Landauer loss profiling |
+| **Tool Execution** | Deterministic Actuator | `src/action_actuator.py` | Microsecond-latency API and signal execution |
+| **Isolation** | MicroVM Sandbox | `src/sandbox_vm.py` | Isolated Linux subshell and jail execution |
+| **Governance** | Constitutional Alignment | `src/governance.py` | Mechanistic probe & activation drift detection |
+| **Red-Team** | Dialectical Debate Arena | `src/multi_agent_debate.py` | Multi-agent adversarial debate (Proponent/Critic/Arbiter) |
+| **Blockchain Proof**| Cryptographic Ledger | `src/cryptographic_ledger.py` | SHA-256 state transition & formal proof block chain |
+| **Theorem Prover** | Lean 4 Prover Bridge | `src/lean_bridge.py` | Lean 4 formal script generation & verification |
+| **Self-Improvement**| Safe RSI Engine | `src/rsi_engine.py` | Formally bounded self-improvement & zero-downtime hot swap |
+| **Monitoring** | Holographic Web HUD & Voice Audio | `src/api_server.py` | Three.js 3D tactical HUD with Web Speech Audio |
+
+---
+
+## Quickstart & Verification
+
+```bash
+# Automated Setup & Self-Test
+./install.sh
+
+# Run Complete Apex J.A.R.V.I.S. Framework (v7.0.0)
+python3 main.py
+
+# Run Full 29-Subsystem Unit & Integration Test Suite
+python3 -m unittest discover -s tests
+
+# Interactive Voice/Terminal Shell
+zasi -i
+```

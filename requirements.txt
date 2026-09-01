@@ -1,0 +1,4 @@
+# Optional dependencies for formal SMT solver acceleration
+# ZASI runs 100% standalone out-of-the-box with built-in pure AST verifier.
+# Install z3-solver if native C++ theorem proving is desired:
+# z3-solver>=4.12.0

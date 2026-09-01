@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zasi"
+version = "5.0.0"
+description = "Omniscient Sovereign Artificial Superintelligence (ASI) Architecture"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [
+    { name = "ZASI Core Team" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence"
+]
+dependencies = []
+
+[project.optional-dependencies]
+formal = [
+    "z3-solver>=4.12.0"
+]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0"
+]
+
+[project.scripts]
+zasi = "src.cli:main"
+zasi-core = "main:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]

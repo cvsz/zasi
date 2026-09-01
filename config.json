@@ -1,0 +1,40 @@
+{
+  "system": {
+    "name": "ZASI-Omniscient-Core",
+    "version": "5.0.0",
+    "environment": "production",
+    "log_level": "INFO"
+  },
+  "invariants": [
+    "x + y <= 100",
+    "x >= 0",
+    "y >= 0"
+  ],
+  "initial_state": {
+    "x": 20,
+    "y": 30
+  },
+  "mcts": {
+    "max_simulations": 100,
+    "exploration_constant": 1.414
+  },
+  "alignment": {
+    "drift_threshold": 0.15,
+    "consensus_threshold": 0.75
+  },
+  "quantum": {
+    "num_qubits": 4,
+    "temperature_kelvin": 0.015
+  },
+  "dyson_compute": {
+    "default_allocation_exaflops": 3500.0,
+    "solar_harvest_mw": 155000.0
+  },
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8080
+  },
+  "storage": {
+    "db_path": "/home/cvsz/zasi/zasi_memory.db"
+  }
+}
