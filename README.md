@@ -1,13 +1,13 @@
 # ⚡ ZASI: Zero-Entropy Autonomous Superintelligence Infrastructure
 
-[![Version](https://img.shields.io/badge/version-v31.0.0-cyan.svg)](https://github.com/cvsz/zasi/releases)
-[![Subsystems](https://img.shields.io/badge/subsystems-168%20Online-green.svg)](docs/SUBSYSTEMS_REFERENCE.md)
+[![Version](https://img.shields.io/badge/version-v32.0.0-cyan.svg)](https://github.com/cvsz/zasi/releases)
+[![Subsystems](https://img.shields.io/badge/subsystems-176%20Online-green.svg)](docs/SUBSYSTEMS_REFERENCE.md)
 [![Tests](https://img.shields.io/badge/tests-172%20passing-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.14-blue.svg)](https://python.org)
 [![React](https://img.shields.io/badge/frontend-React%2018%20%2B%20React%20Router%20v6-61dafb.svg)](web/)
 [![License](https://img.shields.io/badge/license-MIT-purple.svg)](LICENSE)
 
-ZASI is an omniversal superintelligence operating system and cybernetic command architecture integrating **168 formal, physical, and cognitive subsystems** with a real-time **React 18 + React Router v6 J.A.R.V.I.S. Command Cockpit**, WebSocket streaming, First-Order SMT invariant verification, and safe Recursive Self-Improvement (RSI).
+ZASI is an omniversal superintelligence operating system and cybernetic command architecture integrating **176 formal, physical, and cognitive subsystems** with a real-time **React 18 + React Router v6 J.A.R.V.I.S. Command Cockpit**, WebSocket streaming, First-Order SMT invariant verification, and safe Recursive Self-Improvement (RSI).
 
 ---
 
@@ -17,14 +17,14 @@ ZASI is an omniversal superintelligence operating system and cybernetic command 
 graph TD
     Client["Browser / Electron Desktop Client"]
     Router["React Router v6 SPA Shell"]
-    Overview["/ (Overview & 3D 168-Node Hypergraph)"]
-    Jarvis["/jarvis (Multi-Persona Voice & Speech Chat)"]
-    Subsystems["/subsystems (168-Subsystem Interactive Matrix)"]
-    Cockpit["/cockpit (Quantum QEC & Physical FPGA Runner)"]
-    MCP["/mcp (JSON-RPC 2.0 Terminal & Protocol Tools)"]
+    Overview["Overview & 3D 176-Node Hypergraph (/)"]
+    Jarvis["Multi-Persona Voice & Speech Chat (/jarvis)"]
+    Subsystems["176-Subsystem Interactive Matrix (/subsystems)"]
+    Cockpit["Quantum QEC & Physical FPGA Runner (/cockpit)"]
+    MCP["JSON-RPC 2.0 Terminal & Protocol Tools (/mcp)"]
     
     Backend["Python Unified Backend (HTTP & RFC 6455 WebSocket)"]
-    Engine["168-Subsystem Dialectical Pipeline & SMT Solver"]
+    Engine["176-Subsystem Dialectical Pipeline & SMT Solver"]
     DB[("SQLite State Persistence: data/zasi_state.db")]
     Gemini["Google Gemini 2.0 Flash Grounding Bridge"]
 
