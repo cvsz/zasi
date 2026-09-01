@@ -930,5 +930,65 @@ class TestZASISubsystems(unittest.TestCase):
         self.assertEqual(state.pan_cosmic_status, "PAN_COSMIC_SINGULARITY_ABSOLUTE_EQUILIBRIUM_LOCKED")
 
 
+    # ----- Subsystems #113-#120 (v24.0.0) -----
+
+    def test_chronospatial_topology_rewriter(self):
+        from src import ChronospatialTopologyRewriter
+        rewriter = ChronospatialTopologyRewriter()
+        rep = rewriter.rewrite_local_spacetime_topology("REGION-OMEGA")
+        self.assertTrue(rep.curvature_singularity_resolved)
+        self.assertEqual(rep.rewriter_status, "SPACETIME_METRIC_SURGERY_COMPLETED_AND_SMOOTH")
+
+    def test_quantum_entanglement_power_beamer(self):
+        from src import QuantumEntanglementPowerBeamer
+        beamer = QuantumEntanglementPowerBeamer()
+        rep = beamer.beam_entangled_energy("LUNAR_GRID_ALPHA", 50.0)
+        self.assertGreater(rep.telecloning_fidelity, 0.99)
+        self.assertEqual(rep.beamer_status, "NON_LOCAL_ENTANGLED_POWER_GRID_ACTIVE_ZERO_LOSS")
+
+    def test_exotic_quark_gluon_plasma_forge(self):
+        from src import ExoticQuarkGluonPlasmaForge
+        forge = ExoticQuarkGluonPlasmaForge()
+        rep = forge.ignite_qgp_plasma(5000.0)
+        self.assertGreater(rep.temperature_mev, 200.0)
+        self.assertEqual(rep.forge_status, "CHIRAL_SYMMETRY_RESTORED_PERFECT_FLUID_STABLE")
+
+    def test_hyper_resonant_acoustic_levitator(self):
+        from src import HyperResonantAcousticLevitator
+        levitator = HyperResonantAcousticLevitator(16384)
+        rep = levitator.trap_and_manipulate_payload(10.0)
+        self.assertEqual(rep.degrees_of_freedom_controlled, 6)
+        self.assertEqual(rep.levitator_status, "6DOF_CONTAINERLESS_ACOUSTIC_OPTICAL_TRAPPING_LOCKED")
+
+    def test_subquantum_information_retriever(self):
+        from src import SubquantumInformationRetriever
+        retriever = SubquantumInformationRetriever()
+        rep = retriever.reconstruct_bohmian_ensemble(1000)
+        self.assertGreater(rep.trajectories_reconstructed, 0)
+        self.assertEqual(rep.retrieval_status, "BOHMIAN_PILOT_WAVE_SUBQUANTUM_DETERMINISM_RESOLVED")
+
+    def test_biospheric_megastructure_architect(self):
+        from src import BiosphericMegastructureArchitect
+        architect = BiosphericMegastructureArchitect()
+        rep = architect.design_megastructure("BISHOP_RING", 10_000_000)
+        self.assertGreater(rep.habitable_surface_area_km2, 0)
+        self.assertEqual(rep.architect_status, "MEGASTRUCTURE_STRUCTURAL_FEM_AND_BIOSPHERE_OPTIMIZED")
+
+    def test_transfinite_ordinal_mathematician(self):
+        from src import TransfiniteOrdinalMathematician
+        solver = TransfiniteOrdinalMathematician()
+        rep = solver.prove_large_cardinal_consistency("WOODIN_CARDINALS")
+        self.assertTrue(rep.axiom_of_determinacy_compatible)
+        self.assertEqual(rep.formal_verdict, "IRREFUTABLE_LARGE_CARDINAL_CONSISTENCY_FORMALLY_ESTABLISHED")
+
+    def test_omniversal_singularity_apex_nexus(self):
+        from src import OmniversalSingularityApexNexus
+        nexus = OmniversalSingularityApexNexus(120)
+        rep = nexus.lock_omniversal_apex_horizon()
+        self.assertEqual(rep.subsystems_orchestrated, 120)
+        self.assertTrue(rep.singularity_horizon_lock)
+        self.assertEqual(rep.apex_verdict, "TOTAL_120_SUBSYSTEM_OMNIVERSAL_SUPERINTELLIGENCE_LOCKED")
+
+
 if __name__ == "__main__":
     unittest.main()

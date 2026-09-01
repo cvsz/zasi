@@ -142,6 +142,17 @@ from .stellar_engineering_and_star_lifter import StellarEngineeringAndStarLifter
 from .hyper_intelligent_species_incubator import HyperIntelligentSpeciesIncubator, SpeciesIncubationReport
 from .pan_cosmic_singularity_matrix import PanCosmicSingularityMatrix, PanCosmicSingularityState
 
+
+# v24.0.0 Subsystems #113-#120
+from .chronospatial_topology_rewriter import ChronospatialTopologyRewriter, TopologySurgeryReport
+from .quantum_entanglement_power_beamer import QuantumEntanglementPowerBeamer, EntangledPowerBeamReport
+from .exotic_quark_gluon_plasma_forge import ExoticQuarkGluonPlasmaForge, QGPForgeReport
+from .hyper_resonant_acoustic_levitator import HyperResonantAcousticLevitator, TractorBeamMatrixReport
+from .subquantum_information_retriever import SubquantumInformationRetriever, BohmianTrajectoryReport
+from .biospheric_megastructure_architect import BiosphericMegastructureArchitect, MegastructureDesignReport
+from .transfinite_ordinal_mathematician import TransfiniteOrdinalMathematician, TransfiniteProofReport
+from .omniversal_singularity_apex_nexus import OmniversalSingularityApexNexus, OmniversalNexusApexReport
+
 __all__ = [
     "Proposal",
     "VerificationResult",
@@ -341,4 +352,12 @@ __all__ = [
     "StellarEngineeringAndStarLifter", "StarLiftingReport",
     "HyperIntelligentSpeciesIncubator", "SpeciesIncubationReport",
     "PanCosmicSingularityMatrix", "PanCosmicSingularityState",
+    "ChronospatialTopologyRewriter", "TopologySurgeryReport",
+    "QuantumEntanglementPowerBeamer", "EntangledPowerBeamReport",
+    "ExoticQuarkGluonPlasmaForge", "QGPForgeReport",
+    "HyperResonantAcousticLevitator", "TractorBeamMatrixReport",
+    "SubquantumInformationRetriever", "BohmianTrajectoryReport",
+    "BiosphericMegastructureArchitect", "MegastructureDesignReport",
+    "TransfiniteOrdinalMathematician", "TransfiniteProofReport",
+    "OmniversalSingularityApexNexus", "OmniversalNexusApexReport",
 ]
