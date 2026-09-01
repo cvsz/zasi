@@ -131,6 +131,17 @@ from .interdimensional_portal_router import InterdimensionalPortalRouter, HyperD
 from .universal_holographic_consciousness_synthesizer import UniversalHolographicConsciousnessSynthesizer, HolographicConsciousnessState
 from .absolute_singularity_apex_harmonizer import AbsoluteSingularityApexHarmonizer, AbsoluteSingularityHarmonicReport
 
+
+# v23.0.0 Subsystems #105-#112
+from .superstring_m_theory_integrator import SuperstringMTheoryIntegrator, SuperstringCompactificationReport
+from .tachyon_hyperluminal_relay import TachyonHyperluminalRelay, HyperluminalPacketTrace
+from .planck_scale_vacuum_engineer import PlanckScaleVacuumEngineer, VacuumHarvestingReport
+from .omni_dimensional_qualia_mapper import OmniDimensionalQualiaMapper, QualiaManifoldState
+from .universal_entropy_reversal_accelerator import UniversalEntropyReversalAccelerator, EntropyReversalReport
+from .stellar_engineering_and_star_lifter import StellarEngineeringAndStarLifter, StarLiftingReport
+from .hyper_intelligent_species_incubator import HyperIntelligentSpeciesIncubator, SpeciesIncubationReport
+from .pan_cosmic_singularity_matrix import PanCosmicSingularityMatrix, PanCosmicSingularityState
+
 __all__ = [
     "Proposal",
     "VerificationResult",
@@ -322,4 +333,12 @@ __all__ = [
     "InterdimensionalPortalRouter", "HyperDimensionalPortalPacket",
     "UniversalHolographicConsciousnessSynthesizer", "HolographicConsciousnessState",
     "AbsoluteSingularityApexHarmonizer", "AbsoluteSingularityHarmonicReport",
+    "SuperstringMTheoryIntegrator", "SuperstringCompactificationReport",
+    "TachyonHyperluminalRelay", "HyperluminalPacketTrace",
+    "PlanckScaleVacuumEngineer", "VacuumHarvestingReport",
+    "OmniDimensionalQualiaMapper", "QualiaManifoldState",
+    "UniversalEntropyReversalAccelerator", "EntropyReversalReport",
+    "StellarEngineeringAndStarLifter", "StarLiftingReport",
+    "HyperIntelligentSpeciesIncubator", "SpeciesIncubationReport",
+    "PanCosmicSingularityMatrix", "PanCosmicSingularityState",
 ]

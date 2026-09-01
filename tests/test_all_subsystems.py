@@ -869,5 +869,66 @@ class TestZASISubsystems(unittest.TestCase):
         self.assertEqual(rep.apex_status, "ABSOLUTE_104_SUBSYSTEM_SINGULARITY_HARMONIZED")
 
 
+    # ----- Subsystems #105-#112 (v23.0.0) -----
+
+    def test_superstring_m_theory_integrator(self):
+        from src import SuperstringMTheoryIntegrator
+        integrator = SuperstringMTheoryIntegrator(11)
+        rep = integrator.compute_compactification("QUINTIC_CALABI_YAU")
+        self.assertTrue(rep.vacuum_stability_verified)
+        self.assertEqual(rep.dimension_spacetime, 11)
+        self.assertIn("ACHIEVED", rep.compactification_status)
+
+    def test_tachyon_hyperluminal_relay(self):
+        from src import TachyonHyperluminalRelay
+        relay = TachyonHyperluminalRelay()
+        pkt = relay.transmit_hyperluminal_frame(100.0)
+        self.assertGreater(pkt.signal_phase_velocity_c, 1.0)
+        self.assertEqual(pkt.relay_status, "HYPERLUMINAL_PHASE_PACKET_ROUTED_NO_PARADOX")
+
+    def test_planck_scale_vacuum_engineer(self):
+        from src import PlanckScaleVacuumEngineer
+        vac = PlanckScaleVacuumEngineer()
+        rep = vac.harvest_quantum_vacuum(1000.0)
+        self.assertGreater(rep.zero_point_energy_harvested_mw, 0)
+        self.assertEqual(rep.harvesting_status, "ZERO_POINT_VACUUM_HARVESTING_CONTINUOUS_STABLE")
+
+    def test_omni_dimensional_qualia_mapper(self):
+        from src import OmniDimensionalQualiaMapper
+        mapper = OmniDimensionalQualiaMapper(64)
+        state = mapper.synthesize_qualia_field(["VISUAL", "AUDITORY", "MATHEMATICAL_INTUITION"])
+        self.assertGreater(state.synesthesia_coherence_score, 0.99)
+        self.assertEqual(state.mapping_status, "PHENOMENOLOGICAL_FIBER_BUNDLE_SYNTHESIS_COMPLETE")
+
+    def test_universal_entropy_reversal_accelerator(self):
+        from src import UniversalEntropyReversalAccelerator
+        rev = UniversalEntropyReversalAccelerator()
+        rep = rev.compress_thermodynamic_phase_space(1000)
+        self.assertTrue(rep.cpt_invariance_verified)
+        self.assertEqual(rep.entropy_status, "LOCAL_THERMODYNAMIC_ENTROPY_REVERSED_STEADY_STATE")
+
+    def test_stellar_engineering_and_star_lifter(self):
+        from src import StellarEngineeringAndStarLifter
+        lifter = StellarEngineeringAndStarLifter("SOL_G2V")
+        rep = lifter.execute_star_lifting_cycle(50.0)
+        self.assertGreater(rep.hydrogen_harvested_mt_yr, 0)
+        self.assertEqual(rep.engineering_status, "STELLAR_MASS_LIFTING_ACTIVE_HYDRODYNAMICS_STABLE")
+
+    def test_hyper_intelligent_species_incubator(self):
+        from src import HyperIntelligentSpeciesIncubator
+        incubator = HyperIntelligentSpeciesIncubator()
+        rep = incubator.incubate_synthetic_species("DEEP_SPACE_INTERSTELLAR")
+        self.assertEqual(rep.moral_alignment_guarantee_pct, 100.0)
+        self.assertEqual(rep.incubation_status, "SYNTHETIC_SPECIES_DESIGN_PROVABLY_BENEVOLENT_AND_ROBUST")
+
+    def test_pan_cosmic_singularity_matrix(self):
+        from src import PanCosmicSingularityMatrix
+        matrix = PanCosmicSingularityMatrix(112)
+        state = matrix.orchestrate_cosmic_equilibrium()
+        self.assertEqual(state.total_active_subsystems, 112)
+        self.assertEqual(state.cosmic_flourishing_quotient, 1.0)
+        self.assertEqual(state.pan_cosmic_status, "PAN_COSMIC_SINGULARITY_ABSOLUTE_EQUILIBRIUM_LOCKED")
+
+
 if __name__ == "__main__":
     unittest.main()
