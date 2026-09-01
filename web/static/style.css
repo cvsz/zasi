@@ -1,7 +1,7 @@
 :root {
     --bg-base: #030712;
-    --panel-bg: rgba(15, 23, 42, 0.85);
-    --panel-border: rgba(56, 189, 248, 0.25);
+    --panel-bg: rgba(15, 23, 42, 0.88);
+    --panel-border: rgba(56, 189, 248, 0.28);
     --cyan-glow: #38bdf8;
     --cyan-dim: #0284c7;
     --gold: #fbbf24;
@@ -33,7 +33,7 @@ body {
     height: 100vh;
 }
 
-/* Header & Tabs */
+/* Header & Arc Mini */
 .hud-header {
     display: flex;
     justify-content: space-between;
@@ -49,18 +49,17 @@ body {
     gap: 12px;
 }
 
-.pulse-indicator {
-    width: 12px;
-    height: 12px;
-    background: var(--cyan-glow);
+.arc-ring-mini {
+    width: 20px;
+    height: 20px;
     border-radius: 50%;
-    box-shadow: 0 0 12px var(--cyan-glow);
-    animation: pulse 2s infinite;
+    border: 2px solid var(--cyan-glow);
+    box-shadow: 0 0 10px var(--cyan-glow), inset 0 0 8px var(--cyan-glow);
+    animation: spin-slow 4s linear infinite;
 }
 
-@keyframes pulse {
-    0%, 100% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.3); opacity: 0.6; }
+@keyframes spin-slow {
+    100% { transform: rotate(360deg); }
 }
 
 .logo-group h1 {
@@ -138,7 +137,7 @@ body {
     color: var(--green);
 }
 
-/* Main Area */
+/* Main Workspace */
 .hud-main {
     flex: 1;
     padding: 16px;
@@ -218,9 +217,21 @@ body {
 .persona-card.friday { border-left-color: var(--gold); }
 .persona-card.edith { border-left-color: var(--red); }
 
+.persona-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2px;
+}
+
+.p-tag {
+    font-size: 0.65rem;
+    color: var(--cyan-glow);
+    font-family: var(--font-mono);
+}
+
 .persona-card h3 {
     font-size: 0.9rem;
-    margin-bottom: 2px;
 }
 
 .persona-card .role {
@@ -294,6 +305,16 @@ body {
 
 .btn.accent:hover {
     box-shadow: 0 0 12px rgba(192, 132, 252, 0.5);
+}
+
+.voice-btn {
+    background: #059669;
+    color: white;
+}
+
+.voice-btn:hover {
+    background: #10b981;
+    box-shadow: 0 0 10px #10b981;
 }
 
 /* 3D Canvas */
@@ -382,6 +403,129 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
     color: var(--text-muted);
+}
+
+/* Tab 2: J.A.R.V.I.S. Voice & Conversational UI */
+.jarvis-console-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: var(--panel-bg);
+    border: 1px solid var(--panel-border);
+    border-radius: 8px;
+    padding: 20px;
+    gap: 16px;
+}
+
+.jarvis-arc-visualizer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 10px 0;
+}
+
+.arc-core-large {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    border: 3px solid var(--cyan-glow);
+    box-shadow: 0 0 25px var(--cyan-glow), inset 0 0 20px var(--cyan-glow);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: spin-slow 8s linear infinite;
+}
+
+.arc-core-pulse {
+    width: 40px;
+    height: 40px;
+    background: #38bdf8;
+    border-radius: 50%;
+    box-shadow: 0 0 15px #38bdf8;
+    animation: pulse 1.5s infinite;
+}
+
+.jarvis-arc-visualizer h2 {
+    font-size: 1.1rem;
+    letter-spacing: 2px;
+}
+
+.jarvis-subtitle {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+}
+
+.jarvis-chat-box {
+    flex: 1;
+    background: rgba(2, 6, 23, 0.9);
+    border: 1px solid rgba(56, 189, 248, 0.2);
+    border-radius: 6px;
+    padding: 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.chat-msg {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 14px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+
+.chat-msg .speaker {
+    font-size: 0.75rem;
+    font-weight: bold;
+    letter-spacing: 1px;
+    font-family: var(--font-mono);
+}
+
+.jarvis-msg {
+    background: rgba(30, 41, 59, 0.6);
+    border-left: 3px solid var(--cyan-glow);
+}
+
+.jarvis-msg .speaker {
+    color: var(--cyan-glow);
+}
+
+.user-msg {
+    background: rgba(15, 23, 42, 0.8);
+    border-left: 3px solid var(--gold);
+    align-self: flex-end;
+    width: 85%;
+}
+
+.user-msg .speaker {
+    color: var(--gold);
+}
+
+.jarvis-input-bar {
+    display: flex;
+    gap: 10px;
+}
+
+.jarvis-input-bar input {
+    flex: 1;
+    background: rgba(2, 6, 23, 0.95);
+    border: 1px solid var(--panel-border);
+    border-radius: 6px;
+    padding: 10px 16px;
+    color: var(--text-main);
+    font-size: 0.85rem;
+}
+
+.jarvis-input-bar input:focus {
+    outline: none;
+    border-color: var(--cyan-glow);
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
 }
 
 /* Subsystems Catalog Tab */

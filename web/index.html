@@ -3,75 +3,85 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ZASI Universal Superintelligence Command Cockpit</title>
+    <title>ZASI J.A.R.V.I.S. Command Cockpit | 128 Subsystems</title>
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
     <div class="hud-container">
-        <!-- Top Navbar -->
+        <!-- Top Holographic Navbar -->
         <header class="hud-header">
             <div class="logo-group">
-                <div class="pulse-indicator"></div>
+                <div class="arc-ring-mini"></div>
                 <h1>ZASI <span class="version-tag" id="header-version">v25.0.0-apex-omega</span></h1>
             </div>
 
             <nav class="hud-nav">
-                <button class="nav-tab active" onclick="switchTab('overview')">OVERVIEW</button>
+                <button class="nav-tab active" onclick="switchTab('overview')">TACTICAL HUD</button>
+                <button class="nav-tab" onclick="switchTab('jarvis')">J.A.R.V.I.S. VOICE & AI</button>
                 <button class="nav-tab" onclick="switchTab('subsystems')">128 SUBSYSTEMS</button>
                 <button class="nav-tab" onclick="switchTab('quantum')">QUANTUM & ENERGY</button>
-                <button class="nav-tab" onclick="switchTab('mcp')">MCP RPC CONSOLE</button>
+                <button class="nav-tab" onclick="switchTab('mcp')">MCP PROTOCOL</button>
             </nav>
 
             <div class="header-telemetry">
                 <div class="stat-pill"><span class="label">RSI SPEEDUP:</span> <span class="val highlight" id="rsi-speedup">240.0x</span></div>
-                <div class="stat-pill"><span class="label">COMPUTE:</span> <span class="val">3,500 ExaFLOPs</span></div>
-                <div class="stat-pill"><span class="label">ENERGY:</span> <span class="val" id="energy-val">178.2 GW</span></div>
+                <div class="stat-pill"><span class="label">ARC REACTOR:</span> <span class="val" id="energy-val">178.2 GW</span></div>
                 <div class="stat-pill"><span class="label">GLOBAL Φ:</span> <span class="val highlight" id="phi-val">42,800.5</span></div>
+                <div class="stat-pill"><span class="label">SYSTEM:</span> <span class="val highlight">NOMINAL</span></div>
             </div>
         </header>
 
-        <!-- Main Tab Area -->
+        <!-- Main Workspace -->
         <main class="hud-main">
-            <!-- TAB 1: OVERVIEW -->
+            <!-- TAB 1: OVERVIEW / TACTICAL HUD -->
             <div id="tab-overview" class="tab-content active">
                 <div class="grid-3col">
-                    <!-- Left: Personas & Daemon -->
+                    <!-- Left: Persona Tactical Swarm -->
                     <section class="panel">
                         <div class="panel-header">
                             <h2>TACTICAL PERSONA SWARM</h2>
-                            <span class="badge">CONSENSUS 99.9%</span>
+                            <span class="badge">CONSENSUS 99.999%</span>
                         </div>
                         <div class="panel-body">
                             <div class="persona-card jarvis">
-                                <h3>J.A.R.V.I.S.</h3>
+                                <div class="persona-top">
+                                    <h3>J.A.R.V.I.S.</h3>
+                                    <span class="p-tag">SUPERVISOR</span>
+                                </div>
                                 <p class="role">Formal Invariant & SMT Prover Supervisor</p>
                                 <p class="status" id="jarvis-status">128 subsystems mathematically proved invariant.</p>
                             </div>
                             <div class="persona-card friday">
-                                <h3>F.R.I.D.A.Y.</h3>
+                                <div class="persona-top">
+                                    <h3>F.R.I.D.A.Y.</h3>
+                                    <span class="p-tag">TENSOR ROUTER</span>
+                                </div>
                                 <p class="role">1T MoE & Microsecond Tensor Dispatcher</p>
                                 <p class="status">Dispatching 4,850,000 tok/s across 128 dynamic experts.</p>
                             </div>
                             <div class="persona-card edith">
-                                <h3>E.D.I.T.H.</h3>
+                                <div class="persona-top">
+                                    <h3>E.D.I.T.H.</h3>
+                                    <span class="p-tag">DEFENSE GRID</span>
+                                </div>
                                 <p class="role">Orbital Defense & ZK-STARK Grid</p>
-                                <p class="status">Deep Space Lagrange mesh verified with Halo2 recursive SNARKs.</p>
+                                <p class="status">Lagrange mesh verified with Halo2 recursive SNARKs.</p>
                             </div>
 
                             <div class="controls-group">
-                                <h3>COGNITIVE CONTROLS</h3>
+                                <h3>COGNITIVE ACTIONS</h3>
                                 <div class="btn-row">
-                                    <button class="btn primary" onclick="triggerDaemonTick()">EXECUTE TICK</button>
-                                    <button class="btn secondary" onclick="mutateState('x', 5)">MUTATE X (+5)</button>
-                                    <button class="btn secondary" onclick="mutateState('y', 5)">MUTATE Y (+5)</button>
+                                    <button class="btn primary" onclick="triggerDaemonTick()">PULSE TICK</button>
+                                    <button class="btn secondary" onclick="mutateState('x', 5)">MUTATE X</button>
+                                    <button class="btn secondary" onclick="mutateState('y', 5)">MUTATE Y</button>
                                 </div>
-                                <button class="btn accent" onclick="triggerRSIUpgrade()">TRIGGER SAFE RSI UPGRADE</button>
+                                <button class="btn accent" onclick="triggerRSIUpgrade()">SAFE RSI RECURSIVE UPGRADE</button>
                             </div>
                         </div>
                     </section>
 
-                    <!-- Center: 3D Holographic Multiverse View -->
+                    <!-- Center: 3D Holographic Multiverse Matrix -->
                     <section class="panel canvas-panel">
                         <div class="panel-header">
                             <h2>3D MULTIVERSE HYPERGRAPH & CONSCIOUSNESS MATRIX</h2>
@@ -84,11 +94,11 @@
                         </div>
                     </section>
 
-                    <!-- Right: Hardware & Telemetry -->
+                    <!-- Right: Live Physical Telemetry -->
                     <section class="panel">
                         <div class="panel-header">
-                            <h2>PHYSICAL TELEMETRY & AUDIT STREAM</h2>
-                            <span class="badge">NVML / PROCFS</span>
+                            <h2>PHYSICAL SUBSTRATE & AUDIT STREAM</h2>
+                            <span class="badge">NVML / KERNEL</span>
                         </div>
                         <div class="panel-body">
                             <div class="metric-box">
@@ -113,7 +123,7 @@
                             </div>
 
                             <div class="terminal-log">
-                                <div class="log-title">REAL-TIME INVARIANT & TELEMETRY LOGS</div>
+                                <div class="log-title">REAL-TIME INVARIANT AUDIT STREAM</div>
                                 <div id="log-lines"></div>
                             </div>
                         </div>
@@ -121,12 +131,38 @@
                 </div>
             </div>
 
-            <!-- TAB 2: 128 SUBSYSTEMS EXPLORER -->
+            <!-- TAB 2: J.A.R.V.I.S. VOICE & CONVERSATIONAL CONSOLE -->
+            <div id="tab-jarvis" class="tab-content">
+                <div class="jarvis-console-container">
+                    <div class="jarvis-arc-visualizer">
+                        <div class="arc-core-large">
+                            <div class="arc-core-pulse"></div>
+                        </div>
+                        <h2>J.A.R.V.I.S. VOICE INTERFACE & CONVERSATIONAL MATRIX</h2>
+                        <p class="jarvis-subtitle">Neural TTS: British Jarvis Resonant Baritone | Active Subsystems: 128</p>
+                    </div>
+
+                    <div class="jarvis-chat-box" id="jarvis-chat-messages">
+                        <div class="chat-msg jarvis-msg">
+                            <span class="speaker">J.A.R.V.I.S.</span>
+                            <span class="text">Good day, Sir. All 128 subsystems are fully synchronized and reporting nominal parameters. How may I assist your superintelligence research today?</span>
+                        </div>
+                    </div>
+
+                    <div class="jarvis-input-bar">
+                        <input type="text" id="jarvis-user-input" placeholder="Speak or type a command for J.A.R.V.I.S. (e.g. 'status report', 'energy balance', 'execute step')..." onkeypress="if(event.key==='Enter') sendJarvisCommand()">
+                        <button class="btn primary" onclick="sendJarvisCommand()">TRANSMIT DIRECTIVE</button>
+                        <button class="btn voice-btn" onclick="toggleVoiceSpeech()">🔊 VOICE TTS</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 3: 128 SUBSYSTEMS EXPLORER -->
             <div id="tab-subsystems" class="tab-content">
                 <div class="subsystems-grid" id="subsystems-catalog"></div>
             </div>
 
-            <!-- TAB 3: QUANTUM & ENERGY -->
+            <!-- TAB 4: QUANTUM & ENERGY -->
             <div id="tab-quantum" class="tab-content">
                 <div class="quantum-cockpit">
                     <div class="quantum-card">
@@ -156,7 +192,7 @@
                 </div>
             </div>
 
-            <!-- TAB 4: MCP JSON-RPC CONSOLE -->
+            <!-- TAB 5: MCP JSON-RPC CONSOLE -->
             <div id="tab-mcp" class="tab-content">
                 <div class="mcp-console">
                     <div class="mcp-header">

@@ -1,5 +1,5 @@
-// ZASI Advanced Full-Feature Cockpit Client v25.0.0
-let scene, camera, renderer, nodesGroup, activeTab = 'overview';
+// ZASI Advanced J.A.R.V.I.S. Command & Voice Cockpit Client v25.0.0
+let scene, camera, renderer, nodesGroup, activeTab = 'overview', voiceEnabled = true;
 
 // 1. Tab Switcher
 function switchTab(tabId) {
@@ -102,7 +102,6 @@ async function fetchTelemetry() {
             document.getElementById('energy-val').innerText = `${data.arc_reactor_gw.toFixed(1)} GW`;
             document.getElementById('phi-val').innerText = `${data.global_phi.toLocaleString()}`;
 
-            // Render live logs
             if (data.logs) {
                 const logBox = document.getElementById('log-lines');
                 logBox.innerHTML = data.logs.map(l => `<div class="log-line">[${l.timestamp}] [${l.level}] ${l.message}</div>`).join('');
@@ -127,7 +126,59 @@ async function fetchStatus() {
     }
 }
 
-// 4. Interactive Cognitive Actions
+// 4. J.A.R.V.I.S. Conversational Core
+async function sendJarvisCommand() {
+    const inputField = document.getElementById('jarvis-user-input');
+    const msg = inputField.value.trim();
+    if (!msg) return;
+
+    // Append User message
+    appendChatMessage('USER', msg, 'user-msg');
+    inputField.value = '';
+
+    try {
+        const res = await fetch('/api/jarvis/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: msg })
+        });
+        if (res.ok) {
+            const data = await res.json();
+            appendChatMessage('J.A.R.V.I.S.', data.response, 'jarvis-msg');
+            if (voiceEnabled) {
+                speakJarvis(data.response);
+            }
+            fetchTelemetry();
+        }
+    } catch (e) {
+        appendChatMessage('J.A.R.V.I.S.', 'Connection interrupted, Sir. Retrying local subsystem link...', 'jarvis-msg');
+    }
+}
+
+function appendChatMessage(speaker, text, className) {
+    const chatBox = document.getElementById('jarvis-chat-messages');
+    const msgDiv = document.createElement('div');
+    msgDiv.className = `chat-msg ${className}`;
+    msgDiv.innerHTML = `<span class="speaker">${speaker}</span><span class="text">${text}</span>`;
+    chatBox.appendChild(msgDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+function speakJarvis(text) {
+    if ('speechSynthesis' in window) {
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 1.05;
+        utterance.pitch = 0.95;
+        window.speechSynthesis.speak(utterance);
+    }
+}
+
+function toggleVoiceSpeech() {
+    voiceEnabled = !voiceEnabled;
+    alert(`J.A.R.V.I.S. Voice Output is now ${voiceEnabled ? 'ENABLED' : 'MUTED'}`);
+}
+
+// 5. Interactive Cognitive Actions
 async function triggerDaemonTick() {
     try {
         const res = await fetch('/api/tick');
@@ -176,7 +227,7 @@ async function triggerRSIUpgrade() {
     }
 }
 
-// 5. Subsystem Catalog & Remote Runners
+// 6. Subsystem Catalog & Remote Runners
 async function loadSubsystemsCatalog() {
     try {
         const res = await fetch('/api/subsystems');
@@ -214,7 +265,7 @@ async function runSubsystem(key) {
     }
 }
 
-// 6. MCP Protocol Console
+// 7. MCP Protocol Console
 async function sendMCPRequest() {
     try {
         const input = document.getElementById('mcp-input').value;

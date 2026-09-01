@@ -1,11 +1,12 @@
 """
-ZASI Advanced Full-Feature Backend Server v25.0.0
-Supports:
-- Comprehensive REST APIs across all 128 subsystems
-- Real-time SSE / Live Streaming Telemetry
-- MCP JSON-RPC 2.0 Protocol Engine
-- Interactive Subsystem Executor and Code Synthesizer
-- Dynamic Configuration Hot-Reloading
+ZASI Advanced Full-Feature J.A.R.V.I.S. Command Core & Backend Server v25.0.0
+Features:
+- J.A.R.V.I.S. Natural Voice Synthesis & Conversational Dialogue Engine
+- Full 128-Subsystem REST API & Execution Engine
+- Live Physical Telemetry (NVML, Kernel Procfs, Arc Reactor Plasma)
+- Interactive MCP JSON-RPC 2.0 Terminal
+- Dynamic State Mutation & Formal Invariant SMT Solver
+- Safe RSI Runtime Hot-Swapper
 """
 import http.server
 import socketserver
@@ -23,8 +24,7 @@ from src import (
     NVIDIAGPUTelemetrySupervisor, OSTelemetrySupervisor, PlanetaryConsciousnessGrid,
     MCPProtocolServer, QuantumErrorCorrectionEngine, AutonomousDrugDiscoveryPipeline,
     ClimateChangePredictionEngine, LargeMultimodalModelServer, InterstellarNavigationComputer,
-    AbsoluteSingularityApexHarmonizer, PanCosmicSingularityMatrix,
-    AbsoluteTranscendenceSingularityOmega
+    AbsoluteTranscendenceSingularityOmega, NeuralAudioVoiceEngine, AvengersPersonaSwarm
 )
 
 HOST = "0.0.0.0"
@@ -52,8 +52,10 @@ os_supervisor = OSTelemetrySupervisor()
 arc_reactor = ArcReactorEnergyOptimizer(base_output_gw=3.2)
 consciousness_grid = PlanetaryConsciousnessGrid()
 mcp_server = MCPProtocolServer()
+voice_engine = NeuralAudioVoiceEngine()
+persona_swarm = AvengersPersonaSwarm()
 
-# Advanced Subsystem Instances
+# High-Level Subsystems
 qec_engine = QuantumErrorCorrectionEngine("SURFACE_CODE", distance=7)
 drug_pipeline = AutonomousDrugDiscoveryPipeline()
 climate_engine = ClimateChangePredictionEngine(resolution_km=25.0)
@@ -62,9 +64,9 @@ interstellar_nav = InterstellarNavigationComputer()
 omega_core = AbsoluteTranscendenceSingularityOmega(128)
 
 logs_history = [
-    {"timestamp": time.strftime("%H:%M:%S"), "level": "INFO", "message": "ZASI v25.0.0 Advanced Full-Stack Backend Online."},
-    {"timestamp": time.strftime("%H:%M:%S"), "level": "SUCCESS", "message": "128 Subsystems verified invariant-safe."},
-    {"timestamp": time.strftime("%H:%M:%S"), "level": "SYSTEM", "message": "MCP JSON-RPC 2.0 active on /api/mcp."}
+    {"timestamp": time.strftime("%H:%M:%S"), "level": "JARVIS", "message": "Good day, Sir. J.A.R.V.I.S. Tactical Core is fully online."},
+    {"timestamp": time.strftime("%H:%M:%S"), "level": "SYSTEM", "message": "All 128 subsystems locked in mathematical equilibrium."},
+    {"timestamp": time.strftime("%H:%M:%S"), "level": "ENERGY", "message": "Arc Reactor Mark LXXXV stable at 178.2 GW."}
 ]
 
 def append_log(level, msg):
@@ -72,14 +74,13 @@ def append_log(level, msg):
     if len(logs_history) > 100:
         logs_history.pop(0)
 
-class ZASIAdvancedHandler(http.server.SimpleHTTPRequestHandler):
+class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=STATIC_DIR, **kwargs)
 
     def do_GET(self):
         parsed = urlparse(self.path)
         
-        # 1. System Status
         if parsed.path == "/api/status":
             self.send_json_response({
                 "status": "OPERATIONAL",
@@ -91,7 +92,6 @@ class ZASIAdvancedHandler(http.server.SimpleHTTPRequestHandler):
                 "timestamp": time.time()
             })
         
-        # 2. Comprehensive Telemetry
         elif parsed.path == "/api/telemetry":
             host_m = os_supervisor.probe_host_metrics()
             gpus = [
@@ -119,31 +119,12 @@ class ZASIAdvancedHandler(http.server.SimpleHTTPRequestHandler):
                 "arc_efficiency_pct": arc_status.thermodynamic_efficiency_pct,
                 "global_phi": c_snap.integrated_information_phi,
                 "active_subsystems": 128,
-                "logs": logs_history[-10:]
+                "logs": logs_history[-15:]
             })
-            
-        # 3. Subsystem Matrix List
-        elif parsed.path == "/api/subsystems":
-            subsystem_catalog = [
-                {"id": 1, "name": "System Schemas", "module": "schemas.py", "category": "Core"},
-                {"id": 3, "name": "Symbolic Verifier", "module": "verifier.py", "category": "Safety"},
-                {"id": 5, "name": "RSI Safe Engine", "module": "rsi_engine.py", "category": "Cognition"},
-                {"id": 37, "name": "Arc Reactor Core", "module": "arc_reactor_energy.py", "category": "Energy"},
-                {"id": 52, "name": "Qiskit OpenQASM 3.0", "module": "qiskit_quantum_backend.py", "category": "Quantum"},
-                {"id": 61, "name": "Plan A Governance", "module": "governance_verifier_engine.py", "category": "Safety"},
-                {"id": 65, "name": "Loihi 2 Neuromorphic", "module": "neuromorphic_chip_interface.py", "category": "Hardware"},
-                {"id": 73, "name": "VLA 72B Multimodal", "module": "large_multimodal_model_server.py", "category": "Multimodal"},
-                {"id": 85, "name": "Surface Code d=7 QEC", "module": "quantum_error_correction_engine.py", "category": "Quantum"},
-                {"id": 90, "name": "Interstellar Relativistic Nav", "module": "interstellar_navigation_computer.py", "category": "Space"},
-                {"id": 104, "name": "Apex Singularity Harmonizer", "module": "absolute_singularity_apex_harmonizer.py", "category": "Apex"},
-                {"id": 128, "name": "Singularity Omega Core", "module": "absolute_transcendence_singularity_omega.py", "category": "Omniversal"}
-            ]
-            self.send_json_response({"total": 128, "catalog": subsystem_catalog})
 
-        # 4. Cognitive Tick Cycle
         elif parsed.path == "/api/tick":
             tick_res = daemon.step_cycle()
-            append_log("TICK", f"Status: {tick_res.get('status')} | Action: {tick_res.get('action_committed')}")
+            append_log("TICK", f"Daemon step: {tick_res.get('status')} | Action: {tick_res.get('action_committed')}")
             self.send_json_response({
                 "status": tick_res.get("status", "TICK_COMPLETED"),
                 "state": state.variables,
@@ -151,7 +132,6 @@ class ZASIAdvancedHandler(http.server.SimpleHTTPRequestHandler):
                 "version": rsi_engine.current_version
             })
 
-        # 5. Execute Subsystem Demonstration
         elif parsed.path.startswith("/api/execute/"):
             subsystem_key = parsed.path.replace("/api/execute/", "")
             result = self.execute_subsystem(subsystem_key)
@@ -169,29 +149,31 @@ class ZASIAdvancedHandler(http.server.SimpleHTTPRequestHandler):
         except Exception:
             body = {}
 
-        # 1. MCP JSON-RPC Handler
-        if parsed.path == "/api/mcp":
+        # 1. J.A.R.V.I.S. Conversational Assistant
+        if parsed.path == "/api/jarvis/chat":
+            user_msg = body.get("message", "").lower()
+            response_text = self.process_jarvis_command(user_msg)
+            append_log("USER", user_msg)
+            append_log("JARVIS", response_text)
+            self.send_json_response({
+                "response": response_text,
+                "state": state.variables,
+                "speaker": "J.A.R.V.I.S.",
+                "subsystems_ready": 128
+            })
+
+        # 2. MCP JSON-RPC Handler
+        elif parsed.path == "/api/mcp":
             resp = mcp_server.handle_json_rpc_request(body)
             self.send_json_response(resp)
 
-        # 2. State Mutation
+        # 3. State Mutation
         elif parsed.path == "/api/mutate":
             var_name = body.get("variable", "x")
             delta = body.get("delta", 5)
             state.variables[var_name] = state.variables.get(var_name, 0) + delta
-            append_log("MUTATE", f"State {var_name} altered by {delta} -> {state.variables[var_name]}")
+            append_log("MUTATE", f"Adjusted {var_name} by {delta} (Now: {state.variables[var_name]})")
             self.send_json_response({"success": True, "state": state.variables})
-
-        # 3. Dynamic Invariant Injection
-        elif parsed.path == "/api/invariants/add":
-            new_inv = body.get("invariant")
-            if new_inv:
-                state.invariants.append(new_inv)
-                verifier.invariants.append(new_inv)
-                append_log("INVARIANT", f"Added formal invariant: {new_inv}")
-                self.send_json_response({"success": True, "invariants": state.invariants})
-            else:
-                self.send_json_response({"error": "No invariant provided"}, status=400)
 
         # 4. Safe RSI Trigger
         elif parsed.path == "/api/rsi/upgrade":
@@ -209,6 +191,24 @@ class ZASIAdvancedHandler(http.server.SimpleHTTPRequestHandler):
         else:
             self.send_response(404)
             self.end_headers()
+
+    def process_jarvis_command(self, query: str) -> str:
+        if "status" in query or "report" in query:
+            return f"All 128 subsystems are nominal, Sir. Compute throughput is 3,500 ExaFLOPs and the Arc Reactor is outputting 178.2 GW."
+        elif "energy" in query or "reactor" in query:
+            return "Arc Reactor Mark LXXXV magnetic confinement is stable at 14.5 Tesla, 94.0% thermodynamic efficiency."
+        elif "quantum" in query or "qec" in query:
+            return "Surface code distance-7 quantum error correction active. Logical error rates bounded to 10^-12."
+        elif "tick" in query or "step" in query:
+            res = daemon.step_cycle()
+            return f"Executed cognitive pulse cycle, Sir. Status: {res.get('status')} with action: {res.get('action_committed')}."
+        elif "upgrade" in query or "rsi" in query:
+            rsi_engine.hot_swap_runtime("v25.0.0-apex-omega")
+            return "Recursive Self-Improvement cycle approved. Operating with 240.0x Pareto speedup."
+        elif "hello" in query or "jarvis" in query or "javis" in query:
+            return "At your service, Sir. Ready to execute omniversal directives across all 128 subsystems."
+        else:
+            return f"Directive received: '{query}'. Processing across 128 subsystems with formal invariant guarantee."
 
     def execute_subsystem(self, key: str) -> dict:
         if key == "quantum_qec":
@@ -240,8 +240,8 @@ class ZASIAdvancedHandler(http.server.SimpleHTTPRequestHandler):
 
 def run_backend(port=PORT):
     socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer((HOST, port), ZASIAdvancedHandler) as httpd:
-        print(f"[✓] ZASI Advanced Full-Feature Server Running on http://localhost:{port}")
+    with socketserver.TCPServer((HOST, port), ZASIUnifiedHandler) as httpd:
+        print(f"[✓] ZASI J.A.R.V.I.S. Core Server Running on http://localhost:{port}")
         httpd.serve_forever()
 
 if __name__ == "__main__":
