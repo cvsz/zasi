@@ -54,10 +54,14 @@ from .quantum_gravity_spacetime import QuantumGravitySpacetimeEngine, SpacetimeM
 from .molecular_nanofab_assembler import MolecularNanofabAssembler, NanofabricationBatch
 from .hyperspatial_topology_router import HyperspatialTopologyRouter, HyperspatialRoutingPacket
 from .universal_telemetry_mesh import UniversalTelemetryMesh, UniversalTelemetrySnapshot
-# Production Bridges & Protocol Engines
 from .qiskit_quantum_backend import QiskitQuantumBridge, QuantumCircuitExecutionResult
 from .nvidia_gpu_telemetry import NVIDIAGPUTelemetrySupervisor, GPUDeviceMetrics
 from .mcp_protocol_server import MCPProtocolServer, MCPToolDefinition
+# v12.0.0 Transports, Annealers, and Pod Orchestration
+from .mcp_stdio_transport import MCPStdioTransport
+from .mcp_sse_transport import MCPSSETransport
+from .qiskit_quantum_annealer import QuantumAnnealingEngine, AnnealingTrajectoryResult
+from .hyperscale_cluster_orchestrator import HyperscaleClusterOrchestrator, ClusterPodTopology
 
 __all__ = [
     "Proposal",
@@ -162,5 +166,11 @@ __all__ = [
     "NVIDIAGPUTelemetrySupervisor",
     "GPUDeviceMetrics",
     "MCPProtocolServer",
-    "MCPToolDefinition"
+    "MCPToolDefinition",
+    "MCPStdioTransport",
+    "MCPSSETransport",
+    "QuantumAnnealingEngine",
+    "AnnealingTrajectoryResult",
+    "HyperscaleClusterOrchestrator",
+    "ClusterPodTopology"
 ]

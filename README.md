@@ -1,21 +1,25 @@
 # ZASI: Apex J.A.R.V.I.S. / F.R.I.D.A.Y. / E.D.I.T.H. Superintelligence Framework
 
-**ZASI** is a total-horizon, multimodal, quantum-thermodynamic, cryptographically verified Artificial Superintelligence (ASI) framework equipped with 47 unified subsystems, the **J.A.R.V.I.S. / F.R.I.D.A.Y. / E.D.I.T.H.** tactical persona swarm, Model Context Protocol (MCP) JSON-RPC 2.0 server, Qiskit OpenQASM 3.0 quantum hardware bridge, NVIDIA NVML GPU telemetry, Quantum Gravity CDT Spacetime engine, Atomic-Precision Molecular Nanofabrication, Calabi-Yau dimensional routing, Universal Multiverse Telemetry Mesh, Tokamak fusion plasma optimizer, planetary climate geoengineering actuator, 65k-channel direct cortical optical BCI, N-body cosmological simulator, CXL 3.0 accelerator fabric, Deep Space Lagrange relay mesh, bio-molecular simulator, universal AGI benchmark suite, holographic WebXR Spatial HUD, Arc Reactor energy management, neural audio wake-word synthesis, autonomous Git self-evolution, Linux kernel telemetry probes, and robotics G-code drivers.
+**ZASI** is a total-horizon, multimodal, quantum-thermodynamic, cryptographically verified Artificial Superintelligence (ASI) framework equipped with 51 unified subsystems, the **J.A.R.V.I.S. / F.R.I.D.A.Y. / E.D.I.T.H.** tactical persona swarm, Model Context Protocol (MCP) JSON-RPC 2.0 & Stdio/SSE streaming transports, Hyperscale GPU/TPU multi-node SuperPod clustering, Quantum Annealing Ising Hamiltonian engines, Qiskit OpenQASM 3.0 quantum hardware bridge, NVIDIA NVML GPU telemetry, Quantum Gravity CDT Spacetime engine, Atomic-Precision Molecular Nanofabrication, Calabi-Yau dimensional routing, Universal Multiverse Telemetry Mesh, Tokamak fusion plasma optimizer, planetary climate geoengineering actuator, 65k-channel direct cortical optical BCI, N-body cosmological simulator, CXL 3.0 accelerator fabric, Deep Space Lagrange relay mesh, bio-molecular simulator, universal AGI benchmark suite, holographic WebXR Spatial HUD, Arc Reactor energy management, neural audio wake-word synthesis, autonomous Git self-evolution, Linux kernel telemetry probes, and robotics G-code drivers.
 
 ---
 
-## 47 Unified Subsystems Matrix
+## 51 Unified Subsystems Matrix
 
 | Category | Subsystem | Module | Description |
 | :--- | :--- | :--- | :--- |
 | **Tactical Persona Swarm** | J.A.R.V.I.S. / F.R.I.D.A.Y. / E.D.I.T.H. | `src/avengers_persona_swarm.py` | Multi-persona strategic, compute, and security swarm |
 | **Tool Protocols** | MCP JSON-RPC 2.0 Server | `src/mcp_protocol_server.py` | Standard Model Context Protocol for IDEs, tools, and external LLMs |
+| **CLI / IDE Transport** | MCP Stdio Transport Adapter | `src/mcp_stdio_transport.py` | Standard input / standard output stream transport for Claude Desktop & IDEs |
+| **Web Streaming Transport**| MCP SSE Transport Adapter | `src/mcp_sse_transport.py` | Server-Sent Events (SSE) streaming transport for web & distributed agents |
+| **Quantum Annealing** | Transverse-Field Ising Solver | `src/qiskit_quantum_annealer.py` | Adiabatic ground state energy optimization & quantum tunneling |
+| **SuperPod Orchestration**| Hyperscale Cluster Pod Engine | `src/hyperscale_cluster_orchestrator.py` | Multi-node NCCL/RCCL pipeline parallel & ZeRO-3 sharding |
 | **Quantum Hardware** | Qiskit OpenQASM 3.0 Bridge | `src/qiskit_quantum_backend.py` | N-qubit GHZ state synthesis & Landauer dissipation profiling |
 | **Hardware Telemetry** | NVIDIA NVML Real GPU Supervisor | `src/nvidia_gpu_telemetry.py` | Live Tensor Core load, VRAM, NVLink, and wattage telemetry |
 | **Quantum Gravity** | CDT 4D Spacetime & Holography | `src/quantum_gravity_spacetime.py` | 50M-simplex causal dynamical triangulation & AdS/CFT entropy bounds |
 | **Molecular Nanofab** | Diamondoid Mechanosynthesis | `src/molecular_nanofab_assembler.py` | 1.2e12 atoms/sec mechanosynthetic tooltip placement & nanobotics |
 | **Hyperspatial Routing** | Calabi-Yau Manifold Topology | `src/hyperspatial_topology_router.py` | 10D/11D compactification tensor compression (1420x ratio) |
-| **Universal Telemetry** | Multiverse Supercluster Mesh | `src/universal_telemetry_mesh.py` | Global 47-subsystem telemetry & Landauer thermodynamic loss profiling |
+| **Universal Telemetry** | Multiverse Supercluster Mesh | `src/universal_telemetry_mesh.py` | Global 51-subsystem telemetry & Landauer thermodynamic loss profiling |
 | **Direct Cortical BCI** | Optical Neural Bus (65k Channels) | `src/optical_bci_neural_bus.py` | High-channel cortical electrophysiology & optogenetic thought decoding |
 | **Fusion Energy** | Tokamak Magnetic Confinement Core | `src/fusion_tokamak_optimizer.py` | Magnetohydrodynamic (MHD) plasma equilibrium & Greenwald safety limit |
 | **Planetary Actuation** | Climate Geoengineering Actuator | `src/planetary_climate_actuator.py` | SAI & ocean alkalinity radiation balancing under planetary boundaries |
@@ -64,10 +68,10 @@
 # Automated Setup & Self-Test
 ./install.sh
 
-# Run Complete Apex J.A.R.V.I.S. Framework (v11.0.0)
+# Run Complete Apex J.A.R.V.I.S. Framework (v12.0.0)
 python3 main.py
 
-# Run Full 44-Subsystem Unit & Integration Test Suite
+# Run Full 48-Subsystem Unit & Integration Test Suite
 python3 -m unittest discover -s tests
 
 # Interactive Voice/Terminal Shell

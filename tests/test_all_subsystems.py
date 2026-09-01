@@ -383,5 +383,41 @@ class TestZASISubsystems(unittest.TestCase):
         self.assertIn("Invariant Verified", call_res["result"]["content"][0]["text"])
 
 
+    # ----- Transports, Annealers & Pod Clusters (v12.0.0) -----
+
+    def test_mcp_stdio_transport(self):
+        from src import MCPProtocolServer, MCPStdioTransport
+        import io, json
+        mcp = MCPProtocolServer()
+        transport = MCPStdioTransport(mcp)
+        in_stream = io.StringIO(json.dumps({"jsonrpc": "2.0", "id": 101, "method": "initialize"}) + "\n")
+        out_stream = io.StringIO()
+        transport.run_stdio_loop(in_stream, out_stream)
+        resp = json.loads(out_stream.getvalue())
+        self.assertEqual(resp["result"]["serverInfo"]["name"], "zasi-superintelligence-mcp")
+
+    def test_mcp_sse_transport(self):
+        from src import MCPProtocolServer, MCPSSETransport
+        mcp = MCPProtocolServer()
+        sse = MCPSSETransport(mcp)
+        msg = sse.format_sse_message("telemetry", {"status": "ACTIVE"})
+        self.assertIn("event: telemetry", msg)
+        self.assertIn("data:", msg)
+
+    def test_quantum_annealing_engine(self):
+        from src import QuantumAnnealingEngine
+        annealer = QuantumAnnealingEngine(num_spins=16)
+        res = annealer.solve_ising_ground_state([[0.0] * 16] * 16)
+        self.assertTrue(res.combinatorial_optimality_verified)
+        self.assertLess(res.ground_state_energy_ev, 0.0)
+
+    def test_hyperscale_cluster_orchestrator(self):
+        from src import HyperscaleClusterOrchestrator
+        orch = HyperscaleClusterOrchestrator()
+        topology = orch.configure_distributed_mesh(world_size=512)
+        self.assertEqual(topology.total_accelerators, 512)
+        self.assertEqual(topology.cluster_health_status, "ALL_NODES_HEALTHY_AND_SYNCHRONIZED")
+
+
 if __name__ == "__main__":
     unittest.main()
