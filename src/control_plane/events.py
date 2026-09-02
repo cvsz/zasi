@@ -11,6 +11,10 @@ from .storage import ControlPlaneStore
 OutboxHandler = Callable[[Dict[str, object]], None]
 
 
+class _OutboxConfigurationError(RuntimeError):
+    """Raised when a non-reference outbox destination has no adapter."""
+
+
 @dataclass(frozen=True)
 class DispatchReport:
     claimed: int
@@ -42,6 +46,13 @@ class OutboxDispatcher:
                 continue
             claimed += 1
             try:
+                destination = str(claimed_item.get("destination") or "")
+                if handler is None and destination != "event_stream":
+                    # The durable event table is the reference profile's
+                    # stream sink. Any other destination must have an
+                    # explicitly configured delivery adapter; acknowledging
+                    # it without one would silently lose an external event.
+                    raise _OutboxConfigurationError("outbox handler is not configured")
                 if handler is not None:
                     handler(dict(claimed_item))
                 self.store.finish_outbox(
@@ -50,6 +61,14 @@ class OutboxDispatcher:
                     claim_token=str(claimed_item.get("claim_token") or "") or None,
                 )
                 delivered += 1
+            except _OutboxConfigurationError:
+                self.store.finish_outbox(
+                    item["id"],
+                    success=False,
+                    error="outbox handler is not configured",
+                    claim_token=str(claimed_item.get("claim_token") or "") or None,
+                )
+                retried += 1
             except Exception:
                 self.store.finish_outbox(
                     item["id"],

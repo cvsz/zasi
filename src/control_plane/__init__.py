@@ -10,6 +10,7 @@ from .policy import PolicyDecision, PolicyEngine
 from .postgres_storage import PostgresControlPlaneStore
 from .scheduler import DurableScheduler
 from .storage import ConflictError, ControlPlaneStore, ScopeViolation
+from .worker import OutboxWorker, WorkerReport
 
 __all__ = [
     "ConfigurationError",
@@ -26,7 +27,9 @@ __all__ = [
     "PolicyEngine",
     "PostgresControlPlaneStore",
     "OutboxDispatcher",
+    "OutboxWorker",
     "ScopeViolation",
     "Settings",
+    "WorkerReport",
     "hash_token",
 ]
