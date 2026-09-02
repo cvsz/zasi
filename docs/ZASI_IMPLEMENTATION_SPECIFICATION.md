@@ -1908,8 +1908,8 @@ implementation claim.
 
 | Command or inspection | Observed result | Evidence class |
 |---|---|---|
-| `python3 -m unittest discover -s tests -q` | 323 tests passed, 2 optional live-service checks skipped | Local functional regression |
-| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 323 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
+| `python3 -m unittest discover -s tests -q` | 326 tests passed, 2 optional live-service checks skipped; current-tree run completed with `OK` | Local functional regression |
+| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 326 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
 | Focused control-plane/security suite (`tests.test_control_plane_core`, `tests.test_control_plane_broker`, `tests.test_control_plane_api`, `tests.test_security_hardening`, `tests.test_egress_security`) | Passed, including memory-hard API-key verification and TLS 1.2 floor tests | Local governed/security regression |
 | Focused outbox worker suite (`tests.test_outbox_worker tests.test_control_plane_core`) | 28 tests passed; bounded polling, interruptible shutdown, retry/dead-letter preservation, expired-lease reclaim, conditional-claim race handling, configuration fail-closed behavior, and worker identifier validation covered | Local outbox worker regression |
 | `PYTHONPATH=. python3 -m unittest tests.test_release_signing -v` | 5 tests passed; artifact selection/checksum determinism, signed-bundle publication, and protected release workflow requirements covered | Local release-signing regression |
