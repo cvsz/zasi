@@ -53,6 +53,10 @@ class LegacyTruthfulnessTests(unittest.TestCase):
     def test_legacy_openapi_marks_side_effect_paths_retired(self):
         self.assertIn("legacy", legacy_server.OPENAPI_SPEC["info"]["description"].lower())
         self.assertIn(
+            "reference process",
+            legacy_server.OPENAPI_SPEC["paths"]["/api/status"]["get"]["summary"].lower(),
+        )
+        self.assertIn(
             "local host",
             legacy_server.OPENAPI_SPEC["paths"]["/api/telemetry"]["get"]["summary"].lower(),
         )

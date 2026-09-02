@@ -690,8 +690,8 @@ OPENAPI_SPEC = {
     },
     "paths": {
         "/api/status": {
-            "get": {"summary": "System status (public)", "security": [],
-                    "responses": {"200": {"description": "Operational status"}}}
+            "get": {"summary": "Legacy reference process status (public)", "security": [],
+                    "responses": {"200": {"description": "Reference process status"}}}
         },
         "/api/telemetry": {
             "get": {"summary": "Local host telemetry with disabled capability fields",
