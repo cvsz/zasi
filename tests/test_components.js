@@ -11,6 +11,7 @@ const appTsx = fs.readFileSync(appTsxPath, 'utf8');
 const appJsx = fs.readFileSync(appJsxPath, 'utf8');
 const content = `${appTsx}\n${appJsx}`;
 const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
+const makefile = fs.readFileSync(path.join(__dirname, '../Makefile'), 'utf8');
 
 console.log('[*] Testing React 19 + React Router v7 TypeScript entrypoint and component declarations...');
 
@@ -18,6 +19,8 @@ assert(packageJson.dependencies.react.startsWith('19.'), 'package must pin React
 assert(packageJson.dependencies['react-dom'].startsWith('19.'), 'package must pin React DOM 19');
 assert(packageJson.dependencies['react-router-dom'].startsWith('7.'), 'package must pin React Router 7');
 assert(packageJson.devDependencies.typescript, 'package must include TypeScript tooling');
+assert(makefile.includes('npm run typecheck'), 'Make targets must enforce the TypeScript check');
+assert(!/^\s*rm .*\.coverage/m.test(makefile), 'Make clean must preserve the tracked coverage artifact');
 assert(appTsx.includes("from './app.jsx?legacy'"), 'TypeScript entrypoint must preserve the reviewed cockpit implementation import');
 assert(!appJsx.includes('createRoot('), 'compatibility module must not mount a second React root');
 assert(appTsx.includes('createRoot'), 'TypeScript entrypoint must own React root creation');

@@ -1,4 +1,4 @@
-.PHONY: all setup test test-api test-control-plane test-js test-all coverage clean build build-web sbom install server run docker-build docker-run ci help
+.PHONY: all setup test test-api test-control-plane test-js typecheck test-all coverage clean build build-web sbom install server run docker-build docker-run ci help
 
 PYTHON ?= python3
 PIP ?= $(PYTHON) -m pip
@@ -23,14 +23,18 @@ test-control-plane:
 test-js:
 	node tests/test_components.js
 
-test-all: test test-api test-js coverage
+typecheck:
+	npm ci --ignore-scripts
+	npm run typecheck
+
+test-all: test test-api test-js typecheck coverage
 
 coverage:
 	coverage run -m unittest discover -s tests -q
 	coverage report -m
 
 clean:
-	rm -rf build/ dist/ *.egg-info .coverage htmlcov/ data/*.db
+	rm -rf build/ dist/ *.egg-info htmlcov/ data/*.db
 
 build:
 	$(MAKE) build-web
@@ -38,6 +42,7 @@ build:
 
 build-web:
 	npm ci --ignore-scripts
+	npm run typecheck
 	npm run build
 
 sbom:
