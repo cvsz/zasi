@@ -9,9 +9,10 @@ and the product/system vision is
 
 `backend.app` is the only authoritative application entry point. It owns the
 ASGI lifecycle, authenticated session, tenant scope, policy evaluation, typed
-tool registry, SQLite repository, audit/event/outbox records, SSE replay, and
-the bundled cockpit fallback. `main.py` and `backend.server.py` are not
-production owners; their explicit compatibility/demo commands are quarantined.
+tool registry, SQLite/PostgreSQL repository, Redis-backed shared rate limits,
+audit/event/outbox records, SSE replay, and the bundled cockpit fallback.
+`main.py` and `backend.server.py` are not production owners; their explicit
+compatibility/demo commands are quarantined.
 
 ```text
 browser / Electron
@@ -21,7 +22,9 @@ browser / Electron
 backend.app (ASGI)
   identity -> policy -> intent/plan -> broker -> evidence
         |                    |
-        +---- SQLite ---------+---- events + durable outbox
+        +---- PostgreSQL/SQLite ---- events + durable outbox
+              |
+              +---- Redis (authenticated shared rate limits)
 ```
 
 The control plane is server-authoritative. A UI route, model response, voice
@@ -46,8 +49,9 @@ not imply that a capability is live.
 
 ## Profiles
 
-Local uses loopback-oriented configuration and SQLite. Staging and production
-configuration require an explicit PostgreSQL URL, external secret provider,
-and managed backup policy; the current reference binary intentionally refuses
-to start those profiles until the production repository adapter exists. This is
-a deliberate NO-GO boundary, not a claim of PostgreSQL readiness.
+Local defaults remain portable, while this checkout can use the authenticated
+shared PostgreSQL and Redis services through its private generated `.env`.
+Staging and production configuration require explicit PostgreSQL and Redis
+URLs, an external secret provider, and a managed backup policy. The repository
+adapter is implemented and locally smoke-tested; staging deployment, managed
+secrets/backups, and rollback evidence remain release gates.

@@ -8,8 +8,9 @@
 
 > **Runtime authority:** The design below is a target architecture. The
 > executable contract is [ZASI_IMPLEMENTATION_SPECIFICATION.md](ZASI_IMPLEMENTATION_SPECIFICATION.md).
-> The current reference application is authenticated, scoped, local SQLite,
-> and read-only/assistive by default. Hardware, external writes, research
+> The current reference application is authenticated, scoped, and backed by
+> local SQLite or an authenticated PostgreSQL/Redis path; it is
+> read-only/assistive by default. Hardware, external writes, research
 > execution, runtime self-modification, and unverified formal/cryptographic
 > claims are not enabled merely because this document describes them.
 
@@ -66,11 +67,11 @@ This is a source inspection snapshot, not a production-readiness claim. It preve
 
 | Repository surface | Observed current behavior | v33 interpretation |
 |---|---|---|
-| `backend/app.py` | Authoritative FastAPI/ASGI owner with fail-closed session authentication, typed routes, policy/broker dispatch, schema-7 SQLite state, durable SSE replay/resync, and bundled cockpit serving. | Current governed reference slice; production profiles remain blocked until the PostgreSQL/managed-operations path is implemented and evidenced. |
+| `backend/app.py` | Authoritative FastAPI/ASGI owner with fail-closed session authentication, typed routes, policy/broker dispatch, schema-7 SQLite/PostgreSQL state, Redis-backed shared rate limits, durable SSE replay/resync, and bundled cockpit serving. | Current governed reference slice; staging/production remain blocked until managed operations and deployment evidence are supplied. |
 | `backend/server.py` | Legacy standard-library compatibility server remains isolated from the authoritative import path; its historical WebSocket, catalog, chat, and mutation surfaces are not the production owner. | Compatibility/research edge only; do not use it as production evidence. |
 | `web/static/app.jsx` | React 18 + React Router cockpit source uses the authenticated v2 session, snapshot, capability registry, and SSE event feed. The Vite output is the runtime bundle; no CDN runtime is required. | Current cockpit surface for Observe/Assist and governed command presentation; voice, humanoid, and engineering visuals remain disclosure-bound. |
 | `src/javis_voice_multimodal.py` | Voice, CAD, visual, and briefing dataclasses remain adapter/fixture contracts. Server-owned verification is required; unavailable and unverified outputs are explicit. | Adapter contract and test fixture source, not evidence of real STT, anti-replay biometrics, CAD parsing, or visual analysis. |
-| SQLite state | `ControlPlaneStore` persists tenants, principals, devices, sessions, capabilities, intents, plans, approvals, runs, actions, evidence, audit, events, outbox, rate limits, artifacts, memory, briefings, and sequences. | Current local/reference repository; PostgreSQL multi-process implementation is a release blocker. |
+| SQLite/PostgreSQL state | `ControlPlaneStore` and `PostgresControlPlaneStore` persist tenants, principals, devices, sessions, capabilities, intents, plans, approvals, runs, actions, evidence, audit, events, outbox, rate limits, artifacts, memory, briefings, and sequences. Redis provides authenticated shared rate-limit coordination. | Local SQLite and shared PostgreSQL/Redis paths are implemented; managed backup, staging, and multi-process deployment evidence remain release gates. |
 | `/api/tick`, `/api/execute/{key}`, `/api/mutate`, `/api/rsi/upgrade` | Compatibility routes are retired with typed 410 responses; no privileged GET path is used by the authoritative app. | Preserve the safe migration response and use v2 typed plans/broker for future capability work. |
 | `docs/javis/*.mp4` | Reference recordings only; no executable contract, telemetry, or acceptance evidence. | Use for UX acceptance scenarios and visual language, never for capability verification. |
 
@@ -1525,7 +1526,7 @@ independently verified.
 | `/api/*` | Python compatibility responses | Read-only disclosures or typed retirement responses; not a side-effect owner. |
 | `/ws` | Historical raw realtime telemetry broadcaster | Not used by the authoritative cockpit; optional governed WebSocket remains a future adapter. |
 | `/api/jarvis/stream` | Compatibility response stream | Adapter/demo boundary; a delayed text stream is not durable run streaming. |
-| SQLite state store | Control-plane repository | Local implementation for sessions, devices, plans, runs, evidence, audit, events, outbox, memory, artifacts, and sequences; not the production PostgreSQL path. |
+| SQLite/PostgreSQL state store | Control-plane repository | SQLite local implementation plus PostgreSQL multi-process adapter for sessions, devices, plans, runs, evidence, audit, events, outbox, memory, artifacts, and sequences. |
 | `src/javis_voice_multimodal.py` | Typed multimodal façade and deterministic fixtures | Simulator/adapter; it is not evidence of real STT, speaker authentication, CAD parsing, or visual model execution. |
 | MCP server/transports | Governed `/api/v2/mcp` adapter | Discovery and enabled read-only calls use the same registry, policy, idempotency, audit, and evidence path. |
 | symbolic verifier / memory hypergraph / sandbox modules | Repository subsystem surfaces | Module-level evidence only; capability status must be proven per source-to-sink execution path. |
@@ -1536,9 +1537,9 @@ independently verified.
 
 The implementation order remains **contract first, then vertical slice**: the
 authenticated session, durable event stream, truth-labelled cockpit, brokered
-read-only action path, durable orchestration, and unavailable multimodal
-adapters are now represented in the reference slice; production connectors,
-PostgreSQL, and certified hardware remain release gates.
+read-only action path, durable orchestration, PostgreSQL/Redis service path, and
+unavailable multimodal adapters are now represented in the reference slice;
+managed production operations and certified hardware remain release gates.
 
 ---
 

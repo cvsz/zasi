@@ -24,8 +24,9 @@ encrypted/restorable backups, external delivery, hardware safety, formal or
 cryptographic assurance, or AGI/ASI capability.
 
 The release is `NO-GO` for public production use until the remaining mandatory
-H5/H7/H8 evidence is supplied: production repository and migration path,
-backup/restore and crash-recovery evidence, external egress worker and
+H5/H7/H8 evidence is supplied: managed production repository operations and
+multi-process migration/crash-recovery evidence, encrypted managed backup/restore,
+external egress worker and
 dead-letter integration, hosted release provenance, vulnerability/container
 scans, staging canary, rollback observation, and independent verification.
 Local wheel, sdist, SBOM, checksum, and GPG-signature verification now exists

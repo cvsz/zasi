@@ -21,11 +21,14 @@ curl -fsS http://127.0.0.1:8080/health/live
 curl -fsS http://127.0.0.1:8080/health/ready
 ```
 
-The API key is required at startup and is never committed. The direct local
-process uses `data/zasi_control_plane.db`; quarantined artifact files live
-outside the web bundle. Use `ControlPlaneStore.backup_to()` for a consistent
-SQLite backup and restore it into a clean validation environment before
-calling a backup usable.
+The API key is required at startup. The tracked example contains only a
+loopback-only generated example credential; shared service credentials are
+never committed. The private local configuration may point the direct process at the authenticated shared
+PostgreSQL and Redis services; the checked-in example remains portable SQLite.
+Quarantined artifact files live outside the web bundle. PostgreSQL profiles use
+`PostgresControlPlaneStore.backup_to()` for a custom-format dump; SQLite uses
+`ControlPlaneStore.backup_to()`. Restore into a clean validation environment
+before calling a backup usable.
 
 ## Container reference profile
 
@@ -72,6 +75,9 @@ session; process readiness is not user authorization.
 | `ZASI_HOST` / `ZASI_PORT` | Defaults `127.0.0.1` / `8080` |
 | `ZASI_CORS_ORIGINS` | Explicit non-wildcard allowlist |
 | `ZASI_DATABASE_PATH` | SQLite path; default under `data/` |
+| `ZASI_DATABASE_BACKEND` | `sqlite` for the portable default or `postgresql` for the shared multi-process repository |
+| `ZASI_DATABASE_URL` | Authenticated PostgreSQL URL when `ZASI_DATABASE_BACKEND=postgresql` |
+| `ZASI_REDIS_URL` | Authenticated Redis URL for shared rate limits and readiness |
 | `ZASI_ARTIFACT_DIRECTORY` | Quarantine directory outside `web/dist` |
 | `ZASI_MAX_BODY` | Bounded request body, default 1 MiB |
 | `ZASI_ENABLE_EXTERNAL_EGRESS` | `no`; enabling requires an allowlist and separate review |
@@ -79,9 +85,10 @@ session; process readiness is not user authorization.
 | `ZASI_ENABLE_PHYSICAL_ACTUATION` | Always rejected by the reference profile |
 
 Staging/production settings additionally require `ZASI_DATABASE_BACKEND=postgresql`,
-a PostgreSQL `ZASI_DATABASE_URL`, an external `ZASI_SECRET_PROVIDER`, and a
-managed non-local `ZASI_BACKUP_POLICY`. The current app deliberately fails
-closed because it does not yet ship the PostgreSQL repository adapter.
+a PostgreSQL `ZASI_DATABASE_URL`, an authenticated `ZASI_REDIS_URL`, an
+external `ZASI_SECRET_PROVIDER`, and a managed non-local `ZASI_BACKUP_POLICY`.
+The application fails readiness closed when either shared dependency is
+unavailable.
 
 ## Operational gates
 

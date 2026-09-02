@@ -4,8 +4,8 @@
 > blueprint. It is not an implementation certificate and does not establish
 > ASI/AGI capability, formal proof, hyperscale infrastructure, physical
 > hardware, recursive self-improvement, or safe deployment. The current
-> reference profile is an authenticated, local SQLite, read-only/assistive
-> control plane; dynamic code execution, runtime hot swap, physical actuation,
+> reference profile is an authenticated, local SQLite or PostgreSQL/Redis,
+> read-only/assistive control plane; dynamic code execution, runtime hot swap, physical actuation,
 > and unverified proof claims remain disabled or unavailable. See
 > [ZASI_IMPLEMENTATION_SPECIFICATION.md](ZASI_IMPLEMENTATION_SPECIFICATION.md)
 > for the authoritative runtime contract.

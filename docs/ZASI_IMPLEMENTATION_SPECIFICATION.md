@@ -6,8 +6,9 @@ Authority: companion specification to ZASI_FULL_ARCHITECTURE.md
 Scope: implementation, security hardening, verification, and release gates
 Change posture: normative contract with source, test, and release evidence tracked in this revision
 
-Current release boundary: the repository implements a local SQLite reference
-control plane. It is not a production-ready PostgreSQL deployment, external
+Current release boundary: the repository implements local SQLite and
+authenticated PostgreSQL/Redis reference paths. It is not a production-ready
+managed deployment, external
 connector service, hardware controller, formal-proof service, or ASI/AGI
 runtime. Any capability outside the verified reference slice remains disabled,
 simulated, research_only, or unavailable.
@@ -122,11 +123,11 @@ These results establish a baseline only. They do not prove authorization, tenant
 The current tree now contains the first governed vertical slice described in
 Section 2. `backend.app` is the sole authoritative ASGI owner; it initializes
 the durable `ControlPlaneStore`, registers code-owned tool manifests, and
-serves the bundled cockpit. The repository schema is version 7. SQLite is
-implemented for the local/reference profile. Staging and production settings
-require a PostgreSQL URL, an external secret provider, and a managed backup
-policy, but the reference application deliberately refuses to start those
-profiles until a PostgreSQL repository adapter is supplied.
+serves the bundled cockpit. The repository schema is version 7. SQLite and
+the authenticated PostgreSQL adapter are implemented; Redis supplies shared
+rate-limit coordination and readiness. Staging and production settings still
+require explicit service URLs, an external secret provider, and a managed
+backup policy.
 
 Implemented local controls include fail-closed bootstrap authentication,
 hashed session credentials, tenant-scoped repositories, device challenge
@@ -1689,15 +1690,15 @@ Every capability that cannot complete this path remains disabled, simulated, res
 Evidence capture date: **2026-09-02 UTC**. The results below distinguish local
 working-tree evidence, the signed implementation commits, hosted PR checks, and
 unverified deployment gates. The implementation branch is
-`0e0a469` and PR [#29](https://github.com/cvsz/zasi/pull/29) has passed its
+`d5b7160` before the PostgreSQL/Redis hardening increment; PR [#29](https://github.com/cvsz/zasi/pull/29) passed its
 hosted checks. There is no staging deployment, production checkout, or
 production release authorization. The existing `.coverage` deletion is
 preserved and is not part of the implementation claim.
 
 | Command or inspection | Observed result | Evidence class |
 |---|---|---|
-| `python3 -m unittest discover -s tests -q` | 215 tests passed | Local functional regression |
-| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 215 tests passed; no unclosed SQLite warning | Local resource-lifecycle regression |
+| `python3 -m unittest discover -s tests -q` | 225 tests passed, 2 optional live-service checks skipped | Local functional regression |
+| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 225 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
 | Focused control-plane/security suite (`tests.test_control_plane_core`, `tests.test_control_plane_broker`, `tests.test_control_plane_api`, `tests.test_security_hardening`, `tests.test_egress_security`) | Passed, including memory-hard API-key verification and TLS 1.2 floor tests | Local governed/security regression |
 | `python3 -m unittest tests.test_api -q` | 8 legacy compatibility tests passed, including retired webhook and truthful legacy OpenAPI assertions | Local migration-surface regression |
 | `python3 -m compileall -q backend src scripts tests main.py` | Passed | Local syntax check |
@@ -1705,6 +1706,9 @@ preserved and is not part of the implementation claim.
 | `node --check electron/main.js` | Passed | Local Electron syntax check |
 | `npm run build` | Vite production bundle passed; emitted a chunk-size advisory | Local frontend build |
 | `python3 -m build` | Source distribution and wheel build passed | Local package build |
+| `ZASI_DATABASE_BACKEND=postgresql` with `PostgresControlPlaneStore` against the shared cluster | Schema 7 initialization, integrity check, authenticated session, memory write/delete, readiness, and custom-format backup catalog smoke passed | Local PostgreSQL integration |
+| `ZASI_REDIS_URL` with `RedisRuntime` against the shared ACL user | Authenticated ping, atomic namespaced rate-limit, and ASGI request smoke passed; unauthenticated default access returns `NOAUTH` | Local Redis integration |
+| Private `.env` service credential shape | Mode `600`; `zasi` PostgreSQL/Redis URLs and `PGPASSWORD`/`REDIS_PASSWORD` contain operator-supplied high-entropy hex material; the value is ignored by Git and absent from tracked source | Local secret-handling inspection |
 | `npm audit --omit=dev --json` | No high/critical findings; two moderate React Router findings remain and the automated fix requires a major v7 migration | Local dependency audit |
 | `docker compose config` | Passed with explicit local API key/CORS inputs | Local configuration rendering |
 | ASGI smoke: session bootstrap, authenticated OpenAPI, header-based SSE resume, `/health/live`, `/health/ready`, `/`, and an unknown API route | Session `201`; authenticated OpenAPI `200`; SSE resume `200` with `stream.end`; liveness/readiness/root `200`; unknown API route returned JSON 404 | Local HTTP smoke |
@@ -1712,7 +1716,7 @@ preserved and is not part of the implementation claim.
 | Hardened container smoke | `/health/ready` returned `ready`; UID `10001:10001`, read-only rootfs, all capabilities dropped, and no-new-privileges verified; external egress and physical actuation reported disabled | Local runtime/container evidence |
 | `python3 scripts/generate_sbom.py --output dist/zasi-sbom.cdx.json --resolve-installed` | CycloneDX 1.5 SBOM generated with 342 components and deterministic serial | Local supply-chain evidence |
 | `sha256sum --check dist/SHA256SUMS` and GPG verification of wheel, sdist, and SBOM signatures | Passed with the configured cvsz signing identity | Local artifact integrity evidence |
-| PR #29 hosted checks for commit `0e0a469` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12, lint, distribution, and Docker checks passed; PR package publication skipped | Hosted CI evidence |
+| PR #29 hosted checks for commit `d5b7160` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12, lint, distribution, and Docker checks passed; PR package publication skipped | Hosted CI evidence before this unpushed increment |
 | GitHub Issue #18 | Remains `OPEN`; PR/evidence comment recorded at [#issuecomment-5503404521](https://github.com/cvsz/zasi/issues/18#issuecomment-5503404521) | External roadmap status, not release approval |
 
 The `ResourceWarning` regression test is intentionally retained. The original
@@ -1731,7 +1735,7 @@ the acceptance criteria in [#9](https://github.com/cvsz/zasi/issues/9) through
 | Issue / phase | Current status | Evidence and remaining release gate |
 |---|---|---|
 | [#9 / P0](https://github.com/cvsz/zasi/issues/9) | Partial, local | `backend.app` is the authoritative ASGI owner; fail-closed settings, readiness, compatibility quarantine, and registry-derived status exist. Duplicate-port ownership detection and hosted runtime ownership evidence remain open. |
-| [#10 / P1](https://github.com/cvsz/zasi/issues/10) | Partial, local SQLite | Tenant-scoped identity, hashed sessions, devices, audit, events, rate limits, migrations, and backup API exist. PostgreSQL adapter, external identity/secrets, multi-process restart proof, and managed backup/restore remain open. |
+| [#10 / P1](https://github.com/cvsz/zasi/issues/10) | Partial, local PostgreSQL/Redis | Tenant-scoped identity, hashed sessions, devices, audit, events, rate limits, schema-7 migrations, PostgreSQL repository, Redis coordination, authenticated API smoke, and custom-format backup generation exist. External identity/managed secrets, multi-process restart proof, encrypted managed backup/restore, and staging operations remain open. |
 | [#11 / P2](https://github.com/cvsz/zasi/issues/11) | Partial, local | Typed intents/plans, deterministic risk policy, exact-digest approval records, evidence provenance, and governed MCP calls exist. Full R0–R5 capability inventory, production verification procedures, and complete claim-to-evidence coverage remain open. |
 | [#12 / P3](https://github.com/cvsz/zasi/issues/12) | Partial, local | Transactional events/outbox, leased claims, authenticated SSE replay, cursor validation, retention gaps, and snapshot resync exist. A production worker, 10,000-event performance evidence, backpressure policy, and multi-process delivery proof remain open. |
 | [#13 / P4](https://github.com/cvsz/zasi/issues/13) | Partial, reference-only | Stable tool registry, request digests, run idempotency, approval gating, fail-closed dynamic execution, and trusted handlers exist. External action workers, reconciliation of unknown side effects, durable cancellation/timeout workers, and certified sandbox evidence remain open. |

@@ -5,7 +5,7 @@
 [![PyPI Downloads](https://img.shields.io/pypi/dm/zasi.svg?color=blue)](https://pypi.org/project/zasi/)
 [![npm](https://img.shields.io/npm/v/zasi-cockpit.svg?logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/zasi-cockpit)
 [![Subsystems](https://img.shields.io/badge/subsystems-176%20Online-green.svg)](docs/SUBSYSTEMS_REFERENCE.md)
-[![Tests](https://img.shields.io/badge/tests-215%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-225%20passing-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.14-blue.svg)](https://python.org)
 [![React](https://img.shields.io/badge/frontend-React%2018%20%2B%20React%20Router%20v6-61dafb.svg)](web/)
 [![Discussions](https://img.shields.io/badge/community-Discussions-orange.svg)](https://github.com/cvsz/zasi/discussions)
@@ -91,9 +91,13 @@ npm run build
 python3 -m build
 ```
 
-Local green tests do not prove staging deployment, PostgreSQL operation,
-external egress, hardware control, formal/cryptographic proof, or ASI/AGI
-capability. Those remain explicit release gates.
+The checked-in example contains only a generated loopback-only API credential
+and uses SQLite for a portable local baseline; it contains no shared-service
+passwords. This checkout's private `.env` is machine-generated and uses the
+shared authenticated PostgreSQL and Redis services; those credentials are
+never committed. Local green tests do not prove staging deployment, managed
+operations, external egress, hardware control, formal/cryptographic proof, or
+ASI/AGI capability. Those remain explicit release gates.
 
 ## Documentation
 
