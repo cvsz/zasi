@@ -14,6 +14,9 @@ from typing import Any, Dict, List, Optional, Tuple
 from .identity import hash_token
 
 
+CURRENT_SCHEMA_VERSION = 8
+
+
 class NotFoundError(LookupError):
     """Requested object does not exist in the current repository."""
 
@@ -51,6 +54,16 @@ def _parse_utc_timestamp(value: Any, field_name: str) -> datetime:
     if parsed.tzinfo is None:
         raise ValueError(f"{field_name} must include a timezone")
     return parsed.astimezone(timezone.utc)
+
+
+def _normalize_optional_timestamp(value: Any, field_name: str) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            raise ValueError(f"{field_name} must include a timezone")
+        return _timestamp(value)
+    return _timestamp(_parse_utc_timestamp(value, field_name))
 
 
 class ControlPlaneStore:
@@ -320,6 +333,48 @@ class ControlPlaneStore:
                     finished_at TEXT,
                     UNIQUE (tenant_id, idempotency_key)
                 );
+                CREATE TABLE IF NOT EXISTS goals (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    principal_id TEXT NOT NULL REFERENCES principals(id),
+                    title TEXT NOT NULL,
+                    description TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL,
+                    priority INTEGER NOT NULL DEFAULT 50,
+                    due_at TEXT,
+                    metadata_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    completed_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS tasks (
+                    id TEXT PRIMARY KEY,
+                    goal_id TEXT NOT NULL REFERENCES goals(id),
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    principal_id TEXT NOT NULL REFERENCES principals(id),
+                    title TEXT NOT NULL,
+                    instruction TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    priority INTEGER NOT NULL DEFAULT 50,
+                    not_before TEXT,
+                    attempt_count INTEGER NOT NULL DEFAULT 0,
+                    max_attempts INTEGER NOT NULL DEFAULT 3,
+                    idempotency_key TEXT NOT NULL,
+                    lease_owner TEXT,
+                    lease_token TEXT,
+                    lease_until TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    completed_at TEXT,
+                    result_json TEXT NOT NULL DEFAULT '{}',
+                    UNIQUE (tenant_id, idempotency_key)
+                );
+                CREATE TABLE IF NOT EXISTS task_dependencies (
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    task_id TEXT NOT NULL REFERENCES tasks(id),
+                    depends_on_task_id TEXT NOT NULL REFERENCES tasks(id),
+                    PRIMARY KEY (task_id, depends_on_task_id)
+                );
                 CREATE INDEX IF NOT EXISTS idx_sessions_tenant
                     ON sessions(tenant_id, status, expires_at);
                 CREATE INDEX IF NOT EXISTS idx_events_tenant_sequence
@@ -336,6 +391,12 @@ class ControlPlaneStore:
                     ON sequences(tenant_id, status, updated_at);
                 CREATE INDEX IF NOT EXISTS idx_sequence_runs_tenant_idempotency
                     ON sequence_runs(tenant_id, idempotency_key);
+                CREATE INDEX IF NOT EXISTS idx_goals_tenant_status
+                    ON goals(tenant_id, status, updated_at);
+                CREATE INDEX IF NOT EXISTS idx_tasks_tenant_status_due
+                    ON tasks(tenant_id, status, not_before, updated_at);
+                CREATE INDEX IF NOT EXISTS idx_task_dependencies_task
+                    ON task_dependencies(tenant_id, task_id);
                 """
             )
             tenant_columns = {
@@ -449,6 +510,12 @@ class ControlPlaneStore:
                 connection.execute(
                     "ALTER TABLE runs ADD COLUMN request_digest TEXT NOT NULL DEFAULT ''"
                 )
+            task_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(tasks)").fetchall()
+            }
+            if task_columns and "lease_owner" not in task_columns:
+                connection.execute("ALTER TABLE tasks ADD COLUMN lease_owner TEXT")
             schema_row = connection.execute(
                 "SELECT value FROM schema_meta WHERE key = 'schema_version'"
             ).fetchone()
@@ -457,10 +524,11 @@ class ControlPlaneStore:
                     current_schema = int(schema_row["value"])
                 except (TypeError, ValueError) as exc:
                     raise RuntimeError("schema version metadata is invalid") from exc
-                if current_schema > 7:
+                if current_schema > CURRENT_SCHEMA_VERSION:
                     raise RuntimeError("database schema is newer than this application")
             connection.execute(
-                "INSERT OR REPLACE INTO schema_meta(key, value) VALUES('schema_version', '7')"
+                "INSERT OR REPLACE INTO schema_meta(key, value) VALUES('schema_version', ?)",
+                (str(CURRENT_SCHEMA_VERSION),),
             )
             self._connection = connection
 
@@ -2128,6 +2196,610 @@ class ControlPlaneStore:
                 connection.execute("ROLLBACK")
                 raise
         return {"memory_id": memory_id, "status": "deleted", "deleted_at": now}
+
+    @staticmethod
+    def _validate_worker_id(worker_id: str) -> None:
+        if (
+            not isinstance(worker_id, str)
+            or not worker_id
+            or len(worker_id) > 128
+            or any(ord(char) < 0x20 or ord(char) == 0x7F for char in worker_id)
+        ):
+            raise ValueError("worker_id must be non-empty and bounded")
+
+    @staticmethod
+    def _validate_idempotency_key(idempotency_key: str) -> None:
+        if (
+            not isinstance(idempotency_key, str)
+            or not idempotency_key
+            or len(idempotency_key) > 256
+            or any(ord(char) < 0x20 or ord(char) == 0x7F for char in idempotency_key)
+        ):
+            raise ValueError("idempotency_key must be non-empty and bounded")
+
+    @staticmethod
+    def _validate_principal_locked(connection: Any, tenant_id: str, principal_id: str) -> None:
+        row = connection.execute(
+            "SELECT tenant_id, status FROM principals WHERE id = ?", (principal_id,)
+        ).fetchone()
+        if row is None:
+            raise NotFoundError("principal not found")
+        if row["tenant_id"] != tenant_id:
+            raise ScopeViolation("principal is outside tenant scope")
+        if row["status"] != "active":
+            raise ConflictError("principal is not active")
+
+    @staticmethod
+    def _goal_record(row: Any) -> Dict[str, Any]:
+        return {
+            "goal_id": row["id"],
+            "tenant_id": row["tenant_id"],
+            "principal_id": row["principal_id"],
+            "title": row["title"],
+            "description": row["description"],
+            "status": row["status"],
+            "priority": row["priority"],
+            "due_at": row["due_at"],
+            "metadata": json.loads(row["metadata_json"]),
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+            "completed_at": row["completed_at"],
+        }
+
+    @staticmethod
+    def _task_record(
+        row: Any,
+        dependencies: List[str],
+        include_lease_token: bool = False,
+    ) -> Dict[str, Any]:
+        record = {
+            "task_id": row["id"],
+            "goal_id": row["goal_id"],
+            "tenant_id": row["tenant_id"],
+            "principal_id": row["principal_id"],
+            "title": row["title"],
+            "instruction": row["instruction"],
+            "status": row["status"],
+            "priority": row["priority"],
+            "not_before": row["not_before"],
+            "attempt_count": row["attempt_count"],
+            "max_attempts": row["max_attempts"],
+            "idempotency_key": row["idempotency_key"],
+            "lease_until": row["lease_until"],
+            "dependencies": dependencies,
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+            "completed_at": row["completed_at"],
+            "result": json.loads(row["result_json"]),
+        }
+        if include_lease_token:
+            record["lease_token"] = row["lease_token"]
+        return record
+
+    @staticmethod
+    def _task_dependencies_locked(connection: Any, task_id: str, tenant_id: str) -> List[str]:
+        rows = connection.execute(
+            "SELECT depends_on_task_id FROM task_dependencies "
+            "WHERE task_id = ? AND tenant_id = ? ORDER BY depends_on_task_id",
+            (task_id, tenant_id),
+        ).fetchall()
+        return [row["depends_on_task_id"] for row in rows]
+
+    def create_goal(
+        self,
+        goal_id: str,
+        tenant_id: str,
+        principal_id: str,
+        title: str,
+        description: str = "",
+        priority: int = 50,
+        due_at: Any = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        if not isinstance(title, str) or not title.strip() or len(title) > 256:
+            raise ValueError("goal title must be non-empty and bounded")
+        if not isinstance(description, str) or len(description) > 4096:
+            raise ValueError("goal description is too long")
+        if isinstance(priority, bool) or not isinstance(priority, int) or not 0 <= priority <= 100:
+            raise ValueError("goal priority must be between 0 and 100")
+        if metadata is None:
+            metadata = {}
+        if not isinstance(metadata, dict):
+            raise ValueError("goal metadata must be an object")
+        metadata_json = json.dumps(
+            metadata, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+        )
+        due = _normalize_optional_timestamp(due_at, "due_at")
+        now = _timestamp(_utcnow())
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._validate_principal_locked(connection, tenant_id, principal_id)
+                connection.execute(
+                    "INSERT INTO goals("
+                    "id, tenant_id, principal_id, title, description, status, priority, due_at, "
+                    "metadata_json, created_at, updated_at"
+                    ") VALUES(?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)",
+                    (
+                        goal_id,
+                        tenant_id,
+                        principal_id,
+                        title,
+                        description,
+                        priority,
+                        due,
+                        metadata_json,
+                        now,
+                        now,
+                    ),
+                )
+                payload = {
+                    "goal_id": goal_id,
+                    "status": "active",
+                    "priority": priority,
+                }
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{goal_id}:created:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="principal",
+                    actor_id=principal_id,
+                    action="goal.created",
+                    target=goal_id,
+                    outcome="success",
+                    event_type="goal.created",
+                    aggregate_kind="goal",
+                    aggregate_id=goal_id,
+                    payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                connection.execute("COMMIT")
+            except Exception as error:
+                connection.execute("ROLLBACK")
+                if _is_unique_integrity_error(error):
+                    raise ConflictError("goal conflicts with an existing record") from error
+                raise
+        return self.get_goal(goal_id, tenant_id)
+
+    def get_goal(self, goal_id: str, tenant_id: str) -> Dict[str, Any]:
+        with self._lock:
+            row = self._conn().execute(
+                "SELECT * FROM goals WHERE id = ?", (goal_id,)
+            ).fetchone()
+        if row is None:
+            raise NotFoundError("goal not found")
+        if row["tenant_id"] != tenant_id:
+            raise ScopeViolation("goal is outside tenant scope")
+        return self._goal_record(row)
+
+    def list_goals(
+        self, tenant_id: str, status: Optional[str] = None, limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        if not 1 <= limit <= 1000:
+            raise ValueError("invalid goal limit")
+        if status is not None and status not in {"active", "completed", "cancelled"}:
+            raise ValueError("invalid goal status")
+        statement = "SELECT * FROM goals WHERE tenant_id = ?"
+        parameters: List[Any] = [tenant_id]
+        if status is not None:
+            statement += " AND status = ?"
+            parameters.append(status)
+        statement += " ORDER BY priority, created_at, id LIMIT ?"
+        parameters.append(limit)
+        with self._lock:
+            rows = self._conn().execute(statement, parameters).fetchall()
+        return [self._goal_record(row) for row in rows]
+
+    def create_task(
+        self,
+        task_id: str,
+        goal_id: str,
+        tenant_id: str,
+        principal_id: str,
+        title: str,
+        instruction: str,
+        idempotency_key: str,
+        priority: int = 50,
+        not_before: Any = None,
+        max_attempts: int = 3,
+        depends_on: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        if not isinstance(title, str) or not title.strip() or len(title) > 256:
+            raise ValueError("task title must be non-empty and bounded")
+        if not isinstance(instruction, str) or not instruction.strip() or len(instruction) > 16_384:
+            raise ValueError("task instruction must be non-empty and bounded")
+        if isinstance(priority, bool) or not isinstance(priority, int) or not 0 <= priority <= 100:
+            raise ValueError("task priority must be between 0 and 100")
+        if isinstance(max_attempts, bool) or not isinstance(max_attempts, int) or not 1 <= max_attempts <= 10:
+            raise ValueError("max_attempts must be between 1 and 10")
+        self._validate_idempotency_key(idempotency_key)
+        not_before_value = _normalize_optional_timestamp(not_before, "not_before")
+        dependency_ids = list(depends_on or [])
+        if len(dependency_ids) > 64:
+            raise ValueError("a task cannot have more than 64 dependencies")
+        if len(set(dependency_ids)) != len(dependency_ids):
+            raise ValueError("task dependencies must be unique")
+        for dependency_id in dependency_ids:
+            if (
+                not isinstance(dependency_id, str)
+                or not dependency_id
+                or len(dependency_id) > 128
+                or any(ord(char) < 0x20 or ord(char) == 0x7F for char in dependency_id)
+            ):
+                raise ValueError("task dependency identifiers are invalid")
+        if task_id in dependency_ids:
+            raise ValueError("a task cannot depend on itself")
+        now = _timestamp(_utcnow())
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._validate_principal_locked(connection, tenant_id, principal_id)
+                goal = connection.execute(
+                    "SELECT tenant_id, status FROM goals WHERE id = ?", (goal_id,)
+                ).fetchone()
+                if goal is None:
+                    raise NotFoundError("goal not found")
+                if goal["tenant_id"] != tenant_id:
+                    raise ScopeViolation("goal is outside tenant scope")
+                if goal["status"] != "active":
+                    raise ConflictError("tasks cannot be added to an inactive goal")
+                if dependency_ids:
+                    placeholders = ",".join("?" for _ in dependency_ids)
+                    dependency_rows = connection.execute(
+                        "SELECT id, tenant_id, goal_id FROM tasks "
+                        f"WHERE id IN ({placeholders})",
+                        dependency_ids,
+                    ).fetchall()
+                    dependencies_by_id = {row["id"]: row for row in dependency_rows}
+                    for dependency_id in dependency_ids:
+                        dependency = dependencies_by_id.get(dependency_id)
+                        if dependency is None:
+                            raise NotFoundError("task dependency not found")
+                        if dependency["tenant_id"] != tenant_id:
+                            raise ScopeViolation("task dependency is outside tenant scope")
+                        if dependency["goal_id"] != goal_id:
+                            raise ConflictError("task dependency belongs to another goal")
+                connection.execute(
+                    "INSERT INTO tasks("
+                    "id, goal_id, tenant_id, principal_id, title, instruction, status, priority, "
+                    "not_before, attempt_count, max_attempts, idempotency_key, created_at, updated_at"
+                    ") VALUES(?, ?, ?, ?, ?, ?, 'queued', ?, ?, 0, ?, ?, ?, ?)",
+                    (
+                        task_id,
+                        goal_id,
+                        tenant_id,
+                        principal_id,
+                        title,
+                        instruction,
+                        priority,
+                        not_before_value,
+                        max_attempts,
+                        idempotency_key,
+                        now,
+                        now,
+                    ),
+                )
+                for dependency_id in dependency_ids:
+                    connection.execute(
+                        "INSERT INTO task_dependencies(tenant_id, task_id, depends_on_task_id) "
+                        "VALUES(?, ?, ?)",
+                        (tenant_id, task_id, dependency_id),
+                    )
+                payload = {
+                    "task_id": task_id,
+                    "goal_id": goal_id,
+                    "status": "queued",
+                    "priority": priority,
+                    "dependencies": dependency_ids,
+                }
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{task_id}:created:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="principal",
+                    actor_id=principal_id,
+                    action="task.created",
+                    target=task_id,
+                    outcome="success",
+                    event_type="task.created",
+                    aggregate_kind="task",
+                    aggregate_id=task_id,
+                    payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                connection.execute("COMMIT")
+            except Exception as error:
+                connection.execute("ROLLBACK")
+                if _is_unique_integrity_error(error):
+                    raise ConflictError("task conflicts with an existing record") from error
+                raise
+        return self.get_task(task_id, tenant_id)
+
+    def get_task(self, task_id: str, tenant_id: str) -> Dict[str, Any]:
+        with self._lock:
+            connection = self._conn()
+            row = connection.execute(
+                "SELECT * FROM tasks WHERE id = ?", (task_id,)
+            ).fetchone()
+            if row is None:
+                raise NotFoundError("task not found")
+            if row["tenant_id"] != tenant_id:
+                raise ScopeViolation("task is outside tenant scope")
+            dependencies = self._task_dependencies_locked(connection, task_id, tenant_id)
+        return self._task_record(row, dependencies)
+
+    def list_tasks(self, goal_id: str, tenant_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+        if not 1 <= limit <= 1000:
+            raise ValueError("invalid task limit")
+        with self._lock:
+            connection = self._conn()
+            goal = connection.execute(
+                "SELECT tenant_id FROM goals WHERE id = ?", (goal_id,)
+            ).fetchone()
+            if goal is None:
+                raise NotFoundError("goal not found")
+            if goal["tenant_id"] != tenant_id:
+                raise ScopeViolation("goal is outside tenant scope")
+            rows = connection.execute(
+                "SELECT * FROM tasks WHERE goal_id = ? AND tenant_id = ? "
+                "ORDER BY priority, created_at, id LIMIT ?",
+                (goal_id, tenant_id, limit),
+            ).fetchall()
+            records = [
+                self._task_record(
+                    row,
+                    self._task_dependencies_locked(connection, row["id"], tenant_id),
+                )
+                for row in rows
+            ]
+        return records
+
+    def claim_due_task(
+        self,
+        task_id: str,
+        tenant_id: str,
+        worker_id: str,
+        lease_seconds: int = 60,
+        now: Optional[datetime] = None,
+    ) -> Optional[Dict[str, Any]]:
+        self._validate_worker_id(worker_id)
+        if isinstance(lease_seconds, bool) or not isinstance(lease_seconds, int) or not 1 <= lease_seconds <= 3600:
+            raise ValueError("lease_seconds must be between 1 and 3600")
+        now_dt = _utcnow() if now is None else now
+        if not isinstance(now_dt, datetime) or now_dt.tzinfo is None:
+            raise ValueError("now must include a timezone")
+        now_value = _timestamp(now_dt)
+        lease_until = _timestamp(now_dt + timedelta(seconds=lease_seconds))
+        lease_token = hash_token(
+            f"{tenant_id}:{task_id}:{worker_id}:{now_value}:{os.urandom(32).hex()}"
+        )
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                row = connection.execute(
+                    "SELECT * FROM tasks WHERE id = ?", (task_id,)
+                ).fetchone()
+                if row is None:
+                    raise NotFoundError("task not found")
+                if row["tenant_id"] != tenant_id:
+                    raise ScopeViolation("task is outside tenant scope")
+                lease_expired = (
+                    row["status"] == "running"
+                    and row["lease_until"] is not None
+                    and row["lease_until"] <= now_value
+                )
+                claimable_status = row["status"] in {"queued", "retry"} or lease_expired
+                not_before_passed = row["not_before"] is None or row["not_before"] <= now_value
+                dependencies_pending = connection.execute(
+                    "SELECT COUNT(*) AS count FROM task_dependencies d "
+                    "JOIN tasks dependency ON dependency.id = d.depends_on_task_id "
+                    "WHERE d.tenant_id = ? AND d.task_id = ? AND dependency.status != 'completed'",
+                    (tenant_id, task_id),
+                ).fetchone()
+                eligible = (
+                    claimable_status
+                    and not_before_passed
+                    and int(row["attempt_count"]) < int(row["max_attempts"])
+                    and int(dependencies_pending["count"]) == 0
+                )
+                if not eligible:
+                    connection.execute("ROLLBACK")
+                    return None
+                updated = connection.execute(
+                    "UPDATE tasks SET status = 'running', attempt_count = attempt_count + 1, "
+                    "lease_owner = ?, lease_token = ?, lease_until = ?, updated_at = ? "
+                    "WHERE id = ? AND tenant_id = ? AND attempt_count < max_attempts AND "
+                    "(status IN ('queued', 'retry') OR "
+                    "(status = 'running' AND lease_until IS NOT NULL AND lease_until <= ?)) AND "
+                    "(not_before IS NULL OR not_before <= ?)",
+                    (
+                        worker_id,
+                        lease_token,
+                        lease_until,
+                        now_value,
+                        task_id,
+                        tenant_id,
+                        now_value,
+                        now_value,
+                    ),
+                )
+                if getattr(updated, "rowcount", 1) != 1:
+                    connection.execute("ROLLBACK")
+                    return None
+                claimed = connection.execute(
+                    "SELECT * FROM tasks WHERE id = ? AND tenant_id = ?",
+                    (task_id, tenant_id),
+                ).fetchone()
+                payload = {
+                    "task_id": task_id,
+                    "status": "running",
+                    "attempt_count": int(claimed["attempt_count"]),
+                    "lease_until": lease_until,
+                }
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{task_id}:claimed:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="worker",
+                    actor_id=worker_id,
+                    action="task.claimed",
+                    target=task_id,
+                    outcome="success",
+                    event_type="task.claimed",
+                    aggregate_kind="task",
+                    aggregate_id=task_id,
+                    payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    payload=payload,
+                    now=now_value,
+                    event_id=event_id,
+                )
+                record = self._task_record(
+                    claimed,
+                    self._task_dependencies_locked(connection, task_id, tenant_id),
+                    include_lease_token=True,
+                )
+                connection.execute("COMMIT")
+                return record
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+
+    def complete_task(
+        self,
+        task_id: str,
+        tenant_id: str,
+        worker_id: str,
+        lease_token: str,
+        result: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        self._validate_worker_id(worker_id)
+        if not isinstance(lease_token, str) or not lease_token or len(lease_token) > 512:
+            raise ValueError("lease_token is invalid")
+        if not isinstance(result, dict):
+            raise ValueError("task result must be an object")
+        result_json = json.dumps(
+            result, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+        )
+        now = _timestamp(_utcnow())
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                row = connection.execute(
+                    "SELECT * FROM tasks WHERE id = ?", (task_id,)
+                ).fetchone()
+                if row is None:
+                    raise NotFoundError("task not found")
+                if row["tenant_id"] != tenant_id:
+                    raise ScopeViolation("task is outside tenant scope")
+                if row["status"] != "running":
+                    raise ConflictError("task is not running")
+                if row["lease_until"] is None or row["lease_until"] <= now:
+                    raise ConflictError("task lease has expired")
+                if not hmac.compare_digest(str(row["lease_owner"] or ""), worker_id):
+                    raise ConflictError("task lease belongs to another worker")
+                if not hmac.compare_digest(str(row["lease_token"] or ""), lease_token):
+                    raise ConflictError("task lease token is invalid")
+                updated = connection.execute(
+                    "UPDATE tasks SET status = 'completed', result_json = ?, completed_at = ?, "
+                    "updated_at = ?, lease_owner = NULL, lease_token = NULL, lease_until = NULL "
+                    "WHERE id = ? AND tenant_id = ? AND status = 'running' "
+                    "AND lease_owner = ? AND lease_token = ?",
+                    (result_json, now, now, task_id, tenant_id, worker_id, lease_token),
+                )
+                if getattr(updated, "rowcount", 1) != 1:
+                    raise ConflictError("task lease is no longer valid")
+                payload = {
+                    "task_id": task_id,
+                    "status": "completed",
+                    "attempt_count": int(row["attempt_count"]),
+                }
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{task_id}:completed:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="worker",
+                    actor_id=worker_id,
+                    action="task.completed",
+                    target=task_id,
+                    outcome="success",
+                    event_type="task.completed",
+                    aggregate_kind="task",
+                    aggregate_id=task_id,
+                    payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                goal = connection.execute(
+                    "SELECT id, status FROM goals WHERE id = ? AND tenant_id = ?",
+                    (row["goal_id"], tenant_id),
+                ).fetchone()
+                total_tasks = connection.execute(
+                    "SELECT COUNT(*) AS count FROM tasks WHERE goal_id = ? AND tenant_id = ?",
+                    (row["goal_id"], tenant_id),
+                ).fetchone()
+                incomplete_tasks = connection.execute(
+                    "SELECT COUNT(*) AS count FROM tasks WHERE goal_id = ? AND tenant_id = ? "
+                    "AND status != 'completed'",
+                    (row["goal_id"], tenant_id),
+                ).fetchone()
+                if (
+                    goal is not None
+                    and goal["status"] == "active"
+                    and int(total_tasks["count"]) > 0
+                    and int(incomplete_tasks["count"]) == 0
+                ):
+                    connection.execute(
+                        "UPDATE goals SET status = 'completed', completed_at = ?, updated_at = ? "
+                        "WHERE id = ? AND tenant_id = ? AND status = 'active'",
+                        (now, now, row["goal_id"], tenant_id),
+                    )
+                    goal_payload = {
+                        "goal_id": row["goal_id"],
+                        "status": "completed",
+                    }
+                    goal_event_id = "evt_" + hash_token(
+                        f"{tenant_id}:{row['goal_id']}:completed:{os.urandom(16).hex()}"
+                    )[:26]
+                    self._append_audited_event_locked(
+                        connection=connection,
+                        tenant_id=tenant_id,
+                        actor_kind="worker",
+                        actor_id=worker_id,
+                        action="goal.completed",
+                        target=row["goal_id"],
+                        outcome="success",
+                        event_type="goal.completed",
+                        aggregate_kind="goal",
+                        aggregate_id=row["goal_id"],
+                        payload_json=json.dumps(
+                            goal_payload, sort_keys=True, separators=(",", ":")
+                        ),
+                        payload=goal_payload,
+                        now=now,
+                        event_id=goal_event_id,
+                    )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        return self.get_task(task_id, tenant_id)
 
     def create_briefing(
         self,

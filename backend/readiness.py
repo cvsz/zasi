@@ -8,7 +8,7 @@ from typing import Any, Dict
 from backend.frontend_assets import frontend_dist_path
 from src.control_plane.config import Settings
 from src.control_plane.execution import ToolRegistry
-from src.control_plane.storage import ControlPlaneStore
+from src.control_plane.storage import CURRENT_SCHEMA_VERSION, ControlPlaneStore
 
 
 def probe(
@@ -20,7 +20,11 @@ def probe(
     """Return truthful process/dependency state without claiming capability health."""
     checks: Dict[str, str] = {}
     try:
-        checks["database"] = "ready" if store.integrity_check() and store.schema_version() == 7 else "failed"
+        checks["database"] = (
+            "ready"
+            if store.integrity_check() and store.schema_version() == CURRENT_SCHEMA_VERSION
+            else "failed"
+        )
     except Exception:
         checks["database"] = "failed"
     if settings.redis_url:
@@ -36,7 +40,7 @@ def probe(
     return {
         "status": "ready" if ready else "degraded",
         "profile": settings.profile,
-        "schema_version": 7,
+        "schema_version": CURRENT_SCHEMA_VERSION,
         "checks": checks,
         "registered_capabilities": len(registry.definitions()),
         "disclosure": "Readiness describes process and dependency state, not subsystem availability.",

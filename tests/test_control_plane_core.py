@@ -11,7 +11,12 @@ from src.control_plane.contracts import Goal, IntentCreateRequest
 from src.control_plane.events import OutboxDispatcher
 from src.control_plane.identity import hash_token
 from src.control_plane.policy import PolicyEngine
-from src.control_plane.storage import ConflictError, ControlPlaneStore, ScopeViolation
+from src.control_plane.storage import (
+    CURRENT_SCHEMA_VERSION,
+    ConflictError,
+    ControlPlaneStore,
+    ScopeViolation,
+)
 
 
 class ControlPlaneCoreTests(unittest.TestCase):
@@ -425,7 +430,7 @@ class ControlPlaneCoreTests(unittest.TestCase):
             store.backup_to(backup_path)
             restored = ControlPlaneStore(backup_path)
             restored.initialize()
-            self.assertEqual(restored.schema_version(), 7)
+            self.assertEqual(restored.schema_version(), CURRENT_SCHEMA_VERSION)
             self.assertTrue(restored.integrity_check())
             self.assertEqual(restored.latest_sequence("ten-a"), 1)
             restored.close()

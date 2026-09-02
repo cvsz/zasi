@@ -32,6 +32,7 @@ from src.control_plane.identity import hash_token, issue_id, issue_token, option
 from src.control_plane.policy import PolicyEngine
 from src.control_plane.redis_runtime import RedisRuntime
 from src.control_plane.storage import (
+    CURRENT_SCHEMA_VERSION,
     ConflictError,
     ControlPlaneStore,
     NotFoundError,
@@ -71,6 +72,43 @@ class BriefingRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     sources: list[str] = Field(default_factory=list, max_length=32)
+
+
+class GoalCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=256)
+    description: str = Field(default="", max_length=4096)
+    priority: int = Field(default=50, ge=0, le=100)
+    due_at: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class TaskCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=256)
+    instruction: str = Field(min_length=1, max_length=16_384)
+    idempotency_key: str = Field(min_length=1, max_length=256)
+    priority: int = Field(default=50, ge=0, le=100)
+    not_before: Optional[str] = None
+    max_attempts: int = Field(default=3, ge=1, le=10)
+    depends_on: list[str] = Field(default_factory=list, max_length=64)
+
+
+class TaskClaimRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    worker_id: str = Field(min_length=1, max_length=128)
+    lease_seconds: int = Field(default=60, ge=1, le=3600)
+
+
+class TaskCompleteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    worker_id: str = Field(min_length=1, max_length=128)
+    lease_token: SecretStr = Field(min_length=1, max_length=512)
+    result: Dict[str, Any] = Field(default_factory=dict)
 
 
 class DevicePairRequest(BaseModel):
@@ -974,6 +1012,191 @@ def create_app(
             raise HTTPException(
                 status_code=404,
                 detail={"code": "NOT_FOUND", "message": "Memory item not found."},
+            )
+
+    @app.post("/api/v2/goals", status_code=201)
+    async def create_goal(
+        payload: GoalCreateRequest,
+        request: Request,
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "workspace:write", "Goal writes are not permitted.")
+        try:
+            return request.app.state.store.create_goal(
+                goal_id=issue_id("goal"),
+                tenant_id=context.tenant_id,
+                principal_id=context.principal_id,
+                title=payload.title,
+                description=payload.description,
+                priority=payload.priority,
+                due_at=payload.due_at,
+                metadata=payload.metadata,
+            )
+        except (NotFoundError, ScopeViolation):
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Goal owner was not found."},
+            )
+        except ConflictError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "GOAL_CONFLICT", "message": str(exc)},
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "VALIDATION_ERROR", "message": str(exc)},
+            )
+
+    @app.get("/api/v2/goals")
+    async def list_goals(
+        status: Optional[str] = Query(default=None, max_length=32),
+        limit: int = Query(default=100, ge=1, le=1000),
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "workspace:read", "Goal visibility is not permitted.")
+        try:
+            goals = app.state.store.list_goals(context.tenant_id, status=status, limit=limit)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "VALIDATION_ERROR", "message": str(exc)},
+            )
+        return {"tenant_id": context.tenant_id, "goals": goals}
+
+    @app.get("/api/v2/goals/{goal_id}")
+    async def get_goal(
+        goal_id: str,
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "workspace:read", "Goal visibility is not permitted.")
+        try:
+            return app.state.store.get_goal(goal_id, context.tenant_id)
+        except (NotFoundError, ScopeViolation):
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Goal not found."},
+            )
+
+    @app.post("/api/v2/goals/{goal_id}/tasks", status_code=201)
+    async def create_task(
+        goal_id: str,
+        payload: TaskCreateRequest,
+        request: Request,
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "workspace:write", "Task writes are not permitted.")
+        try:
+            return request.app.state.store.create_task(
+                task_id=issue_id("task"),
+                goal_id=goal_id,
+                tenant_id=context.tenant_id,
+                principal_id=context.principal_id,
+                title=payload.title,
+                instruction=payload.instruction,
+                idempotency_key=payload.idempotency_key,
+                priority=payload.priority,
+                not_before=payload.not_before,
+                max_attempts=payload.max_attempts,
+                depends_on=payload.depends_on,
+            )
+        except (NotFoundError, ScopeViolation):
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Goal or dependency not found."},
+            )
+        except ConflictError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "TASK_CONFLICT", "message": str(exc)},
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "VALIDATION_ERROR", "message": str(exc)},
+            )
+
+    @app.get("/api/v2/goals/{goal_id}/tasks")
+    async def list_tasks(
+        goal_id: str,
+        limit: int = Query(default=100, ge=1, le=1000),
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "workspace:read", "Task visibility is not permitted.")
+        try:
+            tasks = app.state.store.list_tasks(goal_id, context.tenant_id, limit=limit)
+        except (NotFoundError, ScopeViolation):
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Goal not found."},
+            )
+        return {"tenant_id": context.tenant_id, "goal_id": goal_id, "tasks": tasks}
+
+    @app.post("/api/v2/tasks/{task_id}/claim")
+    async def claim_task(
+        task_id: str,
+        payload: TaskClaimRequest,
+        request: Request,
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "workspace:write", "Task execution is not permitted.")
+        try:
+            task = request.app.state.store.claim_due_task(
+                task_id=task_id,
+                tenant_id=context.tenant_id,
+                worker_id=payload.worker_id,
+                lease_seconds=payload.lease_seconds,
+            )
+        except (NotFoundError, ScopeViolation):
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Task not found."},
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "VALIDATION_ERROR", "message": str(exc)},
+            )
+        if task is None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "TASK_NOT_CLAIMABLE",
+                    "message": "Task is not due, is blocked by dependencies, or has no attempts left.",
+                },
+            )
+        return task
+
+    @app.post("/api/v2/tasks/{task_id}/complete")
+    async def complete_task(
+        task_id: str,
+        payload: TaskCompleteRequest,
+        request: Request,
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "workspace:write", "Task execution is not permitted.")
+        try:
+            return request.app.state.store.complete_task(
+                task_id=task_id,
+                tenant_id=context.tenant_id,
+                worker_id=payload.worker_id,
+                lease_token=payload.lease_token.get_secret_value(),
+                result=payload.result,
+            )
+        except (NotFoundError, ScopeViolation):
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Task not found."},
+            )
+        except ConflictError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "TASK_CONFLICT", "message": str(exc)},
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "VALIDATION_ERROR", "message": str(exc)},
             )
 
     @app.post("/api/v2/briefings", status_code=201)
@@ -2146,7 +2369,7 @@ def create_app(
     ):
         return {
             "tenant_id": context.tenant_id,
-            "schema_version": 7,
+            "schema_version": CURRENT_SCHEMA_VERSION,
             "cursor": request.app.state.store.latest_sequence(context.tenant_id),
             "capabilities": {
                 "database": "ready",

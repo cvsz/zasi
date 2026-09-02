@@ -16,7 +16,7 @@ import subprocess
 from typing import Any, Optional
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
-from .storage import ControlPlaneStore
+from .storage import CURRENT_SCHEMA_VERSION, ControlPlaneStore
 
 
 _POSTGRES_SCHEMA_STATEMENTS = (
@@ -307,6 +307,55 @@ _POSTGRES_SCHEMA_STATEMENTS = (
         UNIQUE (tenant_id, idempotency_key)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS goals (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL REFERENCES tenants(id),
+        principal_id TEXT NOT NULL REFERENCES principals(id),
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL,
+        priority INTEGER NOT NULL DEFAULT 50,
+        due_at TEXT,
+        metadata_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        completed_at TEXT
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS tasks (
+        id TEXT PRIMARY KEY,
+        goal_id TEXT NOT NULL REFERENCES goals(id),
+        tenant_id TEXT NOT NULL REFERENCES tenants(id),
+        principal_id TEXT NOT NULL REFERENCES principals(id),
+        title TEXT NOT NULL,
+        instruction TEXT NOT NULL,
+        status TEXT NOT NULL,
+        priority INTEGER NOT NULL DEFAULT 50,
+        not_before TEXT,
+        attempt_count INTEGER NOT NULL DEFAULT 0,
+        max_attempts INTEGER NOT NULL DEFAULT 3,
+        idempotency_key TEXT NOT NULL,
+        lease_owner TEXT,
+        lease_token TEXT,
+        lease_until TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        completed_at TEXT,
+        result_json TEXT NOT NULL DEFAULT '{}',
+        UNIQUE (tenant_id, idempotency_key)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS task_dependencies (
+        tenant_id TEXT NOT NULL REFERENCES tenants(id),
+        task_id TEXT NOT NULL REFERENCES tasks(id),
+        depends_on_task_id TEXT NOT NULL REFERENCES tasks(id),
+        PRIMARY KEY (task_id, depends_on_task_id)
+    )
+    """,
+    "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS lease_owner TEXT",
     "CREATE INDEX IF NOT EXISTS idx_sessions_tenant ON sessions(tenant_id, status, expires_at)",
     "CREATE INDEX IF NOT EXISTS idx_events_tenant_sequence ON events(tenant_id, sequence)",
     "CREATE INDEX IF NOT EXISTS idx_runs_tenant_idempotency ON runs(tenant_id, idempotency_key)",
@@ -315,6 +364,9 @@ _POSTGRES_SCHEMA_STATEMENTS = (
     "CREATE INDEX IF NOT EXISTS idx_devices_tenant ON devices(tenant_id, status, created_at)",
     "CREATE INDEX IF NOT EXISTS idx_sequences_tenant ON sequences(tenant_id, status, updated_at)",
     "CREATE INDEX IF NOT EXISTS idx_sequence_runs_tenant_idempotency ON sequence_runs(tenant_id, idempotency_key)",
+    "CREATE INDEX IF NOT EXISTS idx_goals_tenant_status ON goals(tenant_id, status, updated_at)",
+    "CREATE INDEX IF NOT EXISTS idx_tasks_tenant_status_due ON tasks(tenant_id, status, not_before, updated_at)",
+    "CREATE INDEX IF NOT EXISTS idx_task_dependencies_task ON task_dependencies(tenant_id, task_id)",
     (
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_pairing_tenant_idempotency "
         "ON device_pairing_challenges(tenant_id, idempotency_key) "
@@ -407,11 +459,12 @@ class PostgresControlPlaneStore(ControlPlaneStore):
                 schema_row = connection.execute(
                     "SELECT value FROM schema_meta WHERE key = 'schema_version'"
                 ).fetchone()
-                if schema_row is not None and int(schema_row["value"]) > 7:
+                if schema_row is not None and int(schema_row["value"]) > CURRENT_SCHEMA_VERSION:
                     raise RuntimeError("database schema is newer than this application")
                 connection.execute(
-                    "INSERT INTO schema_meta(key, value) VALUES('schema_version', '7') "
-                    "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value"
+                    "INSERT INTO schema_meta(key, value) VALUES('schema_version', ?) "
+                    "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+                    (str(CURRENT_SCHEMA_VERSION),),
                 )
             except Exception:
                 connection.close()

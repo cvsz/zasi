@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import Mock
 
 from src.control_plane.postgres_storage import _PostgresConnection
+from src.control_plane.storage import CURRENT_SCHEMA_VERSION
 from src.control_plane.redis_runtime import RedisRuntime
 
 
@@ -54,7 +55,7 @@ class PostgresRedisRuntimeTests(unittest.TestCase):
         store = PostgresControlPlaneStore(os.environ["ZASI_TEST_POSTGRES_URL"])
         try:
             store.initialize()
-            self.assertEqual(store.schema_version(), 7)
+            self.assertEqual(store.schema_version(), CURRENT_SCHEMA_VERSION)
             self.assertTrue(store.integrity_check())
         finally:
             store.close()

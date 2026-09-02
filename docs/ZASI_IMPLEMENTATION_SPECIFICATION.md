@@ -42,6 +42,7 @@ The first governed reference slice is:
 8. Evidence-backed result rendering.
 9. Durable event stream with cursor, replay, and resync.
 10. Explicit transition to Do This only after an approval policy permits the requested risk tier.
+11. A bounded durable Goal/Task DAG with tenant scope, dependency gating, worker leases, idempotency, and atomic completion events.
 
 The first slice MUST NOT contain autonomous external writes, credential mutation, arbitrary code execution, runtime hot swap, live physical actuation, or a claim that all catalogued subsystems are active.
 
@@ -123,7 +124,7 @@ These results establish a baseline only. They do not prove authorization, tenant
 The current tree now contains the first governed vertical slice described in
 Section 2. `backend.app` is the sole authoritative ASGI owner; it initializes
 the durable `ControlPlaneStore`, registers code-owned tool manifests, and
-serves the bundled cockpit. The repository schema is version 7. SQLite and
+serves the bundled cockpit. The repository schema is version 8. SQLite and
 the authenticated PostgreSQL adapter are implemented; Redis supplies shared
 rate-limit coordination and readiness. Staging and production settings still
 require explicit service URLs, an external secret provider, and a managed
@@ -135,7 +136,9 @@ storage with pairing idempotency, typed intents/plans, deterministic risk policy
 approvals, brokered trusted handlers, immutable evidence, audit/event/outbox
 transactions, tenant-cursored SSE replay/resync, durable rate limits, bounded
 artifact quarantine, dual-stack egress validation helpers, CSP-safe bundled
-frontend delivery, and supervised Electron startup. The one enabled runtime
+frontend delivery, supervised Electron startup, and a bounded durable Goal/Task
+DAG with dependency gating, worker leases, idempotent task creation, and atomic
+completion events. The one enabled runtime
 tool is the local system-status observation; its evidence is `verified` by a
 named local readiness procedure and is not a claim about the historical
 catalog.
@@ -462,7 +465,7 @@ Requirements:
 - Correlation IDs MUST propagate into logs, actions, events, evidence, and connector requests.
 - The API/event envelope `schema_version` is independent from the repository
   migration schema. The current API/event envelope is version 1; the current
-  local SQLite repository schema is version 7.
+  local SQLite/PostgreSQL repository schema is version 8.
 
 ### 9.2 Intent
 
@@ -756,6 +759,27 @@ Session responses MUST not return reusable secrets. Refresh tokens, if used, MUS
 | GET | /api/v2/runs/{run_id} | R0 | Retrieve run state and evidence refs |
 
 /api/v2/intents/{intent_id}/plan MUST never execute a side effect. /api/v2/plans/{plan_id}/run MUST require an idempotency key for any tier above R0.
+
+The bounded durable Goal/Task orchestration slice is separate from tool-run
+execution. It records operator-owned work, but it does not grant a task an
+external side effect or bypass the policy broker:
+
+| Method | Route | Scope | Behavior |
+|---|---|---|---|
+| POST | /api/v2/goals | workspace:write | Create an active tenant-scoped goal |
+| GET | /api/v2/goals | workspace:read | List goals for the authenticated tenant |
+| GET | /api/v2/goals/{goal_id} | workspace:read | Retrieve one tenant-scoped goal |
+| POST | /api/v2/goals/{goal_id}/tasks | workspace:write | Create an idempotent queued task with same-goal dependencies |
+| GET | /api/v2/goals/{goal_id}/tasks | workspace:read | List tasks without lease credentials |
+| POST | /api/v2/tasks/{task_id}/claim | workspace:write | Atomically claim a due task with a bounded worker lease |
+| POST | /api/v2/tasks/{task_id}/complete | workspace:write | Complete only with the current worker and unexpired lease |
+
+Task creation, lease transitions, task completion, and automatic goal completion
+MUST be transactional with their audit/event/outbox records. Dependency lookup
+MUST reject cross-tenant or cross-goal references. Lease credentials MUST NOT
+appear in ordinary task reads or event payloads. A scheduler, retry worker,
+durable task-run history, memory router, and productivity connector remain
+separate implementation gates.
 
 ### 12.4 Approvals, audit, and evidence
 
@@ -1697,8 +1721,8 @@ preserved and is not part of the implementation claim.
 
 | Command or inspection | Observed result | Evidence class |
 |---|---|---|
-| `python3 -m unittest discover -s tests -q` | 235 tests passed, 2 optional live-service checks skipped | Local functional regression |
-| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 235 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
+| `python3 -m unittest discover -s tests -q` | 241 tests passed, 2 optional live-service checks skipped | Local functional regression |
+| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 241 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
 | Focused control-plane/security suite (`tests.test_control_plane_core`, `tests.test_control_plane_broker`, `tests.test_control_plane_api`, `tests.test_security_hardening`, `tests.test_egress_security`) | Passed, including memory-hard API-key verification and TLS 1.2 floor tests | Local governed/security regression |
 | `python3 -m unittest tests.test_api -q` | 8 legacy compatibility tests passed, including retired webhook and truthful legacy OpenAPI assertions | Local migration-surface regression |
 | `python3 -m compileall -q backend src scripts tests main.py` | Passed | Local syntax check |
@@ -1708,8 +1732,9 @@ preserved and is not part of the implementation claim.
 | `node --check electron/main.js` | Passed | Local Electron syntax check |
 | `npm run build` | Vite production bundle passed; emitted a chunk-size advisory | Local frontend build |
 | `python3 -m build` | Source distribution and wheel build passed | Local package build |
-| `ZASI_DATABASE_BACKEND=postgresql` with `PostgresControlPlaneStore` against the shared cluster | Schema 7 initialization, integrity check, authenticated session, memory write/delete, readiness, and custom-format backup catalog smoke passed | Local PostgreSQL integration |
-| `scripts/backup_control_plane.py create/validate/restore --backend postgresql` with an ephemeral 32-byte key injected through `ZASI_BACKUP_KEY_B64` | Encrypted archive created and validated from the shared PostgreSQL cluster, restored into a temporary database, and verified with schema 7 plus one tenant before cleanup; destination mode `600` | Local encrypted PostgreSQL backup/restore-mechanics evidence |
+| `ZASI_DATABASE_BACKEND=postgresql` with `PostgresControlPlaneStore` against the shared cluster | Schema 8 initialization, integrity check, authenticated session, memory write/delete, readiness, and custom-format backup catalog smoke passed | Local PostgreSQL integration |
+| `PostgresControlPlaneStore` against an ephemeral database on the shared PostgreSQL cluster | Schema 8 initialization, tenant-scoped Goal/Task DAG lifecycle, dependency gating, lease ownership, atomic completion, and goal completion passed; the ephemeral database was removed after verification | Local PostgreSQL vertical-slice integration |
+| `scripts/backup_control_plane.py create/validate/restore --backend postgresql` with an ephemeral 32-byte key injected through `ZASI_BACKUP_KEY_B64` | Encrypted archive created and validated from the shared PostgreSQL cluster, restored into a temporary database, and verified with schema 8 plus one tenant before cleanup; destination mode `600` | Local encrypted PostgreSQL backup/restore-mechanics evidence |
 | `ZASI_REDIS_URL` with `RedisRuntime` against the shared ACL user | Authenticated ping, atomic namespaced rate-limit, and ASGI request smoke passed; the live host ACL has `default` disabled and `zasi` limited to `~zasi:*` plus `PING`, `EVAL`, `INCRBY`, and `EXPIRE`; direct `CONFIG`/`GET`/`SET`, ACL introspection, outside-namespace keys, and unauthenticated access were denied | Local Redis integration and least-privilege ACL audit |
 | Private `.env` service credential shape | Mode `600`; `zasi` PostgreSQL/Redis URLs and `PGPASSWORD`/`REDIS_PASSWORD` contain operator-supplied high-entropy hex material; the value is ignored by Git and absent from tracked source | Local secret-handling inspection |
 | `npm audit --omit=dev --json` | 0 info/low/moderate/high/critical findings after the React Router 7.18.3 upgrade | Local dependency audit |
@@ -1739,12 +1764,12 @@ the acceptance criteria in [#9](https://github.com/cvsz/zasi/issues/9) through
 | Issue / phase | Current status | Evidence and remaining release gate |
 |---|---|---|
 | [#9 / P0](https://github.com/cvsz/zasi/issues/9) | Partial, local | `backend.app` is the authoritative ASGI owner; fail-closed settings, readiness, compatibility quarantine, and registry-derived status exist. Duplicate-port ownership detection and hosted runtime ownership evidence remain open. |
-| [#10 / P1](https://github.com/cvsz/zasi/issues/10) | Partial, local PostgreSQL/Redis and encrypted backup mechanics | Tenant-scoped identity, hashed sessions, devices, audit, events, rate limits, schema-7 migrations, PostgreSQL repository, Redis coordination, authenticated API smoke, AES-GCM encrypted archive creation, SQLite restore integrity, and a temporary PostgreSQL restore check exist. External identity/managed secrets, multi-process restart proof, managed object-storage retention/key rotation, staging restore, and rollback operations remain open. |
+| [#10 / P1](https://github.com/cvsz/zasi/issues/10) | Partial, local PostgreSQL/Redis and encrypted backup mechanics | Tenant-scoped identity, hashed sessions, devices, audit, events, rate limits, schema-8 migrations, PostgreSQL repository, Redis coordination, authenticated API smoke, AES-GCM encrypted archive creation, SQLite restore integrity, and temporary PostgreSQL restore checks exist. External identity/managed secrets, multi-process restart proof, managed object-storage retention/key rotation, staging restore, and rollback operations remain open. |
 | [#11 / P2](https://github.com/cvsz/zasi/issues/11) | Partial, local | Typed intents/plans, deterministic risk policy, exact-digest approval records, evidence provenance, and governed MCP calls exist. Full R0–R5 capability inventory, production verification procedures, and complete claim-to-evidence coverage remain open. |
 | [#12 / P3](https://github.com/cvsz/zasi/issues/12) | Partial, local | Transactional events/outbox, leased claims, authenticated SSE replay, cursor validation, retention gaps, and snapshot resync exist. A production worker, 10,000-event performance evidence, backpressure policy, and multi-process delivery proof remain open. |
 | [#13 / P4](https://github.com/cvsz/zasi/issues/13) | Partial, reference-only | Stable tool registry, request digests, run idempotency, approval gating, fail-closed dynamic execution, and trusted handlers exist. External action workers, reconciliation of unknown side effects, durable cancellation/timeout workers, and certified sandbox evidence remain open. |
 | [#14 / P5](https://github.com/cvsz/zasi/issues/14) | Partial, React 19 / Router 7 with checked TypeScript source | Dependencies are bundled and locked, the cockpit uses authenticated v2 transport, safe rendering, CSP, reconnect/resync state, and a strict TypeScript root entrypoint; the cockpit source is now checked in `cockpit.tsx` and `app.jsx` is only a compatibility export. Accessibility/performance evidence and broad event-driven workspace coverage remain open. |
-| [#15 / P6](https://github.com/cvsz/zasi/issues/15) | Not implemented; target only | The repository has intents, plans, sequences, memory items, and unavailable briefings, but not the required durable Goal/Task DAG, scheduler, project memory router, or productivity connectors. |
+| [#15 / P6](https://github.com/cvsz/zasi/issues/15) | Partial, local durable Goal/Task DAG slice | SQLite/PostgreSQL goals and tasks now provide tenant scope, dependency gating, idempotency keys, worker leases, restart persistence, authenticated CRUD/claim/complete routes, and atomic task/goal events. A production scheduler, durable run history, project-memory router, and productivity connectors remain open. |
 | [#16 / P7](https://github.com/cvsz/zasi/issues/16) | Unavailable by design | Artifact quarantine and provenance contracts exist; real CAD/STEP, vision, STT/TTS, anti-replay speaker verification, and hardware integration are not enabled. |
 | [#17 / P8](https://github.com/cvsz/zasi/issues/17) | Partial packaging and encrypted-backup hardening; NO-GO | Workflows, non-root container configuration, installer backup behavior, lockfiles, AES-GCM backup/restore mechanics, project-only Python/npm dependency audits, local signed wheel/sdist/SBOM/checksum evidence, hosted CodeQL, and container builds exist. Dedicated source/container scanner provenance, managed retention/key rotation, hosted release provenance, staging canary, rollback observation, and independent verification remain open. |
 | [#18 roadmap](https://github.com/cvsz/zasi/issues/18) | Open roadmap | The phase order and release gates are captured here; issue completion must not be inferred from local test output. |
@@ -1759,7 +1784,8 @@ self-evolution, formal/cryptographic assurance, or ASI/AGI claims**.
 
 The next implementation work is finite and ordered: complete the missing P0/P1
 ownership and production repository operations, then add the P3/P4 worker and
-reconciliation path, and only then implement P6/P7 capability adapters and the
-P8 signed staging release process. An open GitHub issue, a target architecture
+reconciliation path, then finish the remaining P6 scheduler/memory/connector
+work and implement P7 capability adapters before the P8 signed staging release
+process. An open GitHub issue, a target architecture
 diagram, a passing local test, or a historical badge cannot substitute for the
 required evidence bundle.
