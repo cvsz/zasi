@@ -71,6 +71,26 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("dist/*.asc", workflow)
         self.assertIn("dist/ZASI_RELEASE_SIGNING_KEY.asc", workflow)
 
+    def test_pypi_publication_consumes_the_signed_release_artifact(self):
+        release_workflow = Path(".github/workflows/release.yml").read_text(
+            encoding="utf-8"
+        )
+        publish_workflow = Path(".github/workflows/publish.yml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("actions/upload-artifact@v4", release_workflow)
+        self.assertIn("name: zasi-signed-release", release_workflow)
+        self.assertIn("workflow_run:", publish_workflow)
+        self.assertIn('workflows: ["Create GitHub Release"]', publish_workflow)
+        self.assertIn("actions/download-artifact@v4", publish_workflow)
+        self.assertIn(
+            "run-id: ${{ github.event.workflow_run.id }}", publish_workflow
+        )
+        self.assertIn("SHA256SUMS", publish_workflow)
+        self.assertIn("gpg --batch --status-fd 1 --verify", publish_workflow)
+        self.assertNotIn("python3 -m build", publish_workflow)
+
 
 if __name__ == "__main__":
     unittest.main()

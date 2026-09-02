@@ -2495,6 +2495,7 @@ def create_app(
             "step_id": issue_id("stp"),
             "kind": "read" if plan_risk == "R0" else "compute" if plan_risk == "R1" else "external_write",
             "tool_id": definition.tool_id,
+            "tool_version": definition.version,
             "input_ref": None,
             "risk_tier": plan_risk,
             "side_effect": _side_effect_for_risk(plan_risk),
@@ -2667,6 +2668,14 @@ def create_app(
             raise HTTPException(
                 status_code=409,
                 detail={"code": "CAPABILITY_UNAVAILABLE", "message": "Plan capability is unavailable."},
+            )
+        if step.get("tool_version") != definition.version:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "CAPABILITY_VERSION_MISMATCH",
+                    "message": "Plan capability changed after plan creation.",
+                },
             )
         decision = policy.evaluate(
             capability_id=definition.tool_id,

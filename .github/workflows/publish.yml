@@ -1,10 +1,9 @@
 name: Publish to PyPI
 
 on:
-  push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
+  workflow_run:
+    workflows: ["Create GitHub Release"]
+    types: [completed]
 
 permissions:
   contents: read
@@ -12,6 +11,11 @@ permissions:
 jobs:
   publish:
     name: Publish Python Package to PyPI
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      startsWith(github.event.workflow_run.head_branch, 'v') &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -20,27 +24,37 @@ jobs:
       id-token: write
       contents: read
     steps:
-      - name: Checkout repository
+      - name: Checkout the signed release workflow revision
         uses: actions/checkout@v7
-
-      - name: Set up Python
-        uses: actions/setup-python@v7
         with:
-          python-version: "3.11"
+          ref: ${{ github.event.workflow_run.head_sha }}
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
+      - name: Download signed release artifact
+        uses: actions/download-artifact@v4
         with:
-          node-version: "20"
+          name: zasi-signed-release
+          path: dist/
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: ${{ github.event.workflow_run.id }}
 
-      - name: Install build tooling
-        run: pip install build
-
-      - name: Build bundled cockpit before packaging
-        run: npm ci --ignore-scripts && npm run typecheck && npm run build
-
-      - name: Build distribution packages (wheel + sdist)
-        run: python3 -m build
+      - name: Verify signed release artifact
+        env:
+          ZASI_RELEASE_GPG_FINGERPRINT: ${{ secrets.ZASI_RELEASE_GPG_FINGERPRINT }}
+        run: |
+          set -euo pipefail
+          test -n "$ZASI_RELEASE_GPG_FINGERPRINT"
+          test -s dist/ZASI_RELEASE_SIGNING_KEY.asc
+          printf '%s\n' "$ZASI_RELEASE_GPG_FINGERPRINT" | grep -Eq '^[0-9A-Fa-f]{16,64}$'
+          expected_fingerprint="$(printf '%s' "$ZASI_RELEASE_GPG_FINGERPRINT" | tr '[:lower:]' '[:upper:]')"
+          gpg --batch --import dist/ZASI_RELEASE_SIGNING_KEY.asc >/dev/null 2>&1
+          for artifact in dist/*.whl dist/*.tar.gz dist/zasi-sbom.cdx.json dist/SHA256SUMS; do
+            test -f "$artifact"
+            test -f "${artifact}.asc"
+            status_output="$(gpg --batch --status-fd 1 --verify "${artifact}.asc" "$artifact" 2>/dev/null)"
+            printf '%s\n' "$status_output" | grep -F "VALIDSIG $expected_fingerprint " >/dev/null
+          done
+          (cd dist && sha256sum --check SHA256SUMS)
 
       - name: Publish package distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
