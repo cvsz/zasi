@@ -9,8 +9,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "electron": "electron electron/main.js",
-    "electron-build": "electron-builder --linux --mac --win",
-    "test": "node tests/test_components.js"
+    "electron-build": "electron-builder --config electron-builder.config.js --linux --mac --win",
+    "test": "node tests/test_components.js && node tests/test_electron_runtime.js && node tests/test_electron_integration.js && node tests/test_electron_packaging.js"
   },
   "devDependencies": {
     "@types/react": "19.2.18",
@@ -26,28 +26,6 @@
     "react-dom": "19.2.8",
     "react-router-dom": "7.18.3",
     "three": "0.179.1"
-  },
-  "build": {
-    "appId": "com.zasi.cockpit",
-    "productName": "ZASI J.A.R.V.I.S.",
-    "directories": {
-      "output": "dist-electron"
-    },
-    "files": [
-      "electron/**/*",
-      "web/**/*",
-      "backend/**/*",
-      "src/**/*"
-    ],
-    "linux": {
-      "target": "AppImage"
-    },
-    "mac": {
-      "target": "dmg"
-    },
-    "win": {
-      "target": "nsis"
-    }
   },
   "keywords": [
     "ai",

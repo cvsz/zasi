@@ -105,7 +105,7 @@ There must be one authoritative runtime entry point after Phase P0. The followin
 | backend/server.py | Loopback-only ThreadingTCPServer compatibility API; status/host telemetry/catalog disclosures remain, side-effect routes return 410, and historical chat/subsystem/background workers are disabled | Retain only as an explicit read-only compatibility adapter; never a production owner |
 | src/api_server.py | Separate legacy HUD compatibility server with escaped HTML, no fixed token, loopback binding, and no start without an explicit token | Quarantine; no production startup path |
 | main.py | `main()` launches the authoritative app; `legacy_demo_main()` exits with a simulation-only/disabled disclosure | Keep one lifecycle command; retain demo source only for continuity |
-| Electron main process | Spawns Python and loads localhost after a fixed delay | Use process supervision, readiness polling, origin restrictions, and clean shutdown |
+| Electron main process | Source mode uses a configured Python interpreter; packaged mode resolves only a bundled per-platform runtime and externalized app resources | Use process supervision, readiness polling, origin restrictions, clean shutdown, and a fail-closed packaging contract |
 | web/static/app.tsx + web/static/cockpit.tsx + web/static/app.jsx | React 19 and React Router v7 cockpit with a strict TypeScript root entrypoint and fully checked TypeScript cockpit source; historical JSX path is a compatibility re-export | Keep the Vite bundle authoritative and retain the compatibility export while adding typed source coverage |
 | web/static/app.js | Legacy dashboard with direct HTML insertion and GET mutation calls | Quarantine and delete only after compatibility tests and operator sign-off |
 | CLI and research modules | Directly expose simulation, self-evolution, sandbox, and hardware-shaped APIs | Convert to adapters with explicit disabled or simulation profiles |
@@ -325,6 +325,7 @@ Requirements:
 - CSP MUST be enforced as a response header, with no unsafe-eval and no broad unsafe-inline in production.
 - Browser rendering MUST avoid innerHTML for untrusted data.
 - Electron MUST keep context isolation and node integration disabled, restrict navigation to the approved origin, validate the child process readiness endpoint, and shut down cleanly.
+- Packaged Electron builds MUST require real per-platform Python virtual environments, externalize backend/frontend resources outside `asar`, and fail before artifact creation when the runtime contract is incomplete.
 - Container images MUST run as non-root, use a read-only root filesystem where feasible, drop unnecessary capabilities, and define resource limits.
 
 Exit evidence:
@@ -1176,6 +1177,7 @@ The UI MUST show a reconnecting/degraded state and a resync prompt when event hi
 - Verify the child process identity and configured port.
 - Propagate termination and remove child processes on shutdown.
 - Do not print environment variables or tokens in stdout/stderr.
+- Packaged launch MUST use only the bundled runtime under `process.resourcesPath`; source-checkout interpreter selection MUST NOT become a packaged runtime fallback.
 
 ## 16. Multimodal and device contracts
 
@@ -1643,10 +1645,11 @@ Outputs:
 - mode and disclosure rendering;
 - safe rendering;
 - hardened Electron lifecycle.
+- packaged-runtime contract with externalized backend/frontend resources.
 
 Validation:
 
-- browser, mobile viewport, reconnect, CSP, DOM XSS, and Electron navigation tests.
+- browser, mobile viewport, reconnect, CSP, DOM XSS, Electron navigation, source-runtime, packaged-runtime, and fail-closed packaging tests.
 
 Rollback:
 
@@ -1828,6 +1831,10 @@ permission hardening is in signed commit
 `d169fa9b9e54ed0bf5263baa8e9bd36db5b05f59`.
 The current release/container/SBOM packaging hardening is in signed commit
 `3fa2b2fbccb5e7ede3b3dc71f72c2114ee763616`.
+The packaged Electron runtime and build-boundary hardening is in signed commit
+`179863f11adfcfd7acd00cde93760e8da751b850`; source mode remains supported,
+while packaged mode requires real per-platform virtual environments and
+externalized application resources.
 The release-publication and schema-preserving backup hardening was merged by
 PR [#31](https://github.com/cvsz/zasi/pull/31), in signed commits
 `e972295` and `84e4f99`; the protected RACER and J.A.R.V.I.S. reference files
@@ -1867,6 +1874,8 @@ implementation claim.
 | `python3 -m unittest tests.test_control_plane_api.ControlPlaneAPITests.test_intent_plan_and_scoped_event_replay_are_read_only_until_run -q` | Passed; an approved plan records the resolved tool version and execution rejects registry-version drift with a bounded conflict | Local plan-integrity regression |
 | `python3 -m unittest tests.test_sbom tests.test_installer -v` | 5 tests passed; SBOM npm-coordinate deduplication, selected Python extras, deterministic output, and fresh installer build-output selection are covered | Local packaging regression |
 | `node tests/test_components.js` | Passed; verifies React 19/Router 7 pins, typed entrypoint ownership, local scripts, and governed route declarations | Local bundle/source safety assertions |
+| `npm test` | Passed; frontend structural checks plus source-runtime, packaged-runtime, Windows runtime-layout, and packaged-startup fail-closed tests | Local cockpit/Electron boundary regression |
+| `npm run electron-build` without `ZASI_ELECTRON_RUNTIME_ROOT` | Exited before artifact creation with the explicit per-platform runtime requirement | Local packaged-build fail-closed gate |
 | `npm run typecheck` | Passed with TypeScript 7 strict settings for the production entrypoint | Local frontend type safety |
 | `node --check electron/main.js` | Passed | Local Electron syntax check |
 | `npm run build` | Vite production bundle passed; emitted a chunk-size advisory | Local frontend build |
@@ -1915,7 +1924,7 @@ the acceptance criteria in [#9](https://github.com/cvsz/zasi/issues/9) through
 | [#12 / P3](https://github.com/cvsz/zasi/issues/12) | Partial, local | Transactional events/outbox, bounded `zasi-outbox-worker` delivery loop, leased claims, authenticated SSE replay, cursor validation, retention gaps, and snapshot resync exist. A continuously deployed production worker, 10,000-event performance evidence, backpressure policy, and multi-process delivery proof remain open. |
 | [#13 / P4](https://github.com/cvsz/zasi/issues/13) | Partial, durable reference worker | Stable tool registry, request digests, run idempotency, approval gating, immutable queued payloads, worker leases/tokens, atomic evidence/events, bounded local retry, timeout/cancellation/unknown semantics, explicit authenticated reconciliation, and the R0/R1 `zasi-action-worker` path exist. Certified isolation, higher-risk worker deployment, external-side-effect proof, multi-process recovery, and production worker evidence remain open. |
 | [#14 / P5](https://github.com/cvsz/zasi/issues/14) | Partial, React 19 / Router 7 with checked TypeScript source | Dependencies are bundled and locked, the cockpit uses authenticated v2 transport, safe rendering, CSP, reconnect/resync state, and a strict TypeScript root entrypoint; the cockpit source is now checked in `cockpit.tsx` and `app.jsx` is only a compatibility export. Accessibility/performance evidence and broad event-driven workspace coverage remain open. |
-| [#15 / P6](https://github.com/cvsz/zasi/issues/15) | Partial, local durable orchestration/reference connectors | SQLite/PostgreSQL goals, tasks, schedules, task runs, project-scoped memory, source-backed briefings, and connector health now provide tenant scope, dependency gating, occurrence/idempotency keys, worker leases, restart persistence, stale invalidation, authenticated routes, and atomic events. A continuously deployed production worker, real GitHub/email/calendar/files adapters, semantic retrieval, external-source freshness, and independent multi-process evidence remain open. |
+| [#15 / P6](https://github.com/cvsz/zasi/issues/15) | Partial, local durable orchestration/reference connectors | SQLite/PostgreSQL goals, tasks, schedules, task runs, project-scoped memory, source-backed briefings, connector health, and a fail-closed packaged Electron runtime contract exist. A continuously deployed production worker, real GitHub/email/calendar/files adapters, semantic retrieval, external-source freshness, complete per-platform runtime bundles, and independent multi-process evidence remain open. |
 | [#16 / P7](https://github.com/cvsz/zasi/issues/16) | Unavailable by design | Artifact quarantine and provenance contracts exist; real CAD/STEP, vision, STT/TTS, anti-replay speaker verification, and hardware integration are not enabled. |
 | [#17 / P8](https://github.com/cvsz/zasi/issues/17) | Partial packaging and encrypted-backup hardening; NO-GO | Workflows, non-root container configuration, installer backup behavior, lockfiles, AES-GCM backup/restore mechanics, project-only Python/npm dependency audits, local signed wheel/sdist/SBOM/checksum evidence, a bounded local rollback rehearsal, a fail-closed protected-environment release-signing workflow, hosted CodeQL, and container builds exist. Dedicated source/container scanner provenance, managed retention/key rotation, hosted release provenance from an exercised tag, staging canary, production rollback observation, and independent verification remain open. |
 | [#18 roadmap](https://github.com/cvsz/zasi/issues/18) | Open roadmap | The phase order and release gates are captured here; issue completion must not be inferred from local test output. |

@@ -43,8 +43,8 @@ jobs:
           coverage report --fail-under=60
           COVERAGE_PCT=$(coverage report | tail -1 | awk '{print $NF}')
           echo "### Coverage: $COVERAGE_PCT" >> $GITHUB_STEP_SUMMARY
-      - name: Run React component tests
-        run: node tests/test_components.js
+      - name: Run cockpit and Electron boundary tests
+        run: npm test
 
   build:
     name: Build Distribution

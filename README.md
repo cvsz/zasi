@@ -93,6 +93,24 @@ Legacy side-effect routes such as `/api/tick`, `/api/mutate`, and
 `/api/rsi/upgrade` return a typed retirement response. `/api/status` and
 `/api/telemetry` are compatibility disclosures, not live subsystem claims.
 
+## Electron packaging contract
+
+`npm run electron` is the source-checkout shell and uses the configured local
+Python interpreter. Packaged Electron builds require a real, dependency-complete
+Python virtual environment for every target platform; `electron-builder` fails
+closed when the runtime root is absent or incomplete. Set
+`ZASI_ELECTRON_RUNTIME_ROOT` to a directory with this layout before building:
+
+```text
+<runtime-root>/linux/bin/python3         + pyvenv.cfg
+<runtime-root>/darwin/bin/python3       + pyvenv.cfg
+<runtime-root>/win32/Scripts/python.exe  + pyvenv.cfg
+```
+
+The build copies those runtimes and the backend/frontend resources outside the
+Electron `asar` archive. A generated desktop artifact is not considered usable
+without a successful packaged-runtime build and launch check.
+
 ## Verification
 
 ```bash
