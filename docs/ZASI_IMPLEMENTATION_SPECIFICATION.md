@@ -1828,8 +1828,8 @@ permission hardening is in signed commit
 `d169fa9b9e54ed0bf5263baa8e9bd36db5b05f59`.
 The current release/container/SBOM packaging hardening is in signed commit
 `3fa2b2fbccb5e7ede3b3dc71f72c2114ee763616`.
-The release-publication and schema-preserving backup hardening is carried by
-follow-up PR [#31](https://github.com/cvsz/zasi/pull/31), in signed commits
+The release-publication and schema-preserving backup hardening was merged by
+PR [#31](https://github.com/cvsz/zasi/pull/31), in signed commits
 `e972295` and `84e4f99`; the protected RACER and J.A.R.V.I.S. reference files
 are restored in signed commit `7bc520e`. Plan steps now bind to the resolved
 tool version and fail closed on registry drift.
@@ -1840,9 +1840,11 @@ PR [#29](https://github.com/cvsz/zasi/pull/29) merged the prior implementation
 head `c713a19be0aee6b7ab4bc0719238c6cc6b9ad50f` after hosted CodeQL,
 Actions/JavaScript-TypeScript/Python analysis, Python 3.11/3.12,
 React/TypeScript, distribution, Docker image, and Docker build checks passed;
-PR-only GHCR publication remained skipped by policy. PR #31 is the current
-follow-up review for the release, backup, plan-version, and protected-reference
-changes; its exact final head must pass hosted checks before merge.
+PR-only GHCR publication remained skipped by policy. PR #31 merged the release,
+backup, plan-version, and protected-reference changes at exact head
+`7bc520ec3f01d8461ebd1a370a932bb2ca94267a` with merge commit
+`bfcb4f52878a11723b29297f98d82976ecf87c66`. The documentation and publication
+permission correction is tracked by the current PR #32.
 There is no
 staging deployment, production checkout, or production release authorization.
 The existing `.coverage` deletion is preserved and is not part of the
@@ -1886,7 +1888,8 @@ implementation claim.
 | `python3 scripts/generate_sbom.py --output zasi-sbom.cdx.json --resolve-installed` in the isolated project environment | CycloneDX 1.5 SBOM generated with 364 components, zero duplicate coordinates or `bom-ref` values, and the selected `psycopg-binary` extra present | Local supply-chain evidence |
 | `(cd dist && sha256sum --check SHA256SUMS)` and GPG verification of wheel, sdist, and SBOM signatures | Passed with the configured cvsz signing identity | Local artifact integrity evidence |
 | PR #29 hosted checks for exact merged head `c713a19be0aee6b7ab4bc0719238c6cc6b9ad50f` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12 with the isolated dependency audit, React/TypeScript validation, distribution, Docker image, and Docker build checks passed; PR package publication skipped. | Historical hosted CI evidence; not release approval |
-| PR #31 follow-up review | Open at the signed follow-up line containing the release-publication, backup, plan-version, and protected-reference changes; hosted checks for its final pushed head are required and are not yet release approval. | Current hosted review gate |
+| PR #31 hosted checks for exact merged head `7bc520ec3f01d8461ebd1a370a932bb2ca94267a` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12, React/TypeScript validation, distribution, Docker image, and Docker build checks passed; PR-only GHCR publication was skipped. | Current merged hosted CI evidence; not release approval |
+| PR #32 follow-up review | Open at the signed documentation and publication-permission correction head; required hosted checks are passing, but this PR is not yet merged. | Current hosted review gate |
 | GitHub Issue #18 | Remains `OPEN`; current status comments are maintained in the [roadmap thread](https://github.com/cvsz/zasi/issues/18) | External roadmap status, not release approval |
 
 The `ResourceWarning` regression test is intentionally retained. The original
