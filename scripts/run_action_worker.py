@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 import signal
 import sys
 import threading
 from typing import Optional, Sequence
+
+# Allow the checked-in CLI to run directly from a source checkout without
+# requiring an editable install.
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from backend.app import create_app
 from src.control_plane.config import ConfigurationError, Settings
@@ -123,6 +129,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         )
         return 1
     finally:
+        if "application" in locals():
+            runtime = getattr(application.state, "redis_runtime", None)
+            if runtime is not None:
+                runtime.close()
         if "store" in locals():
             store.close()
 
