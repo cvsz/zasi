@@ -89,6 +89,25 @@ class ControlPlaneAPITests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(deleted.status_code, 200)
 
+    async def test_malformed_session_scope_is_rejected_fail_closed(self):
+        async with self.client() as client:
+            session = await client.post(
+                "/api/v2/sessions", json={"api_key": "test-bootstrap-secret"}
+            )
+            self.assertEqual(session.status_code, 201)
+            session_body = session.json()
+            self.store._conn().execute(
+                "UPDATE sessions SET scope_json = ? WHERE id = ?",
+                (json.dumps({"workspace:read": True}), session_body["session_id"]),
+            )
+
+            response = await client.get(
+                "/api/v2/goals",
+                headers={"Authorization": f"Bearer {session_body['access_token']}"},
+            )
+            self.assertEqual(response.status_code, 401)
+            self.assertEqual(response.json()["error"]["code"], "AUTH_REQUIRED")
+
     async def test_chunked_request_body_is_bounded_before_json_parsing(self):
         settings = Settings.from_mapping(
             {

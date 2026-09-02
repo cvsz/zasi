@@ -279,12 +279,20 @@ def _context_from_request(request: Request) -> AuthContext:
             detail={"code": "AUTH_REQUIRED", "message": "Authentication is required."},
         )
     try:
-        scopes = frozenset(json.loads(session.get("scope_json") or "[]"))
-    except (TypeError, json.JSONDecodeError):
+        raw_scopes = json.loads(session.get("scope_json") or "[]")
+    except (TypeError, ValueError):
         raise HTTPException(
             status_code=401,
             detail={"code": "AUTH_REQUIRED", "message": "Session scope is invalid."},
         )
+    if not isinstance(raw_scopes, list) or not all(
+        isinstance(scope, str) for scope in raw_scopes
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail={"code": "AUTH_REQUIRED", "message": "Session scope is invalid."},
+        )
+    scopes = frozenset(raw_scopes)
     return AuthContext(
         session_id=session["id"],
         tenant_id=session["tenant_id"],
