@@ -1821,14 +1821,14 @@ implementation claim.
 
 | Command or inspection | Observed result | Evidence class |
 |---|---|---|
-| `python3 -m unittest discover -s tests -q` | 298 tests passed, 2 optional live-service checks skipped | Local functional regression |
-| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 298 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
+| `python3 -m unittest discover -s tests -q` | 299 tests passed, 2 optional live-service checks skipped | Local functional regression |
+| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 299 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
 | Focused control-plane/security suite (`tests.test_control_plane_core`, `tests.test_control_plane_broker`, `tests.test_control_plane_api`, `tests.test_security_hardening`, `tests.test_egress_security`) | Passed, including memory-hard API-key verification and TLS 1.2 floor tests | Local governed/security regression |
 | Focused outbox worker suite (`tests.test_outbox_worker tests.test_control_plane_core`) | 20 tests passed; bounded polling, interruptible shutdown, retry/dead-letter preservation, configuration fail-closed behavior, and worker identifier validation covered | Local outbox worker regression |
 | `PYTHONPATH=. python3 -m unittest tests.test_release_signing -v` | 4 tests passed; artifact selection/checksum determinism and protected release workflow requirements covered | Local release-signing regression |
 | `python3 -m unittest tests.test_api -q` | 8 legacy compatibility tests passed, including retired webhook and truthful legacy OpenAPI assertions | Local migration-surface regression |
 | `PYTHONPATH=. python3 -m unittest tests.test_legacy_truthfulness -v` | 8 tests passed; fixed-token removal, loopback binding, escaped HUD values, disabled demo/chat/subsystem execution, retired OpenAPI operations, and disabled background workers were verified | Local legacy-boundary regression |
-| `PYTHONPATH=. python3 -m unittest tests.test_rollback_drill -v` | 5 tests passed; explicit local opt-in, staging/production rejection, generated-name quoting, sanitized result, and socket-URL preservation were verified | Local rollback-drill safety regression |
+| `PYTHONPATH=. python3 -m unittest tests.test_rollback_drill -v` | 6 tests passed; explicit local opt-in, staging/production rejection, generated-name quoting, sanitized result, socket-URL preservation, and remote-host rejection were verified | Local rollback-drill safety regression |
 | `python3 -m compileall -q backend src scripts tests main.py` | Passed | Local syntax check |
 | `python3 -m unittest tests.test_encrypted_backup -q` | 10 passed, including AES-256-GCM tamper and wrong-key rejection, atomic mode-600 files, missing-source rejection, no-clobber restore, and SQLite restore integrity | Local encrypted backup/restore regression |
 | `node tests/test_components.js` | Passed; verifies React 19/Router 7 pins, typed entrypoint ownership, local scripts, and governed route declarations | Local bundle/source safety assertions |

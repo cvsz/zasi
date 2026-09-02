@@ -20,7 +20,7 @@ import sys
 import tempfile
 from pathlib import Path
 from typing import Optional
-from urllib.parse import quote, unquote, urlsplit, urlunsplit
+from urllib.parse import parse_qs, quote, unquote, urlsplit, urlunsplit
 
 # Allow the checked-in CLI to run directly from a source checkout without an
 # editable install.
@@ -104,6 +104,27 @@ def _require_postgresql_url(value: str, field: str) -> None:
         raise RollbackDrillError(f"{field} must select a database")
 
 
+def _require_local_postgresql_url(value: str, field: str) -> None:
+    """Reject remote targets so a local rehearsal cannot reach production."""
+    _require_postgresql_url(value, field)
+    parsed = urlsplit(value)
+    query = parse_qs(parsed.query, keep_blank_values=True)
+    hosts = []
+    if parsed.hostname:
+        hosts.append(parsed.hostname)
+    for raw_host in query.get("host", []):
+        hosts.extend(item.strip() for item in raw_host.split(","))
+    for host in hosts:
+        normalized = host.lower().rstrip(".")
+        if normalized in {"localhost", "127.0.0.1", "::1"}:
+            continue
+        if host.startswith("/"):
+            continue
+        raise RollbackDrillError(
+            f"{field} must use localhost, loopback, or a Unix socket for local rehearsal"
+        )
+
+
 def _url_for_database(database_url: str, database_name: str) -> str:
     parsed = urlsplit(database_url)
     path = f"/{quote(database_name, safe='')}"
@@ -169,8 +190,8 @@ def run_postgresql_rollback_drill(
     expected_schema_version: Optional[int] = None,
 ) -> RollbackDrillResult:
     """Rehearse restore into a disposable PostgreSQL database."""
-    _require_postgresql_url(source_url, "source URL")
-    _require_postgresql_url(admin_url, "administrator URL")
+    _require_local_postgresql_url(source_url, "source URL")
+    _require_local_postgresql_url(admin_url, "administrator URL")
     key = _read_backup_key()
     source = PostgresControlPlaneStore(source_url)
     admin = None

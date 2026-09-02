@@ -8,6 +8,7 @@ from scripts.rollback_drill import (
     create_ephemeral_database_name,
     quote_ephemeral_database_identifier,
     require_local_rehearsal,
+    _require_local_postgresql_url,
     _url_for_database,
 )
 
@@ -60,6 +61,22 @@ class RollbackDrillSafetyTests(unittest.TestCase):
         self.assertEqual(
             rewritten,
             "postgresql:///zasi_rollback_drill_0123456789abcdef?host=/var/run/postgresql&port=5433",
+        )
+
+    def test_local_rehearsal_rejects_remote_database_hosts(self):
+        with self.assertRaises(RollbackDrillError):
+            _require_local_postgresql_url(
+                "postgresql://db.example/zasi",
+                "source URL",
+            )
+
+        _require_local_postgresql_url(
+            "postgresql://127.0.0.1:5433/zasi",
+            "source URL",
+        )
+        _require_local_postgresql_url(
+            "postgresql:///postgres?host=/var/run/postgresql&port=5433",
+            "administrator URL",
         )
 
 

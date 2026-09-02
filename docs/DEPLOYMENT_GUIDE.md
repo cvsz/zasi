@@ -79,7 +79,8 @@ rejects `staging` and `production` profiles.
 
 Inject the source URL, a separate administrator URL, and a one-off 32-byte
 backup key through the environment; neither URL nor key is printed by the
-command:
+command. The local-only guard rejects remote database hosts and accepts only
+loopback names/addresses or Unix-socket paths:
 
 ```bash
 set -a
