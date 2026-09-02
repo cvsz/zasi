@@ -9,7 +9,7 @@ Features:
 - Full Thai & Multilingual Voice Command Orchestration
 """
 from dataclasses import dataclass, field
-from typing import Dict, List, Any, Optional
+from typing import Callable, Dict, List, Any, Optional
 import hashlib
 import time
 
@@ -19,8 +19,8 @@ class AudioWaveformPacket:
     duration_sec: float
     transcript_text: str
     speaker_tag: str
-    voiceprint_confidence: float = 0.99
-    is_verified_commander: bool = True
+    voiceprint_confidence: float = 0.0
+    is_verified_commander: bool = False
 
 @dataclass
 class CADModelPayload:
@@ -31,7 +31,9 @@ class CADModelPayload:
     volume_cm3: float
     mass_estimate_kg: float
     material: str
-    thermal_stress_nominal: bool
+    thermal_stress_nominal: bool = False
+    analysis_status: str = "unavailable"
+    source_artifact_digest: Optional[str] = None
 
 @dataclass
 class MultimodalVisualFrame:
@@ -65,9 +67,15 @@ class JAVISResponse:
     cad_telemetry: Optional[Dict[str, Any]] = None
 
 class JAVISVoiceMultimodalInterface:
-    def __init__(self, persona_name: str = "J.A.R.V.I.S.", user_callsign: str = "Sir"):
+    def __init__(
+        self,
+        persona_name: str = "J.A.R.V.I.S.",
+        user_callsign: str = "Sir",
+        voiceprint_verifier: Optional[Callable[[AudioWaveformPacket], bool]] = None,
+    ):
         self.persona_name = persona_name
         self.user_callsign = user_callsign
+        self.voiceprint_verifier = voiceprint_verifier
         self.dialogue_history: List[Dict[str, str]] = []
         self.cad_registry: Dict[str, CADModelPayload] = {}
         self.verified_voiceprint_hashes: List[str] = [
@@ -76,8 +84,13 @@ class JAVISVoiceMultimodalInterface:
         ]
 
     def verify_speaker_biometrics(self, audio_packet: AudioWaveformPacket) -> bool:
-        """Biometric voiceprint verification distinguishing the verified founder from other speakers."""
-        return audio_packet.is_verified_commander and audio_packet.voiceprint_confidence >= 0.95
+        """Use only a server-owned verifier; caller flags are never authorization."""
+        if self.voiceprint_verifier is None:
+            return False
+        try:
+            return bool(self.voiceprint_verifier(audio_packet))
+        except Exception:
+            return False
 
     def synthesize_morning_brief(self, state_vars: Dict[str, Any], rsi_version: str = "v32.0.0-apex-prime") -> MorningBriefReport:
         """
@@ -87,23 +100,18 @@ class JAVISVoiceMultimodalInterface:
         ts = time.strftime("%A, %B %d, %Y - %H:%M:%S UTC")
         return MorningBriefReport(
             timestamp=ts,
-            greeting=f"Good morning, {self.user_callsign}. All 176 subsystems have maintained mathematical equilibrium overnight.",
-            overnight_subsystems_evaluated=176,
-            active_invariants=3,
-            hardware_power_gw=178.2,
-            engineering_tasks_completed=[
-                f"RSI 320x Optimization Cycle synced ({rsi_version})",
-                "Surface Code Distance-7 Quantum Error Correction calibrated",
-                "Arc Reactor magnetic containment held at 14.5 Tesla",
-                "Cloudflare Tunnel ingress for zasi.zeaz.dev verified operational"
-            ],
+            greeting=f"Good morning, {self.user_callsign}. Live overnight evidence is unavailable.",
+            overnight_subsystems_evaluated=0,
+            active_invariants=0,
+            hardware_power_gw=0.0,
+            engineering_tasks_completed=[],
             key_priorities=[
-                "Review 3D CAD mechanical assembly tolerances",
-                "Monitor multi-agent tactical debate arena consensus",
-                "Execute autonomous scheduled daemon cognitive cycles"
+                "Connect an authorized telemetry source",
+                "Review evidence freshness and missing data",
+                "Keep external actions disabled until evidence is available"
             ],
             cad_models_rendered=len(self.cad_registry),
-            tactical_summary="Global systems nominal. Compute throughput at 3,500 ExaFLOPs. Ready for your directives."
+            tactical_summary="No live capability claim is made by this briefing."
         )
 
     def ingest_cad_assembly(
@@ -130,7 +138,8 @@ class JAVISVoiceMultimodalInterface:
             volume_cm3=vol_cm3,
             mass_estimate_kg=mass_kg,
             material=material,
-            thermal_stress_nominal=True
+            thermal_stress_nominal=False,
+            analysis_status="simulation",
         )
         self.cad_registry[name] = payload
         return payload
@@ -149,7 +158,9 @@ class JAVISVoiceMultimodalInterface:
                 "Embedded 3D CAD viewer",
                 "Autonomous Chief-of-Staff Morning Brief"
             ],
-            "benchmark_evaluation": "ZASI architecture surpasses target reference with 176 formally verified subsystems."
+            "benchmark_evaluation": "advisory_only",
+            "evidence_state": "unverified",
+            "limitations": "No independent competitor source or benchmark evidence was supplied.",
         }
 
     def transcribe_audio_stream(self, audio_packet: AudioWaveformPacket) -> str:
@@ -192,18 +203,20 @@ class JAVISVoiceMultimodalInterface:
         cad_info = None
 
         # Speaker verification
-        is_founder = True
+        is_founder = False
         if audio_packet and not self.verify_speaker_biometrics(audio_packet):
             is_founder = False
+        elif audio_packet:
+            is_founder = True
 
         # 1. Morning Brief Directive
         if any(w in cmd_lower for w in ["morning brief", "morning briefing", "daily brief", "brief me", "สรุปยามเช้า", "รายงานยามเช้า"]):
             brief = self.synthesize_morning_brief(system_state_vars)
             morning_brief = brief
-            reply = (f"Good morning, {self.user_callsign}. Here is your executive engineering brief: "
-                     f"All 176 subsystems are nominal. Arc Reactor power is steady at 178.2 GW. "
-                     f"{len(brief.engineering_tasks_completed)} background tasks completed. "
-                     f"Priority: {brief.key_priorities[0]}.")
+            reply = (
+                f"Good morning, {self.user_callsign}. The source-backed briefing is incomplete: "
+                f"{brief.greeting} Priority: {brief.key_priorities[0]}."
+            )
             actions.append("dispatch_morning_briefing_telemetry")
 
         # 2. 3D CAD & Hardware Model Directives
@@ -224,9 +237,11 @@ class JAVISVoiceMultimodalInterface:
                 "material": cad.material,
                 "stress_nominal": cad.thermal_stress_nominal
             }
-            reply = (f"CAD Assembly '{cad.model_name}' rendered in 3D viewport, {self.user_callsign}. "
-                     f"Volume: {cad.volume_cm3} cm³, mass: {cad.mass_kg} kg ({cad.material}). "
-                     f"Thermal and volumetric stress simulations verified within nominal bounds.")
+            reply = (
+                f"CAD Assembly '{cad.model_name}' rendered as a simulation preview, "
+                f"{self.user_callsign}. Volume and mass are estimates from caller-provided "
+                f"dimensions; stress verification is unavailable."
+            )
             actions.append("render_3d_cad_assembly_viewport")
 
         # 3. Screenshot & Competitor Analysis
@@ -240,27 +255,33 @@ class JAVISVoiceMultimodalInterface:
 
         # 4. Standard diagnostics
         elif "status" in cmd_lower or "diagnostics" in cmd_lower or "สถานะ" in cmd_lower:
-            reply = f"All 176 subsystems are operating at peak efficiency, {self.user_callsign}. Core telemetry variables: {system_state_vars}."
+            reply = (
+                f"Diagnostic request received, {self.user_callsign}. "
+                "Live subsystem evidence is unavailable on this interface."
+            )
             actions.append("diagnostics_telemetry_broadcast")
 
         elif "optimize" in cmd_lower or "upgrade" in cmd_lower or "rsi" in cmd_lower:
-            reply = f"Initiating recursive self-improvement sequence right away, {self.user_callsign}. Mathematical invariants remain strictly bounded."
-            actions.append("trigger_rsi_pipeline")
+            reply = (
+                f"Recursive self-improvement is disabled in the reference profile, "
+                f"{self.user_callsign}. An approval-bound research request is required."
+            )
+            actions.append("rsi_request_blocked")
 
         # 5. Thai Language Handling
         elif any("\u0e00" <= c <= "\u0e7f" for c in spoken_command):
-            reply = f"รับทราบคำสั่ง: '{spoken_command}' กระผมกำลังประมวลผลผ่านแกน 176 ระบบย่อยของ ZASI อย่างสมบูรณ์แบบครับ ท่าน"
+            reply = f"รับทราบคำสั่ง: '{spoken_command}' ข้อมูล live และสิทธิ์การดำเนินการยังไม่พร้อมครับ ท่าน"
             actions.append("multilingual_thai_command_routed")
 
         else:
             speaker_tag = f" [Verified {self.user_callsign}]" if is_founder else ""
-            reply = f"At your service{speaker_tag}, {self.user_callsign}. Processing command: '{spoken_command}' across 176 subsystems."
+            reply = f"At your service{speaker_tag}, {self.user_callsign}. Processing command as an advisory request."
             actions.append("generic_task_routed")
 
         self.dialogue_history.append({"user": spoken_command, "javis": reply})
 
         hud_info = {
-            "status": "ONLINE",
+            "status": "AVAILABLE",
             "active_speaker": self.persona_name,
             "callsign": self.user_callsign,
             "speaker_verified": is_founder,
@@ -276,4 +297,3 @@ class JAVISVoiceMultimodalInterface:
             morning_brief=morning_brief,
             cad_telemetry=cad_info
         )
-

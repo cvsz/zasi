@@ -3,6 +3,7 @@ Persistent Hypergraph Database Layer with SQLite
 """
 import sqlite3
 import json
+from contextlib import closing
 from typing import Dict, List, Any, Optional
 from .memory_hypergraph import DynamicHypergraphMemory
 
@@ -12,7 +13,7 @@ class PersistentHypergraphStorage:
         self._init_db()
 
     def _init_db(self):
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS entities (
@@ -33,7 +34,7 @@ class PersistentHypergraphStorage:
 
     def sync_to_disk(self, memory: DynamicHypergraphMemory):
         """Serializes in-memory hypergraph to SQLite."""
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn:
             cursor = conn.cursor()
             # Sync nodes
             for entity_id, data in memory.nodes.items():
@@ -52,7 +53,7 @@ class PersistentHypergraphStorage:
     def load_from_disk(self) -> DynamicHypergraphMemory:
         """Restores in-memory hypergraph from SQLite."""
         memory = DynamicHypergraphMemory()
-        with sqlite3.connect(self.db_path) as conn:
+        with closing(sqlite3.connect(self.db_path)) as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT id, attributes, embedding FROM entities")
             for row in cursor.fetchall():

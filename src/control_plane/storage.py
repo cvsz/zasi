@@ -1,0 +1,2987 @@
+"""Small durable SQLite repository with tenant-scoped events and audit."""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+import json
+import os
+import sqlite3
+import threading
+import time
+import hmac
+from typing import Any, Dict, List, Optional, Tuple
+
+from .identity import hash_token
+
+
+class NotFoundError(LookupError):
+    """Requested object does not exist in the current repository."""
+
+
+class ScopeViolation(PermissionError):
+    """Object exists outside the requested tenant scope."""
+
+
+class ConflictError(RuntimeError):
+    """The requested state transition conflicts with the durable record."""
+
+
+def _utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _timestamp(value: datetime) -> str:
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).isoformat()
+
+
+def _parse_utc_timestamp(value: Any, field_name: str) -> datetime:
+    if not isinstance(value, str):
+        raise ValueError(f"{field_name} must be an ISO-8601 timestamp")
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be an ISO-8601 timestamp") from exc
+    if parsed.tzinfo is None:
+        raise ValueError(f"{field_name} must include a timezone")
+    return parsed.astimezone(timezone.utc)
+
+
+class ControlPlaneStore:
+    def __init__(self, database_path: str):
+        self.database_path = database_path
+        self._lock = threading.RLock()
+        self._connection: Optional[sqlite3.Connection] = None
+
+    def initialize(self) -> None:
+        with self._lock:
+            if self._connection is not None:
+                return
+            if self.database_path != ":memory:":
+                parent = os.path.dirname(os.path.abspath(self.database_path))
+                os.makedirs(parent, exist_ok=True)
+            connection = sqlite3.connect(
+                self.database_path,
+                check_same_thread=False,
+                isolation_level=None,
+            )
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA foreign_keys = ON")
+            if self.database_path != ":memory:":
+                connection.execute("PRAGMA journal_mode = WAL")
+                connection.execute("PRAGMA synchronous = NORMAL")
+                connection.execute("PRAGMA busy_timeout = 5000")
+            connection.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS schema_meta (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS tenants (
+                    id TEXT PRIMARY KEY,
+                    status TEXT NOT NULL,
+                    policy_version TEXT NOT NULL DEFAULT 'policy.v1',
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS principals (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS sessions (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    principal_id TEXT NOT NULL REFERENCES principals(id),
+                    device_id TEXT,
+                    token_hash TEXT NOT NULL UNIQUE,
+                    scope_json TEXT NOT NULL DEFAULT '[]',
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    revoked_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS devices (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    label TEXT NOT NULL DEFAULT 'device',
+                    status TEXT NOT NULL,
+                    enrollment_hash TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    last_seen_at TEXT,
+                    revoked_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS device_pairing_challenges (
+                    id TEXT PRIMARY KEY,
+                    device_id TEXT NOT NULL UNIQUE,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    principal_id TEXT NOT NULL REFERENCES principals(id),
+                    device_label TEXT NOT NULL,
+                    challenge_hash TEXT NOT NULL,
+                    idempotency_key TEXT,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    used_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS capabilities (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT,
+                    tool_id TEXT NOT NULL,
+                    version TEXT NOT NULL,
+                    risk_tier TEXT NOT NULL,
+                    manifest_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS intents (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    principal_id TEXT NOT NULL REFERENCES principals(id),
+                    source_kind TEXT NOT NULL,
+                    source_text TEXT NOT NULL,
+                    goal_json TEXT NOT NULL,
+                    requested_mode TEXT NOT NULL,
+                    requested_risk_tier TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS plans (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    principal_id TEXT NOT NULL REFERENCES principals(id),
+                    intent_id TEXT NOT NULL REFERENCES intents(id),
+                    digest TEXT NOT NULL,
+                    scope_digest TEXT NOT NULL DEFAULT '',
+                    steps_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS approvals (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    plan_id TEXT NOT NULL REFERENCES plans(id),
+                    digest TEXT NOT NULL,
+                    scope_digest TEXT NOT NULL,
+                    approver_id TEXT NOT NULL REFERENCES principals(id),
+                    required_capability TEXT NOT NULL,
+                    risk_tier TEXT NOT NULL,
+                    decision TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    approved_at TEXT,
+                    expires_at TEXT NOT NULL,
+                    revoked_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS runs (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    plan_id TEXT,
+                    idempotency_key TEXT NOT NULL,
+                    request_digest TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    finished_at TEXT,
+                    UNIQUE (tenant_id, idempotency_key)
+                );
+                CREATE TABLE IF NOT EXISTS actions (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    run_id TEXT NOT NULL REFERENCES runs(id),
+                    step_id TEXT,
+                    tool_id TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    attempt_count INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    finished_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS evidence (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    kind TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    provenance_json TEXT NOT NULL,
+                    result_json TEXT NOT NULL DEFAULT '{}',
+                    artifact_ref TEXT,
+                    supersedes TEXT,
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS action_evidence (
+                    action_id TEXT PRIMARY KEY REFERENCES actions(id),
+                    evidence_id TEXT NOT NULL REFERENCES evidence(id)
+                );
+                CREATE TABLE IF NOT EXISTS audit_records (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    actor_kind TEXT NOT NULL,
+                    actor_id TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    target TEXT NOT NULL,
+                    outcome TEXT NOT NULL,
+                    metadata_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS events (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    sequence INTEGER NOT NULL,
+                    type TEXT NOT NULL,
+                    aggregate_kind TEXT NOT NULL,
+                    aggregate_id TEXT NOT NULL,
+                    actor_kind TEXT NOT NULL,
+                    actor_id TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    visibility TEXT NOT NULL DEFAULT 'tenant',
+                    schema_version INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL,
+                    UNIQUE (tenant_id, sequence)
+                );
+                CREATE TABLE IF NOT EXISTS outbox (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    event_id TEXT NOT NULL REFERENCES events(id),
+                    destination TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    next_attempt_at TEXT NOT NULL,
+                    attempt_count INTEGER NOT NULL DEFAULT 0,
+                    max_attempts INTEGER NOT NULL DEFAULT 5,
+                    last_error TEXT,
+                    dead_lettered_at TEXT,
+                    claimed_at TEXT,
+                    lease_until TEXT,
+                    claim_token TEXT
+                );
+                CREATE TABLE IF NOT EXISTS rate_limits (
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    subject TEXT NOT NULL,
+                    bucket INTEGER NOT NULL,
+                    count INTEGER NOT NULL,
+                    reset_at TEXT NOT NULL,
+                    PRIMARY KEY (tenant_id, subject, bucket)
+                );
+                CREATE TABLE IF NOT EXISTS artifacts (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    principal_id TEXT NOT NULL REFERENCES principals(id),
+                    digest TEXT NOT NULL,
+                    media_type TEXT NOT NULL,
+                    size_bytes INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    storage_ref TEXT NOT NULL DEFAULT '',
+                    metadata_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS memory_items (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    principal_id TEXT NOT NULL REFERENCES principals(id),
+                    content TEXT NOT NULL,
+                    scope TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    deleted_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS briefings (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    principal_id TEXT NOT NULL REFERENCES principals(id),
+                    content_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS sequences (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    principal_id TEXT NOT NULL REFERENCES principals(id),
+                    name TEXT NOT NULL,
+                    revision INTEGER NOT NULL,
+                    steps_json TEXT NOT NULL,
+                    digest TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    expires_at TEXT
+                );
+                CREATE TABLE IF NOT EXISTS sequence_runs (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    sequence_id TEXT NOT NULL REFERENCES sequences(id),
+                    revision INTEGER NOT NULL,
+                    idempotency_key TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    result_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    finished_at TEXT,
+                    UNIQUE (tenant_id, idempotency_key)
+                );
+                CREATE INDEX IF NOT EXISTS idx_sessions_tenant
+                    ON sessions(tenant_id, status, expires_at);
+                CREATE INDEX IF NOT EXISTS idx_events_tenant_sequence
+                    ON events(tenant_id, sequence);
+                CREATE INDEX IF NOT EXISTS idx_runs_tenant_idempotency
+                    ON runs(tenant_id, idempotency_key);
+                CREATE INDEX IF NOT EXISTS idx_approvals_tenant_plan
+                    ON approvals(tenant_id, plan_id, decision, expires_at);
+                CREATE INDEX IF NOT EXISTS idx_outbox_pending
+                    ON outbox(status, next_attempt_at);
+                CREATE INDEX IF NOT EXISTS idx_devices_tenant
+                    ON devices(tenant_id, status, created_at);
+                CREATE INDEX IF NOT EXISTS idx_sequences_tenant
+                    ON sequences(tenant_id, status, updated_at);
+                CREATE INDEX IF NOT EXISTS idx_sequence_runs_tenant_idempotency
+                    ON sequence_runs(tenant_id, idempotency_key);
+                """
+            )
+            tenant_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(tenants)").fetchall()
+            }
+            if "policy_version" not in tenant_columns:
+                connection.execute(
+                    "ALTER TABLE tenants ADD COLUMN policy_version TEXT NOT NULL DEFAULT 'policy.v1'"
+                )
+            plan_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(plans)").fetchall()
+            }
+            if "principal_id" not in plan_columns:
+                connection.execute(
+                    "ALTER TABLE plans ADD COLUMN principal_id TEXT NOT NULL DEFAULT ''"
+                )
+            if "scope_digest" not in plan_columns:
+                connection.execute(
+                    "ALTER TABLE plans ADD COLUMN scope_digest TEXT NOT NULL DEFAULT ''"
+                )
+            session_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(sessions)").fetchall()
+            }
+            if "scope_json" not in session_columns:
+                connection.execute(
+                    "ALTER TABLE sessions ADD COLUMN scope_json TEXT NOT NULL DEFAULT '[]'"
+                )
+            evidence_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(evidence)").fetchall()
+            }
+            if "result_json" not in evidence_columns:
+                connection.execute(
+                    "ALTER TABLE evidence ADD COLUMN result_json TEXT NOT NULL DEFAULT '{}'"
+                )
+            if "supersedes" not in evidence_columns:
+                connection.execute(
+                    "ALTER TABLE evidence ADD COLUMN supersedes TEXT"
+                )
+            device_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(devices)").fetchall()
+            }
+            if "label" not in device_columns:
+                connection.execute(
+                    "ALTER TABLE devices ADD COLUMN label TEXT NOT NULL DEFAULT 'device'"
+                )
+            if "revoked_at" not in device_columns:
+                connection.execute("ALTER TABLE devices ADD COLUMN revoked_at TEXT")
+            pairing_columns = {
+                row["name"]
+                for row in connection.execute(
+                    "PRAGMA table_info(device_pairing_challenges)"
+                ).fetchall()
+            }
+            if "idempotency_key" not in pairing_columns:
+                connection.execute(
+                    "ALTER TABLE device_pairing_challenges ADD COLUMN idempotency_key TEXT"
+                )
+            connection.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_pairing_tenant_idempotency "
+                "ON device_pairing_challenges(tenant_id, idempotency_key) "
+                "WHERE idempotency_key IS NOT NULL"
+            )
+            event_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(events)").fetchall()
+            }
+            if "visibility" not in event_columns:
+                connection.execute(
+                    "ALTER TABLE events ADD COLUMN visibility TEXT NOT NULL DEFAULT 'tenant'"
+                )
+            if "schema_version" not in event_columns:
+                connection.execute(
+                    "ALTER TABLE events ADD COLUMN schema_version INTEGER NOT NULL DEFAULT 1"
+                )
+            outbox_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(outbox)").fetchall()
+            }
+            if "max_attempts" not in outbox_columns:
+                connection.execute(
+                    "ALTER TABLE outbox ADD COLUMN max_attempts INTEGER NOT NULL DEFAULT 5"
+                )
+            if "last_error" not in outbox_columns:
+                connection.execute("ALTER TABLE outbox ADD COLUMN last_error TEXT")
+            if "dead_lettered_at" not in outbox_columns:
+                connection.execute("ALTER TABLE outbox ADD COLUMN dead_lettered_at TEXT")
+            if "claimed_at" not in outbox_columns:
+                connection.execute("ALTER TABLE outbox ADD COLUMN claimed_at TEXT")
+            if "lease_until" not in outbox_columns:
+                connection.execute("ALTER TABLE outbox ADD COLUMN lease_until TEXT")
+            if "claim_token" not in outbox_columns:
+                connection.execute("ALTER TABLE outbox ADD COLUMN claim_token TEXT")
+            artifact_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(artifacts)").fetchall()
+            }
+            if "storage_ref" not in artifact_columns:
+                connection.execute(
+                    "ALTER TABLE artifacts ADD COLUMN storage_ref TEXT NOT NULL DEFAULT ''"
+                )
+            run_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(runs)").fetchall()
+            }
+            if "request_digest" not in run_columns:
+                connection.execute(
+                    "ALTER TABLE runs ADD COLUMN request_digest TEXT NOT NULL DEFAULT ''"
+                )
+            schema_row = connection.execute(
+                "SELECT value FROM schema_meta WHERE key = 'schema_version'"
+            ).fetchone()
+            if schema_row is not None:
+                try:
+                    current_schema = int(schema_row["value"])
+                except (TypeError, ValueError) as exc:
+                    raise RuntimeError("schema version metadata is invalid") from exc
+                if current_schema > 7:
+                    raise RuntimeError("database schema is newer than this application")
+            connection.execute(
+                "INSERT OR REPLACE INTO schema_meta(key, value) VALUES('schema_version', '7')"
+            )
+            self._connection = connection
+
+    def close(self) -> None:
+        with self._lock:
+            if self._connection is not None:
+                self._connection.close()
+                self._connection = None
+
+    def _conn(self) -> sqlite3.Connection:
+        if self._connection is None:
+            raise RuntimeError("ControlPlaneStore.initialize() must be called first")
+        return self._connection
+
+    def schema_version(self) -> int:
+        with self._lock:
+            row = self._conn().execute(
+                "SELECT value FROM schema_meta WHERE key = 'schema_version'"
+            ).fetchone()
+        if row is None:
+            raise RuntimeError("schema version metadata is missing")
+        return int(row["value"])
+
+    def integrity_check(self) -> bool:
+        with self._lock:
+            row = self._conn().execute("PRAGMA integrity_check").fetchone()
+        return bool(row and row[0] == "ok")
+
+    def backup_to(self, backup_path: str) -> None:
+        """Create a consistent SQLite backup without mutating the source DB."""
+        if not backup_path or backup_path == ":memory:":
+            raise ValueError("backup path must be a filesystem path")
+        source_path = os.path.abspath(self.database_path)
+        target_path = os.path.abspath(backup_path)
+        if source_path == target_path:
+            raise ValueError("backup path must differ from database path")
+        parent = os.path.dirname(target_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        with self._lock:
+            destination = sqlite3.connect(target_path)
+            try:
+                self._conn().backup(destination)
+            finally:
+                destination.close()
+
+    def create_tenant(self, tenant_id: str) -> None:
+        with self._lock:
+            self._conn().execute(
+                "INSERT OR IGNORE INTO tenants(id, status, created_at) VALUES(?, 'active', ?)",
+                (tenant_id, _timestamp(_utcnow())),
+            )
+
+    def create_principal(self, principal_id: str, tenant_id: str) -> None:
+        with self._lock:
+            self._conn().execute(
+                "INSERT OR IGNORE INTO principals(id, tenant_id, status, created_at) "
+                "VALUES(?, ?, 'active', ?)",
+                (principal_id, tenant_id, _timestamp(_utcnow())),
+            )
+
+    def upsert_capability(self, manifest: Dict[str, Any]) -> Dict[str, Any]:
+        """Persist the code-owned capability manifest for audit and inspection."""
+        tool_id = manifest.get("tool_id")
+        version = manifest.get("version")
+        if not isinstance(tool_id, str) or not tool_id or not isinstance(version, str) or not version:
+            raise ValueError("capability manifest requires a tool_id and version")
+        capability_id = str(manifest.get("capability_id") or tool_id)
+        capability_row_id = "cap_" + hash_token(f"{capability_id}:{version}")[:26]
+        now = _timestamp(_utcnow())
+        payload = json.dumps(manifest, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        with self._lock:
+            self._conn().execute(
+                "INSERT INTO capabilities(id, tenant_id, tool_id, version, risk_tier, manifest_json, status, created_at) "
+                "VALUES(?, NULL, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(id) DO UPDATE SET version=excluded.version, risk_tier=excluded.risk_tier, "
+                "manifest_json=excluded.manifest_json, status=excluded.status",
+                (
+                    capability_row_id,
+                    tool_id,
+                    version,
+                    manifest.get("risk_tier", "R0"),
+                    payload,
+                    manifest.get("availability", "disabled"),
+                    now,
+                ),
+            )
+        return {
+            "capability_id": capability_id,
+            "registry_id": capability_row_id,
+            "tool_id": tool_id,
+            "version": version,
+            "manifest": dict(manifest),
+            "status": manifest.get("availability", "disabled"),
+        }
+
+    def list_capabilities(self) -> List[Dict[str, Any]]:
+        with self._lock:
+            rows = self._conn().execute(
+                "SELECT * FROM capabilities ORDER BY tool_id, version"
+            ).fetchall()
+        return [
+            {
+                "registry_id": row["id"],
+                "tenant_id": row["tenant_id"],
+                "tool_id": row["tool_id"],
+                "version": row["version"],
+                "risk_tier": row["risk_tier"],
+                "manifest": json.loads(row["manifest_json"]),
+                "status": row["status"],
+                "created_at": row["created_at"],
+            }
+            for row in rows
+        ]
+
+    def create_pairing_challenge(
+        self,
+        challenge_id: str,
+        device_id: str,
+        tenant_id: str,
+        principal_id: str,
+        device_label: str,
+        challenge_hash: str,
+        expires_at: datetime,
+        idempotency_key: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Persist a one-time device challenge without persisting its plaintext."""
+        if not device_label or len(device_label) > 128:
+            raise ValueError("device label must be non-empty and bounded")
+        if idempotency_key is not None and (
+            not idempotency_key
+            or len(idempotency_key) > 256
+            or any(ord(char) < 0x20 or ord(char) == 0x7F for char in idempotency_key)
+        ):
+            raise ValueError("invalid pairing idempotency key")
+        now = _timestamp(_utcnow())
+        expires = _timestamp(expires_at)
+        if _parse_utc_timestamp(expires, "expires_at") <= _utcnow():
+            raise ValueError("pairing challenge must expire in the future")
+        record = {
+            "challenge_id": challenge_id,
+            "device_id": device_id,
+            "tenant_id": tenant_id,
+            "device_label": device_label,
+            "status": "pending",
+            "created_at": now,
+            "expires_at": expires,
+        }
+        with self._lock:
+            connection = self._conn()
+            if idempotency_key is not None:
+                existing = connection.execute(
+                    "SELECT 1 FROM device_pairing_challenges "
+                    "WHERE tenant_id = ? AND idempotency_key = ?",
+                    (tenant_id, idempotency_key),
+                ).fetchone()
+                if existing is not None:
+                    raise ConflictError("pairing idempotency key has already been used")
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    "INSERT INTO device_pairing_challenges("
+                    "id, device_id, tenant_id, principal_id, device_label, challenge_hash, "
+                    "idempotency_key, status, created_at, expires_at"
+                    ") VALUES(?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)",
+                    (
+                        challenge_id,
+                        device_id,
+                        tenant_id,
+                        principal_id,
+                        device_label,
+                        challenge_hash,
+                        idempotency_key,
+                        now,
+                        expires,
+                    ),
+                )
+                payload = {
+                    "challenge_id": challenge_id,
+                    "device_id": device_id,
+                    "device_label": device_label,
+                    "status": "pending",
+                    "expires_at": expires,
+                }
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{challenge_id}:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="principal",
+                    actor_id=principal_id,
+                    action="device.pairing.created",
+                    target=device_id,
+                    outcome="success",
+                    event_type="device.pairing.created",
+                    aggregate_kind="device_pairing",
+                    aggregate_id=challenge_id,
+                    payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                connection.execute("COMMIT")
+            except sqlite3.IntegrityError as exc:
+                connection.execute("ROLLBACK")
+                raise ConflictError("pairing challenge conflicts with an existing record") from exc
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        return record
+
+    def approve_pairing_challenge(
+        self,
+        device_id: str,
+        tenant_id: str,
+        principal_id: str,
+        challenge: str,
+        enrollment_hash: str,
+    ) -> Dict[str, Any]:
+        """Consume one challenge and enroll exactly one active device."""
+        if not challenge or len(challenge) > 512:
+            raise ConflictError("pairing challenge is invalid")
+        challenge_hash = hash_token(challenge)
+        now = _timestamp(_utcnow())
+        with self._lock:
+            connection = self._conn()
+            row = connection.execute(
+                "SELECT * FROM device_pairing_challenges "
+                "WHERE device_id = ? AND tenant_id = ? AND status = 'pending'",
+                (device_id, tenant_id),
+            ).fetchone()
+            if row is None:
+                raise NotFoundError("pairing challenge not found")
+            if _parse_utc_timestamp(row["expires_at"], "pairing.expires_at") <= _utcnow():
+                connection.execute(
+                    "UPDATE device_pairing_challenges SET status = 'expired' "
+                    "WHERE id = ? AND status = 'pending'",
+                    (row["id"],),
+                )
+                raise ConflictError("pairing challenge expired")
+            if not hmac.compare_digest(challenge_hash, row["challenge_hash"]):
+                raise ConflictError("pairing challenge is invalid")
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    "INSERT INTO devices(id, tenant_id, label, status, enrollment_hash, created_at) "
+                    "VALUES(?, ?, ?, 'active', ?, ?)",
+                    (device_id, tenant_id, row["device_label"], enrollment_hash, now),
+                )
+                connection.execute(
+                    "UPDATE device_pairing_challenges SET status = 'approved', used_at = ? "
+                    "WHERE id = ? AND status = 'pending'",
+                    (now, row["id"]),
+                )
+                payload = {
+                    "device_id": device_id,
+                    "device_label": row["device_label"],
+                    "status": "active",
+                    "challenge_id": row["id"],
+                }
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{device_id}:approved:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="principal",
+                    actor_id=principal_id,
+                    action="device.pairing.approved",
+                    target=device_id,
+                    outcome="success",
+                    event_type="device.pairing.approved",
+                    aggregate_kind="device",
+                    aggregate_id=device_id,
+                    payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        return self.get_device(device_id, tenant_id)
+
+    @staticmethod
+    def _device_record(row: sqlite3.Row) -> Dict[str, Any]:
+        return {
+            "device_id": row["id"],
+            "tenant_id": row["tenant_id"],
+            "label": row["label"],
+            "status": row["status"],
+            "created_at": row["created_at"],
+            "last_seen_at": row["last_seen_at"],
+            "revoked_at": row["revoked_at"],
+        }
+
+    def get_device(self, device_id: str, tenant_id: str) -> Dict[str, Any]:
+        with self._lock:
+            row = self._conn().execute(
+                "SELECT * FROM devices WHERE id = ? AND tenant_id = ?",
+                (device_id, tenant_id),
+            ).fetchone()
+        if row is None:
+            raise NotFoundError("device not found")
+        return self._device_record(row)
+
+    def list_devices(self, tenant_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+        if not 1 <= limit <= 1000:
+            raise ValueError("invalid device limit")
+        with self._lock:
+            rows = self._conn().execute(
+                "SELECT * FROM devices WHERE tenant_id = ? ORDER BY created_at DESC LIMIT ?",
+                (tenant_id, limit),
+            ).fetchall()
+        return [self._device_record(row) for row in rows]
+
+    def revoke_device(
+        self, device_id: str, tenant_id: str, principal_id: str
+    ) -> Dict[str, Any]:
+        now = _timestamp(_utcnow())
+        with self._lock:
+            connection = self._conn()
+            row = connection.execute(
+                "SELECT * FROM devices WHERE id = ? AND tenant_id = ?",
+                (device_id, tenant_id),
+            ).fetchone()
+            if row is None:
+                raise NotFoundError("device not found")
+            if row["status"] == "revoked":
+                return self._device_record(row)
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    "UPDATE devices SET status = 'revoked', revoked_at = ? "
+                    "WHERE id = ? AND tenant_id = ? AND status != 'revoked'",
+                    (now, device_id, tenant_id),
+                )
+                connection.execute(
+                    "UPDATE sessions SET status = 'revoked', revoked_at = ? "
+                    "WHERE device_id = ? AND tenant_id = ? AND status = 'active'",
+                    (now, device_id, tenant_id),
+                )
+                payload = {"device_id": device_id, "status": "revoked"}
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{device_id}:revoked:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="principal",
+                    actor_id=principal_id,
+                    action="device.revoked",
+                    target=device_id,
+                    outcome="success",
+                    event_type="device.revoked",
+                    aggregate_kind="device",
+                    aggregate_id=device_id,
+                    payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        return self.get_device(device_id, tenant_id)
+
+    def create_session(
+        self,
+        session_id: str,
+        tenant_id: str,
+        principal_id: str,
+        device_id: Optional[str],
+        token_hash: str,
+        expires_at: datetime,
+        scopes: Optional[List[str]] = None,
+    ) -> None:
+        scope_json = json.dumps(
+            sorted(set(scopes or ["workspace:read", "intent:create", "plan:create"])),
+            separators=(",", ":"),
+        )
+        with self._lock:
+            connection = self._conn()
+            now = _timestamp(_utcnow())
+            expires = _timestamp(expires_at)
+            payload = {
+                "session_id": session_id,
+                "device_id": device_id,
+                "scopes": json.loads(scope_json),
+                "expires_at": expires,
+            }
+            payload_json = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+            event_id = "evt_" + hash_token(
+                f"{tenant_id}:{session_id}:{os.urandom(16).hex()}"
+            )[:26]
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    "INSERT INTO sessions("
+                    "id, tenant_id, principal_id, device_id, token_hash, scope_json, status, created_at, expires_at"
+                    ") VALUES(?, ?, ?, ?, ?, ?, 'active', ?, ?)",
+                    (
+                        session_id,
+                        tenant_id,
+                        principal_id,
+                        device_id,
+                        token_hash,
+                        scope_json,
+                        now,
+                        expires,
+                    ),
+                )
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="principal",
+                    actor_id=principal_id,
+                    action="session.created",
+                    target=session_id,
+                    outcome="success",
+                    event_type="session.created",
+                    aggregate_kind="session",
+                    aggregate_id=session_id,
+                    payload_json=payload_json,
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+
+    def get_session(self, session_id: str, tenant_id: Optional[str] = None) -> Dict[str, Any]:
+        with self._lock:
+            row = self._conn().execute(
+                "SELECT * FROM sessions WHERE id = ?", (session_id,)
+            ).fetchone()
+        if row is None:
+            raise NotFoundError("session not found")
+        if tenant_id is not None and row["tenant_id"] != tenant_id:
+            raise ScopeViolation("session is outside tenant scope")
+        return dict(row)
+
+    def authenticate_session(self, token: str) -> Optional[Dict[str, Any]]:
+        token_hash = hash_token(token)
+        with self._lock:
+            row = self._conn().execute(
+                "SELECT * FROM sessions WHERE token_hash = ? AND status = 'active'",
+                (token_hash,),
+            ).fetchone()
+        if row is None:
+            return None
+        expires_at = _parse_utc_timestamp(row["expires_at"], "session.expires_at")
+        if expires_at <= _utcnow():
+            return None
+        return dict(row)
+
+    def revoke_session(self, session_id: str) -> None:
+        with self._lock:
+            connection = self._conn()
+            row = connection.execute(
+                "SELECT tenant_id, principal_id, status FROM sessions WHERE id = ?",
+                (session_id,),
+            ).fetchone()
+            if row is None:
+                raise NotFoundError("session not found")
+            if row["status"] == "revoked":
+                return
+            now = _timestamp(_utcnow())
+            payload = {"session_id": session_id, "status": "revoked"}
+            payload_json = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+            event_id = "evt_" + hash_token(
+                f"{row['tenant_id']}:{session_id}:{os.urandom(16).hex()}"
+            )[:26]
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    "UPDATE sessions SET status = 'revoked', revoked_at = ? WHERE id = ?",
+                    (now, session_id),
+                )
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=row["tenant_id"],
+                    actor_kind="principal",
+                    actor_id=row["principal_id"],
+                    action="session.revoked",
+                    target=session_id,
+                    outcome="success",
+                    event_type="session.revoked",
+                    aggregate_kind="session",
+                    aggregate_id=session_id,
+                    payload_json=payload_json,
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+
+    def append_audited_event(
+        self,
+        tenant_id: str,
+        actor_kind: str,
+        actor_id: str,
+        action: str,
+        target: str,
+        outcome: str,
+        event_type: str,
+        aggregate_kind: str,
+        aggregate_id: str,
+        payload: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        payload_json = json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        now = _timestamp(_utcnow())
+        event_id = "evt_" + hash_token(f"{tenant_id}:{now}:{os.urandom(16).hex()}")[:26]
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                event = self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind=actor_kind,
+                    actor_id=actor_id,
+                    action=action,
+                    target=target,
+                    outcome=outcome,
+                    event_type=event_type,
+                    aggregate_kind=aggregate_kind,
+                    aggregate_id=aggregate_id,
+                    payload_json=payload_json,
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        return event
+
+    @staticmethod
+    def _append_audited_event_locked(
+        connection: sqlite3.Connection,
+        tenant_id: str,
+        actor_kind: str,
+        actor_id: str,
+        action: str,
+        target: str,
+        outcome: str,
+        event_type: str,
+        aggregate_kind: str,
+        aggregate_id: str,
+        payload_json: str,
+        payload: Dict[str, Any],
+        now: str,
+        event_id: str,
+        visibility: str = "tenant",
+        schema_version: int = 1,
+    ) -> Dict[str, Any]:
+        if visibility not in {"tenant", "workspace", "principal"}:
+            raise ValueError("invalid event visibility")
+        if not 1 <= schema_version <= 100:
+            raise ValueError("invalid event schema version")
+        audit_id = "aud_" + event_id[4:]
+        row = connection.execute(
+            "SELECT COALESCE(MAX(sequence), 0) + 1 AS next_sequence "
+            "FROM events WHERE tenant_id = ?",
+            (tenant_id,),
+        ).fetchone()
+        sequence = int(row["next_sequence"])
+        connection.execute(
+            "INSERT INTO audit_records("
+            "id, tenant_id, actor_kind, actor_id, action, target, outcome, metadata_json, created_at"
+            ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                audit_id,
+                tenant_id,
+                actor_kind,
+                actor_id,
+                action,
+                target,
+                outcome,
+                payload_json,
+                now,
+            ),
+        )
+        connection.execute(
+            "INSERT INTO events("
+            "id, tenant_id, sequence, type, aggregate_kind, aggregate_id, "
+            "actor_kind, actor_id, payload_json, visibility, schema_version, created_at"
+            ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                event_id,
+                tenant_id,
+                sequence,
+                event_type,
+                aggregate_kind,
+                aggregate_id,
+                actor_kind,
+                actor_id,
+                payload_json,
+                visibility,
+                schema_version,
+                now,
+            ),
+        )
+        connection.execute(
+            "INSERT INTO outbox("
+            "id, tenant_id, event_id, destination, status, next_attempt_at, attempt_count"
+            ") VALUES(?, ?, ?, 'event_stream', 'pending', ?, 0)",
+            ("out_" + event_id[4:], tenant_id, event_id, now),
+        )
+        return {
+            "event_id": event_id,
+            "tenant_id": tenant_id,
+            "sequence": sequence,
+            "type": event_type,
+            "aggregate": {"kind": aggregate_kind, "id": aggregate_id},
+            "actor": {"kind": actor_kind, "id": actor_id},
+            "payload": payload,
+            "visibility": visibility,
+            "schema_version": schema_version,
+            "occurred_at": now,
+        }
+
+    def create_intent(
+        self,
+        intent_id: str,
+        tenant_id: str,
+        principal_id: str,
+        source_kind: str,
+        source_text: str,
+        goal_json: str,
+        requested_mode: str,
+        requested_risk_tier: str,
+    ) -> Dict[str, Any]:
+        now = _timestamp(_utcnow())
+        payload = {
+            "intent_id": intent_id,
+            "status": "created",
+            "requested_risk_tier": requested_risk_tier,
+        }
+        payload_json = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        event_id = "evt_" + hash_token(f"{tenant_id}:{intent_id}:{os.urandom(16).hex()}")[:26]
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    "INSERT INTO intents("
+                    "id, tenant_id, principal_id, source_kind, source_text, goal_json, "
+                    "requested_mode, requested_risk_tier, status, created_at"
+                    ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, 'created', ?)",
+                    (
+                        intent_id,
+                        tenant_id,
+                        principal_id,
+                        source_kind,
+                        source_text,
+                        goal_json,
+                        requested_mode,
+                        requested_risk_tier,
+                        now,
+                    ),
+                )
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="principal",
+                    actor_id=principal_id,
+                    action="intent.created",
+                    target=intent_id,
+                    outcome="success",
+                    event_type="intent.created",
+                    aggregate_kind="intent",
+                    aggregate_id=intent_id,
+                    payload_json=payload_json,
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        return {
+            "intent_id": intent_id,
+            "tenant_id": tenant_id,
+            "principal_id": principal_id,
+            "source_kind": source_kind,
+            "source_text": source_text,
+            "goal": json.loads(goal_json),
+            "requested_mode": requested_mode,
+            "requested_risk_tier": requested_risk_tier,
+            "status": "created",
+            "created_at": now,
+        }
+
+    def get_intent(self, intent_id: str, tenant_id: str) -> Dict[str, Any]:
+        with self._lock:
+            row = self._conn().execute(
+                "SELECT * FROM intents WHERE id = ?", (intent_id,)
+            ).fetchone()
+        if row is None:
+            raise NotFoundError("intent not found")
+        if row["tenant_id"] != tenant_id:
+            raise ScopeViolation("intent is outside tenant scope")
+        return {
+            "intent_id": row["id"],
+            "tenant_id": row["tenant_id"],
+            "principal_id": row["principal_id"],
+            "source_kind": row["source_kind"],
+            "source_text": row["source_text"],
+            "goal": json.loads(row["goal_json"]),
+            "requested_mode": row["requested_mode"],
+            "requested_risk_tier": row["requested_risk_tier"],
+            "status": row["status"],
+            "created_at": row["created_at"],
+        }
+
+    def create_plan(
+        self,
+        plan_id: str,
+        tenant_id: str,
+        principal_id: str,
+        intent_id: str,
+        digest: str,
+        steps_json: str,
+        expires_at: datetime,
+        scope_digest: str = "",
+        status: str = "draft",
+    ) -> Dict[str, Any]:
+        now = _timestamp(_utcnow())
+        expires = _timestamp(expires_at)
+        payload = {
+            "plan_id": plan_id,
+            "intent_id": intent_id,
+            "status": status,
+            "digest": digest,
+        }
+        payload_json = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        event_id = "evt_" + hash_token(f"{tenant_id}:{plan_id}:{os.urandom(16).hex()}")[:26]
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    "INSERT INTO plans("
+                    "id, tenant_id, principal_id, intent_id, digest, scope_digest, steps_json, status, created_at, expires_at"
+                    ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        plan_id,
+                        tenant_id,
+                        principal_id,
+                        intent_id,
+                        digest,
+                        scope_digest,
+                        steps_json,
+                        status,
+                        now,
+                        expires,
+                    ),
+                )
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="principal",
+                    actor_id=principal_id,
+                    action="plan.created",
+                    target=plan_id,
+                    outcome="success",
+                    event_type="plan.created",
+                    aggregate_kind="plan",
+                    aggregate_id=plan_id,
+                    payload_json=payload_json,
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        return {
+            "plan_id": plan_id,
+            "tenant_id": tenant_id,
+            "principal_id": principal_id,
+            "intent_id": intent_id,
+            "digest": digest,
+            "scope_digest": scope_digest,
+            "steps": json.loads(steps_json),
+            "status": status,
+            "created_at": now,
+            "expires_at": expires,
+        }
+
+    def get_plan(self, plan_id: str, tenant_id: str) -> Dict[str, Any]:
+        with self._lock:
+            row = self._conn().execute(
+                "SELECT * FROM plans WHERE id = ?", (plan_id,)
+            ).fetchone()
+        if row is None:
+            raise NotFoundError("plan not found")
+        if row["tenant_id"] != tenant_id:
+            raise ScopeViolation("plan is outside tenant scope")
+        return {
+            "plan_id": row["id"],
+            "tenant_id": row["tenant_id"],
+            "principal_id": row["principal_id"],
+            "intent_id": row["intent_id"],
+            "digest": row["digest"],
+            "scope_digest": row["scope_digest"],
+            "steps": json.loads(row["steps_json"]),
+            "status": row["status"],
+            "created_at": row["created_at"],
+            "expires_at": row["expires_at"],
+        }
+
+    def transition_plan(
+        self,
+        plan_id: str,
+        tenant_id: str,
+        principal_id: str,
+        target_status: str,
+    ) -> Dict[str, Any]:
+        allowed = {
+            "draft": {"awaiting_approval", "executing", "expired", "rejected"},
+            "awaiting_approval": {"approved", "expired", "rejected"},
+            "approved": {"executing", "expired", "rejected", "awaiting_approval"},
+            "executing": {"completed", "failed"},
+            "completed": set(),
+            "failed": set(),
+            "expired": set(),
+            "rejected": set(),
+        }
+        with self._lock:
+            connection = self._conn()
+            row = connection.execute(
+                "SELECT * FROM plans WHERE id = ? AND tenant_id = ?",
+                (plan_id, tenant_id),
+            ).fetchone()
+            if row is None:
+                raise NotFoundError("plan not found")
+            current_status = row["status"]
+            if target_status not in allowed.get(current_status, set()):
+                raise ConflictError(
+                    f"illegal plan transition: {current_status} -> {target_status}"
+                )
+            now = _timestamp(_utcnow())
+            payload = {
+                "plan_id": plan_id,
+                "from_status": current_status,
+                "to_status": target_status,
+            }
+            event_id = "evt_" + hash_token(
+                f"{tenant_id}:{plan_id}:{target_status}:{os.urandom(16).hex()}"
+            )[:26]
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    "UPDATE plans SET status = ? WHERE id = ? AND tenant_id = ?",
+                    (target_status, plan_id, tenant_id),
+                )
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="principal",
+                    actor_id=principal_id,
+                    action=f"plan.{target_status}",
+                    target=plan_id,
+                    outcome="success",
+                    event_type="plan.updated",
+                    aggregate_kind="plan",
+                    aggregate_id=plan_id,
+                    payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        return self.get_plan(plan_id, tenant_id)
+
+    @staticmethod
+    def _approval_record(row: sqlite3.Row) -> Dict[str, Any]:
+        return {
+            "approval_id": row["id"],
+            "tenant_id": row["tenant_id"],
+            "plan_id": row["plan_id"],
+            "digest": row["digest"],
+            "scope_digest": row["scope_digest"],
+            "approver_principal_id": row["approver_id"],
+            "required_capability": row["required_capability"],
+            "risk_tier": row["risk_tier"],
+            "decision": row["decision"],
+            "reason": row["reason"],
+            "created_at": row["created_at"],
+            "approved_at": row["approved_at"],
+            "expires_at": row["expires_at"],
+            "revoked_at": row["revoked_at"],
+        }
+
+    def approve_plan(
+        self,
+        approval_id: str,
+        plan_id: str,
+        tenant_id: str,
+        approver_id: str,
+        digest: str,
+        scope_digest: str,
+        required_capability: str,
+        risk_tier: str,
+        reason: str,
+        expires_at: datetime,
+    ) -> Dict[str, Any]:
+        """Approve one immutable plan digest in the same transaction as its event."""
+        if not reason or len(reason) > 2000:
+            raise ValueError("approval reason must be non-empty and bounded")
+        now = _timestamp(_utcnow())
+        expires = _timestamp(expires_at)
+        payload = {
+            "approval_id": approval_id,
+            "plan_id": plan_id,
+            "digest": digest,
+            "risk_tier": risk_tier,
+            "decision": "approved",
+            "expires_at": expires,
+        }
+        payload_json = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        with self._lock:
+            connection = self._conn()
+            plan = connection.execute(
+                "SELECT * FROM plans WHERE id = ? AND tenant_id = ?",
+                (plan_id, tenant_id),
+            ).fetchone()
+            if plan is None:
+                raise NotFoundError("plan not found")
+            if plan["digest"] != digest or plan["scope_digest"] != scope_digest:
+                raise ConflictError("approval binding does not match the plan")
+            if _parse_utc_timestamp(plan["expires_at"], "plan.expires_at") <= _utcnow():
+                raise ConflictError("plan approval window expired")
+            if plan["status"] in {"rejected", "expired", "completed", "failed"}:
+                raise ConflictError("plan is not approvable in its current state")
+            if _parse_utc_timestamp(expires, "expires_at") <= _utcnow():
+                raise ValueError("approval expiry must be in the future")
+            existing = connection.execute(
+                "SELECT * FROM approvals WHERE plan_id = ? AND tenant_id = ? "
+                "AND digest = ? AND scope_digest = ? AND approver_id = ? "
+                "AND decision = 'approved' AND revoked_at IS NULL",
+                (plan_id, tenant_id, digest, scope_digest, approver_id),
+            ).fetchone()
+            if existing is not None:
+                return self._approval_record(existing)
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    "INSERT INTO approvals("
+                    "id, tenant_id, plan_id, digest, scope_digest, approver_id, "
+                    "required_capability, risk_tier, decision, reason, created_at, "
+                    "approved_at, expires_at, revoked_at"
+                    ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?, ?, ?, NULL)",
+                    (
+                        approval_id,
+                        tenant_id,
+                        plan_id,
+                        digest,
+                        scope_digest,
+                        approver_id,
+                        required_capability,
+                        risk_tier,
+                        reason,
+                        now,
+                        now,
+                        expires,
+                    ),
+                )
+                connection.execute(
+                    "UPDATE plans SET status = 'approved' WHERE id = ? AND tenant_id = ?",
+                    (plan_id, tenant_id),
+                )
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{approval_id}:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="principal",
+                    actor_id=approver_id,
+                    action="plan.approved",
+                    target=plan_id,
+                    outcome="success",
+                    event_type="approval.approved",
+                    aggregate_kind="approval",
+                    aggregate_id=approval_id,
+                    payload_json=payload_json,
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+            row = connection.execute(
+                "SELECT * FROM approvals WHERE id = ?", (approval_id,)
+            ).fetchone()
+            if row is None:
+                raise RuntimeError("approval was not persisted")
+            return self._approval_record(row)
+
+    def list_approvals(
+        self, tenant_id: str, approver_id: Optional[str] = None, limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        if not 1 <= limit <= 1000:
+            raise ValueError("invalid approval limit")
+        query = "SELECT * FROM approvals WHERE tenant_id = ?"
+        parameters: List[Any] = [tenant_id]
+        if approver_id is not None:
+            query += " AND approver_id = ?"
+            parameters.append(approver_id)
+        query += " ORDER BY created_at DESC LIMIT ?"
+        parameters.append(limit)
+        with self._lock:
+            rows = self._conn().execute(query, parameters).fetchall()
+        return [self._approval_record(row) for row in rows]
+
+    def get_approval(self, approval_id: str, tenant_id: str) -> Dict[str, Any]:
+        with self._lock:
+            row = self._conn().execute(
+                "SELECT * FROM approvals WHERE id = ? AND tenant_id = ?",
+                (approval_id, tenant_id),
+            ).fetchone()
+        if row is None:
+            raise NotFoundError("approval not found")
+        return self._approval_record(row)
+
+    def revoke_approval(
+        self, approval_id: str, tenant_id: str, principal_id: str
+    ) -> Dict[str, Any]:
+        now = _timestamp(_utcnow())
+        with self._lock:
+            connection = self._conn()
+            row = connection.execute(
+                "SELECT * FROM approvals WHERE id = ? AND tenant_id = ?",
+                (approval_id, tenant_id),
+            ).fetchone()
+            if row is None:
+                raise NotFoundError("approval not found")
+            if row["decision"] != "approved" or row["revoked_at"] is not None:
+                raise ConflictError("approval is not revocable")
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    "UPDATE approvals SET decision = 'revoked', revoked_at = ? "
+                    "WHERE id = ? AND tenant_id = ? AND decision = 'approved'",
+                    (now, approval_id, tenant_id),
+                )
+                connection.execute(
+                    "UPDATE plans SET status = 'awaiting_approval' WHERE id = ? "
+                    "AND tenant_id = ? AND status = 'approved'",
+                    (row["plan_id"], tenant_id),
+                )
+                payload = {
+                    "approval_id": approval_id,
+                    "plan_id": row["plan_id"],
+                    "decision": "revoked",
+                }
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{approval_id}:revoke:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="principal",
+                    actor_id=principal_id,
+                    action="approval.revoked",
+                    target=approval_id,
+                    outcome="success",
+                    event_type="approval.revoked",
+                    aggregate_kind="approval",
+                    aggregate_id=approval_id,
+                    payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+            updated = connection.execute(
+                "SELECT * FROM approvals WHERE id = ?", (approval_id,)
+            ).fetchone()
+            return self._approval_record(updated)
+
+    def has_valid_approval(
+        self,
+        plan_id: str,
+        tenant_id: str,
+        digest: str,
+        scope_digest: str,
+    ) -> bool:
+        now = _timestamp(_utcnow())
+        with self._lock:
+            row = self._conn().execute(
+                "SELECT 1 FROM approvals WHERE plan_id = ? AND tenant_id = ? "
+                "AND digest = ? AND scope_digest = ? AND decision = 'approved' "
+                "AND revoked_at IS NULL AND expires_at > ? LIMIT 1",
+                (plan_id, tenant_id, digest, scope_digest, now),
+            ).fetchone()
+        return row is not None
+
+    def list_audit(
+        self, tenant_id: str, limit: int = 100, after: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        if not 1 <= limit <= 1000:
+            raise ValueError("invalid audit limit")
+        query = "SELECT * FROM audit_records WHERE tenant_id = ?"
+        parameters: List[Any] = [tenant_id]
+        if after:
+            if "|" in after:
+                after_created_at, after_id = after.rsplit("|", 1)
+                if not after_created_at or not after_id:
+                    raise ValueError("invalid audit cursor")
+                try:
+                    datetime.fromisoformat(after_created_at)
+                except ValueError as exc:
+                    raise ValueError("invalid audit cursor") from exc
+                query += " AND (created_at < ? OR (created_at = ? AND id < ?))"
+                parameters.extend([after_created_at, after_created_at, after_id])
+            else:
+                # Accept the pre-cursor timestamp form during migration. New
+                # responses always return the stable timestamp+ID cursor.
+                try:
+                    datetime.fromisoformat(after)
+                except ValueError as exc:
+                    raise ValueError("invalid audit cursor") from exc
+                query += " AND created_at < ?"
+                parameters.append(after)
+        query += " ORDER BY created_at DESC, id DESC LIMIT ?"
+        parameters.append(limit)
+        with self._lock:
+            rows = self._conn().execute(query, parameters).fetchall()
+        return [
+            {
+                "audit_id": row["id"],
+                "tenant_id": row["tenant_id"],
+                "actor": {"kind": row["actor_kind"], "id": row["actor_id"]},
+                "action": row["action"],
+                "target": row["target"],
+                "outcome": row["outcome"],
+                "metadata": json.loads(row["metadata_json"]),
+                "created_at": row["created_at"],
+            }
+            for row in rows
+        ]
+
+    @staticmethod
+    def audit_cursor(record: Dict[str, Any]) -> str:
+        """Return a stable cursor that remains deterministic for equal timestamps."""
+        created_at = record.get("created_at")
+        audit_id = record.get("audit_id")
+        if not isinstance(created_at, str) or not isinstance(audit_id, str):
+            raise ValueError("audit record does not contain cursor fields")
+        return f"{created_at}|{audit_id}"
+
+    def get_evidence(self, evidence_id: str, tenant_id: str) -> Dict[str, Any]:
+        with self._lock:
+            row = self._conn().execute(
+                "SELECT * FROM evidence WHERE id = ? AND tenant_id = ?",
+                (evidence_id, tenant_id),
+            ).fetchone()
+        if row is None:
+            raise NotFoundError("evidence not found")
+        provenance = json.loads(row["provenance_json"])
+        return {
+            "evidence_id": row["id"],
+            "tenant_id": row["tenant_id"],
+            "kind": row["kind"],
+            "status": row["status"],
+            "provenance": provenance,
+            "result": json.loads(row["result_json"]),
+            "artifact_ref": row["artifact_ref"],
+            "supersedes": row["supersedes"],
+            "created_at": row["created_at"],
+        }
+
+    def create_evidence(
+        self,
+        evidence_id: str,
+        tenant_id: str,
+        principal_id: str,
+        kind: str,
+        status: str,
+        provenance: Dict[str, Any],
+        result: Dict[str, Any],
+        artifact_ref: Optional[str] = None,
+        supersedes: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Append immutable evidence and its audit/event record."""
+        allowed_statuses = {
+            "verified",
+            "rejected",
+            "unknown",
+            "unavailable",
+            "simulated",
+            "research_only",
+        }
+        if status not in allowed_statuses:
+            raise ValueError("invalid evidence status")
+        if not kind or len(kind) > 128:
+            raise ValueError("evidence kind is invalid")
+        if not isinstance(provenance, dict) or not isinstance(result, dict):
+            raise ValueError("evidence provenance and result must be objects")
+        provenance_payload = dict(provenance)
+        observed_at = provenance_payload.setdefault("observed_at", _timestamp(_utcnow()))
+        observed_datetime = _parse_utc_timestamp(observed_at, "observed_at")
+        try:
+            freshness_seconds = int(provenance_payload.get("freshness_seconds", 60))
+        except (TypeError, ValueError):
+            freshness_seconds = 60
+        freshness_seconds = max(0, min(freshness_seconds, 86_400))
+        provenance_payload.setdefault(
+            "fresh_until",
+            _timestamp(
+                observed_datetime
+                + timedelta(seconds=freshness_seconds)
+            ),
+        )
+        result_json_for_digest = json.dumps(
+            result, sort_keys=True, separators=(",", ":"), allow_nan=False
+        )
+        provenance_payload.setdefault(
+            "input_digest", "sha256:" + hash_token(json.dumps(provenance, sort_keys=True, separators=(",", ":")))
+        )
+        provenance_payload.setdefault(
+            "output_digest", "sha256:" + hash_token(result_json_for_digest)
+        )
+        provenance_payload.setdefault(
+            "method_ref", f"procedure.{provenance_payload.get('adapter_id', 'unknown')}.v1"
+        )
+        provenance_payload.setdefault("artifact_ref", artifact_ref)
+        provenance_payload.setdefault(
+            "source",
+            {
+                "adapter_id": provenance_payload.get("adapter_id", "unknown"),
+                "adapter_version": provenance_payload.get("adapter_version", "unknown"),
+                "origin": provenance_payload.get("origin", "unknown"),
+                "input_digest": provenance_payload.get("input_digest"),
+            },
+        )
+        provenance_payload.setdefault("disclosure", "Evidence limitations are recorded by the adapter.")
+        result_payload = dict(result)
+        now = _timestamp(_utcnow())
+        with self._lock:
+            connection = self._conn()
+            if supersedes is not None:
+                parent = connection.execute(
+                    "SELECT 1 FROM evidence WHERE id = ? AND tenant_id = ?",
+                    (supersedes, tenant_id),
+                ).fetchone()
+                if parent is None:
+                    raise NotFoundError("evidence to supersede not found")
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    "INSERT INTO evidence("
+                    "id, tenant_id, kind, status, provenance_json, result_json, artifact_ref, supersedes, created_at"
+                    ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        evidence_id,
+                        tenant_id,
+                        kind,
+                        status,
+                        json.dumps(provenance_payload, sort_keys=True, separators=(",", ":"), allow_nan=False),
+                        json.dumps(result_payload, sort_keys=True, separators=(",", ":"), allow_nan=False),
+                        artifact_ref,
+                        supersedes,
+                        now,
+                    ),
+                )
+                payload = {
+                    "evidence_id": evidence_id,
+                    "kind": kind,
+                    "status": status,
+                    "artifact_ref": artifact_ref,
+                    "supersedes": supersedes,
+                }
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{evidence_id}:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="principal",
+                    actor_id=principal_id,
+                    action="evidence.superseded" if supersedes else "evidence.created",
+                    target=evidence_id,
+                    outcome="success",
+                    event_type="evidence.superseded" if supersedes else "evidence.created",
+                    aggregate_kind="evidence",
+                    aggregate_id=evidence_id,
+                    payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        return self.get_evidence(evidence_id, tenant_id)
+
+    def list_outbox(self, status: str = "pending", limit: int = 100) -> List[Dict[str, Any]]:
+        if not 1 <= limit <= 1000:
+            raise ValueError("invalid outbox limit")
+        with self._lock:
+            rows = self._conn().execute(
+                "SELECT * FROM outbox WHERE status = ? ORDER BY next_attempt_at, id LIMIT ?",
+                (status, limit),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def claim_outbox(self, outbox_id: str, lease_seconds: int = 60) -> Optional[Dict[str, Any]]:
+        if not 1 <= lease_seconds <= 86_400:
+            raise ValueError("invalid outbox lease")
+        now = _timestamp(_utcnow())
+        lease_until = _timestamp(_utcnow() + timedelta(seconds=lease_seconds))
+        claim_token = hash_token(f"outbox:{outbox_id}:{now}:{os.urandom(16).hex()}")
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                row = connection.execute(
+                    "SELECT * FROM outbox WHERE id = ? AND "
+                    "((status = 'pending' AND next_attempt_at <= ?) "
+                    "OR (status = 'processing' AND lease_until IS NOT NULL AND lease_until <= ?))",
+                    (outbox_id, now, now),
+                ).fetchone()
+                if row is None:
+                    connection.execute("ROLLBACK")
+                    return None
+                connection.execute(
+                    "UPDATE outbox SET status = 'processing', attempt_count = attempt_count + 1, "
+                    "claimed_at = ?, lease_until = ?, claim_token = ? WHERE id = ? AND ("
+                    "(status = 'pending' AND next_attempt_at <= ?) OR "
+                    "(status = 'processing' AND lease_until IS NOT NULL AND lease_until <= ?))",
+                    (now, lease_until, claim_token, outbox_id, now, now),
+                )
+                updated = connection.execute(
+                    "SELECT * FROM outbox WHERE id = ?", (outbox_id,)
+                ).fetchone()
+                connection.execute("COMMIT")
+                return dict(updated) if updated is not None else None
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+
+    def finish_outbox(
+        self,
+        outbox_id: str,
+        success: bool,
+        retry_at: Optional[datetime] = None,
+        error: Optional[str] = None,
+        claim_token: Optional[str] = None,
+    ) -> None:
+        with self._lock:
+            claim_filter = " AND claim_token = ?" if claim_token else ""
+            if success:
+                self._conn().execute(
+                    "UPDATE outbox SET status = 'delivered', last_error = NULL, "
+                    "claimed_at = NULL, lease_until = NULL, claim_token = NULL "
+                    "WHERE id = ? AND status = 'processing'" + claim_filter,
+                    (outbox_id, claim_token) if claim_token else (outbox_id,),
+                )
+            else:
+                next_attempt = _timestamp(retry_at or (_utcnow() + timedelta(seconds=30)))
+                safe_error = (error or "delivery failed")[:500]
+                row = self._conn().execute(
+                    "SELECT attempt_count, max_attempts FROM outbox WHERE id = ? AND status = 'processing'"
+                    + claim_filter,
+                    (outbox_id, claim_token) if claim_token else (outbox_id,),
+                ).fetchone()
+                if row is None:
+                    return
+                if int(row["attempt_count"]) >= int(row["max_attempts"]):
+                    self._conn().execute(
+                        "UPDATE outbox SET status = 'dead_letter', last_error = ?, dead_lettered_at = ? "
+                        ", claimed_at = NULL, lease_until = NULL, claim_token = NULL "
+                        "WHERE id = ? AND status = 'processing'" + claim_filter,
+                        (safe_error, _timestamp(_utcnow()), outbox_id, claim_token)
+                        if claim_token
+                        else (safe_error, _timestamp(_utcnow()), outbox_id),
+                    )
+                else:
+                    self._conn().execute(
+                        "UPDATE outbox SET status = 'pending', next_attempt_at = ?, last_error = ?, "
+                        "claimed_at = NULL, lease_until = NULL, claim_token = NULL "
+                        "WHERE id = ? AND status = 'processing'" + claim_filter,
+                        (next_attempt, safe_error, outbox_id, claim_token)
+                        if claim_token
+                        else (next_attempt, safe_error, outbox_id),
+                    )
+
+    def consume_rate_limit(
+        self, tenant_id: str, subject: str, limit: int, window_seconds: int
+    ) -> Tuple[bool, int]:
+        """Atomically consume one fixed-window token in durable storage."""
+        if not subject or not 1 <= limit <= 1_000_000 or not 1 <= window_seconds <= 86_400:
+            raise ValueError("invalid rate limit configuration")
+        now_seconds = int(time.time())
+        bucket = now_seconds // window_seconds
+        reset_epoch = (bucket + 1) * window_seconds
+        reset_at = datetime.fromtimestamp(reset_epoch, timezone.utc)
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                row = connection.execute(
+                    "SELECT count FROM rate_limits WHERE tenant_id = ? AND subject = ? AND bucket = ?",
+                    (tenant_id, subject, bucket),
+                ).fetchone()
+                count = int(row["count"]) if row is not None else 0
+                allowed = count < limit
+                if allowed:
+                    if row is None:
+                        connection.execute(
+                            "INSERT INTO rate_limits(tenant_id, subject, bucket, count, reset_at) "
+                            "VALUES(?, ?, ?, 1, ?)",
+                            (tenant_id, subject, bucket, _timestamp(reset_at)),
+                        )
+                    else:
+                        connection.execute(
+                            "UPDATE rate_limits SET count = count + 1 WHERE tenant_id = ? "
+                            "AND subject = ? AND bucket = ?",
+                            (tenant_id, subject, bucket),
+                        )
+                    count += 1
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        return allowed, max(0, int(reset_epoch - now_seconds))
+
+    def create_artifact(
+        self,
+        artifact_id: str,
+        tenant_id: str,
+        principal_id: str,
+        digest: str,
+        media_type: str,
+        size_bytes: int,
+        metadata: Dict[str, Any],
+        storage_ref: str = "",
+    ) -> Dict[str, Any]:
+        if not 0 <= size_bytes <= 16 * 1024 * 1024:
+            raise ValueError("artifact size is outside the safe bound")
+        now = _timestamp(_utcnow())
+        record = {
+            "artifact_id": artifact_id,
+            "digest": digest,
+            "media_type": media_type,
+            "size_bytes": size_bytes,
+            "status": "quarantined",
+            "storage_ref": storage_ref or artifact_id,
+            "metadata": dict(metadata),
+            "created_at": now,
+        }
+        payload_json = json.dumps(record, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    "INSERT INTO artifacts(id, tenant_id, principal_id, digest, media_type, size_bytes, status, storage_ref, metadata_json, created_at) "
+                    "VALUES(?, ?, ?, ?, ?, ?, 'quarantined', ?, ?, ?)",
+                    (
+                        artifact_id,
+                        tenant_id,
+                        principal_id,
+                        digest,
+                        media_type,
+                        size_bytes,
+                        storage_ref or artifact_id,
+                        json.dumps(metadata, sort_keys=True, separators=(",", ":"), allow_nan=False),
+                        now,
+                    ),
+                )
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{artifact_id}:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="principal",
+                    actor_id=principal_id,
+                    action="artifact.created",
+                    target=artifact_id,
+                    outcome="success",
+                    event_type="artifact.created",
+                    aggregate_kind="artifact",
+                    aggregate_id=artifact_id,
+                    payload_json=payload_json,
+                    payload=record,
+                    now=now,
+                    event_id=event_id,
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        return {"tenant_id": tenant_id, **record}
+
+    def get_artifact(self, artifact_id: str, tenant_id: str) -> Dict[str, Any]:
+        with self._lock:
+            row = self._conn().execute(
+                "SELECT * FROM artifacts WHERE id = ? AND tenant_id = ?",
+                (artifact_id, tenant_id),
+            ).fetchone()
+        if row is None:
+            raise NotFoundError("artifact not found")
+        return {
+            "artifact_id": row["id"],
+            "tenant_id": row["tenant_id"],
+            "principal_id": row["principal_id"],
+            "digest": row["digest"],
+            "media_type": row["media_type"],
+            "size_bytes": row["size_bytes"],
+            "status": row["status"],
+            "storage_ref": row["storage_ref"],
+            "metadata": json.loads(row["metadata_json"]),
+            "created_at": row["created_at"],
+        }
+
+    def create_memory(
+        self,
+        memory_id: str,
+        tenant_id: str,
+        principal_id: str,
+        content: str,
+        scope: str,
+    ) -> Dict[str, Any]:
+        now = _timestamp(_utcnow())
+        record = {
+            "memory_id": memory_id,
+            "content": content,
+            "scope": scope,
+            "status": "active",
+            "created_at": now,
+        }
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    "INSERT INTO memory_items(id, tenant_id, principal_id, content, scope, status, created_at) "
+                    "VALUES(?, ?, ?, ?, ?, 'active', ?)",
+                    (memory_id, tenant_id, principal_id, content, scope, now),
+                )
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{memory_id}:{os.urandom(16).hex()}"
+                )[:26]
+                payload = {"memory_id": memory_id, "scope": scope, "status": "active"}
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="principal",
+                    actor_id=principal_id,
+                    action="memory.created",
+                    target=memory_id,
+                    outcome="success",
+                    event_type="memory.created",
+                    aggregate_kind="memory",
+                    aggregate_id=memory_id,
+                    payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        return {"tenant_id": tenant_id, "principal_id": principal_id, **record}
+
+    def search_memory(self, tenant_id: str, query: str, limit: int = 50) -> List[Dict[str, Any]]:
+        if not 1 <= limit <= 100 or len(query) > 256:
+            raise ValueError("invalid memory search")
+        with self._lock:
+            rows = self._conn().execute(
+                "SELECT * FROM memory_items WHERE tenant_id = ? AND status = 'active' "
+                "AND content LIKE ? ORDER BY created_at DESC LIMIT ?",
+                (tenant_id, f"%{query}%", limit),
+            ).fetchall()
+        return [
+            {
+                "memory_id": row["id"],
+                "tenant_id": row["tenant_id"],
+                "principal_id": row["principal_id"],
+                "content": row["content"],
+                "scope": row["scope"],
+                "status": row["status"],
+                "created_at": row["created_at"],
+            }
+            for row in rows
+        ]
+
+    def delete_memory(self, memory_id: str, tenant_id: str, principal_id: str) -> Dict[str, Any]:
+        now = _timestamp(_utcnow())
+        with self._lock:
+            connection = self._conn()
+            row = connection.execute(
+                "SELECT * FROM memory_items WHERE id = ? AND tenant_id = ? AND status = 'active'",
+                (memory_id, tenant_id),
+            ).fetchone()
+            if row is None:
+                raise NotFoundError("memory item not found")
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    "UPDATE memory_items SET status = 'deleted', deleted_at = ? WHERE id = ? AND tenant_id = ?",
+                    (now, memory_id, tenant_id),
+                )
+                payload = {"memory_id": memory_id, "status": "deleted"}
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{memory_id}:delete:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="principal",
+                    actor_id=principal_id,
+                    action="memory.deleted",
+                    target=memory_id,
+                    outcome="success",
+                    event_type="memory.deleted",
+                    aggregate_kind="memory",
+                    aggregate_id=memory_id,
+                    payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        return {"memory_id": memory_id, "status": "deleted", "deleted_at": now}
+
+    def create_briefing(
+        self,
+        briefing_id: str,
+        tenant_id: str,
+        principal_id: str,
+        content: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        now = _timestamp(_utcnow())
+        content_json = json.dumps(content, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    "INSERT INTO briefings(id, tenant_id, principal_id, content_json, created_at) VALUES(?, ?, ?, ?, ?)",
+                    (briefing_id, tenant_id, principal_id, content_json, now),
+                )
+                payload = {"briefing_id": briefing_id, "status": content.get("status", "unknown")}
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{briefing_id}:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="principal",
+                    actor_id=principal_id,
+                    action="briefing.created",
+                    target=briefing_id,
+                    outcome="success",
+                    event_type="briefing.created",
+                    aggregate_kind="briefing",
+                    aggregate_id=briefing_id,
+                    payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        return {"briefing_id": briefing_id, "tenant_id": tenant_id, "principal_id": principal_id, "content": content, "created_at": now}
+
+    def get_briefing(self, briefing_id: str, tenant_id: str) -> Dict[str, Any]:
+        with self._lock:
+            row = self._conn().execute(
+                "SELECT * FROM briefings WHERE id = ? AND tenant_id = ?",
+                (briefing_id, tenant_id),
+            ).fetchone()
+        if row is None:
+            raise NotFoundError("briefing not found")
+        return {
+            "briefing_id": row["id"],
+            "tenant_id": row["tenant_id"],
+            "principal_id": row["principal_id"],
+            "content": json.loads(row["content_json"]),
+            "created_at": row["created_at"],
+        }
+
+    @staticmethod
+    def _sequence_record(row: sqlite3.Row) -> Dict[str, Any]:
+        return {
+            "sequence_id": row["id"],
+            "tenant_id": row["tenant_id"],
+            "principal_id": row["principal_id"],
+            "name": row["name"],
+            "revision": row["revision"],
+            "steps": json.loads(row["steps_json"]),
+            "digest": row["digest"],
+            "status": row["status"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+            "expires_at": row["expires_at"],
+        }
+
+    def create_sequence(
+        self,
+        sequence_id: str,
+        tenant_id: str,
+        principal_id: str,
+        name: str,
+        steps_json: str,
+        digest: str,
+        expires_at: Optional[datetime] = None,
+    ) -> Dict[str, Any]:
+        if not name or len(name) > 128:
+            raise ValueError("sequence name must be non-empty and bounded")
+        steps = json.loads(steps_json)
+        if not isinstance(steps, list) or not 1 <= len(steps) <= 64:
+            raise ValueError("sequence must contain between one and 64 steps")
+        now = _timestamp(_utcnow())
+        expires = _timestamp(expires_at) if expires_at is not None else None
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    "INSERT INTO sequences("
+                    "id, tenant_id, principal_id, name, revision, steps_json, digest, status, created_at, updated_at, expires_at"
+                    ") VALUES(?, ?, ?, ?, 1, ?, ?, 'draft', ?, ?, ?)",
+                    (sequence_id, tenant_id, principal_id, name, steps_json, digest, now, now, expires),
+                )
+                payload = {
+                    "sequence_id": sequence_id,
+                    "revision": 1,
+                    "digest": digest,
+                    "status": "draft",
+                }
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{sequence_id}:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="principal",
+                    actor_id=principal_id,
+                    action="sequence.created",
+                    target=sequence_id,
+                    outcome="success",
+                    event_type="sequence.created",
+                    aggregate_kind="sequence",
+                    aggregate_id=sequence_id,
+                    payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+            row = connection.execute(
+                "SELECT * FROM sequences WHERE id = ? AND tenant_id = ?",
+                (sequence_id, tenant_id),
+            ).fetchone()
+        return self._sequence_record(row)
+
+    def get_sequence(self, sequence_id: str, tenant_id: str) -> Dict[str, Any]:
+        with self._lock:
+            row = self._conn().execute(
+                "SELECT * FROM sequences WHERE id = ? AND tenant_id = ?",
+                (sequence_id, tenant_id),
+            ).fetchone()
+        if row is None:
+            raise NotFoundError("sequence not found")
+        return self._sequence_record(row)
+
+    def transition_sequence(
+        self,
+        sequence_id: str,
+        tenant_id: str,
+        principal_id: str,
+        target_status: str,
+    ) -> Dict[str, Any]:
+        allowed = {
+            "draft": {"validated", "rejected"},
+            "validated": {"awaiting_approval", "executing", "expired", "rejected"},
+            "awaiting_approval": {"approved", "expired", "rejected"},
+            "approved": {"executing", "expired", "rejected"},
+            "executing": {"completed", "failed"},
+            "completed": set(),
+            "failed": set(),
+            "expired": set(),
+            "rejected": set(),
+        }
+        now = _timestamp(_utcnow())
+        with self._lock:
+            connection = self._conn()
+            row = connection.execute(
+                "SELECT * FROM sequences WHERE id = ? AND tenant_id = ?",
+                (sequence_id, tenant_id),
+            ).fetchone()
+            if row is None:
+                raise NotFoundError("sequence not found")
+            if target_status not in allowed.get(row["status"], set()):
+                raise ConflictError(
+                    f"illegal sequence transition: {row['status']} -> {target_status}"
+                )
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    "UPDATE sequences SET status = ?, updated_at = ? WHERE id = ? AND tenant_id = ?",
+                    (target_status, now, sequence_id, tenant_id),
+                )
+                payload = {
+                    "sequence_id": sequence_id,
+                    "from_status": row["status"],
+                    "to_status": target_status,
+                    "revision": row["revision"],
+                }
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{sequence_id}:{target_status}:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="principal",
+                    actor_id=principal_id,
+                    action=f"sequence.{target_status}",
+                    target=sequence_id,
+                    outcome="success",
+                    event_type="sequence.updated",
+                    aggregate_kind="sequence",
+                    aggregate_id=sequence_id,
+                    payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        return self.get_sequence(sequence_id, tenant_id)
+
+    def start_sequence_run(
+        self,
+        sequence_run_id: str,
+        sequence_id: str,
+        tenant_id: str,
+        principal_id: str,
+        revision: int,
+        idempotency_key: str,
+    ) -> Dict[str, Any]:
+        if not idempotency_key or len(idempotency_key) > 256:
+            raise ValueError("invalid idempotency key")
+        with self._lock:
+            connection = self._conn()
+            existing = connection.execute(
+                "SELECT * FROM sequence_runs WHERE tenant_id = ? AND idempotency_key = ?",
+                (tenant_id, idempotency_key),
+            ).fetchone()
+            if existing is not None:
+                if existing["sequence_id"] != sequence_id or existing["revision"] != revision:
+                    raise ConflictError("idempotency key is bound to another sequence revision")
+                return {"created": False, "run": self.get_sequence_run(existing["id"], tenant_id)}
+            now = _timestamp(_utcnow())
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    "INSERT INTO sequence_runs("
+                    "id, tenant_id, sequence_id, revision, idempotency_key, status, result_json, created_at"
+                    ") VALUES(?, ?, ?, ?, ?, 'running', '{}', ?)",
+                    (sequence_run_id, tenant_id, sequence_id, revision, idempotency_key, now),
+                )
+                payload = {
+                    "sequence_run_id": sequence_run_id,
+                    "sequence_id": sequence_id,
+                    "revision": revision,
+                    "status": "running",
+                }
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{sequence_run_id}:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="principal",
+                    actor_id=principal_id,
+                    action="sequence.run.created",
+                    target=sequence_run_id,
+                    outcome="success",
+                    event_type="sequence.run.created",
+                    aggregate_kind="sequence_run",
+                    aggregate_id=sequence_run_id,
+                    payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+            return {"created": True, "run": self.get_sequence_run(sequence_run_id, tenant_id)}
+
+    def complete_sequence_run(
+        self,
+        sequence_run_id: str,
+        tenant_id: str,
+        principal_id: str,
+        status: str,
+        result: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        if status not in {"completed", "failed", "unknown", "cancelled"}:
+            raise ValueError("invalid sequence run status")
+        now = _timestamp(_utcnow())
+        result_json = json.dumps(result, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        with self._lock:
+            connection = self._conn()
+            row = connection.execute(
+                "SELECT * FROM sequence_runs WHERE id = ? AND tenant_id = ?",
+                (sequence_run_id, tenant_id),
+            ).fetchone()
+            if row is None:
+                raise NotFoundError("sequence run not found")
+            if row["status"] != "running":
+                if row["status"] == status and row["result_json"] == result_json:
+                    return self.get_sequence_run(sequence_run_id, tenant_id)
+                raise ConflictError("sequence run has already reached a terminal state")
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    "UPDATE sequence_runs SET status = ?, result_json = ?, finished_at = ? "
+                    "WHERE id = ? AND tenant_id = ? AND status = 'running'",
+                    (status, result_json, now, sequence_run_id, tenant_id),
+                )
+                payload = {
+                    "sequence_run_id": sequence_run_id,
+                    "sequence_id": row["sequence_id"],
+                    "status": status,
+                }
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{sequence_run_id}:{status}:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="system",
+                    actor_id=principal_id,
+                    action=f"sequence.run.{status}",
+                    target=sequence_run_id,
+                    outcome="success" if status == "completed" else "failure",
+                    event_type="sequence.run.updated",
+                    aggregate_kind="sequence_run",
+                    aggregate_id=sequence_run_id,
+                    payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        return self.get_sequence_run(sequence_run_id, tenant_id)
+
+    def get_sequence_run(self, sequence_run_id: str, tenant_id: str) -> Dict[str, Any]:
+        with self._lock:
+            row = self._conn().execute(
+                "SELECT * FROM sequence_runs WHERE id = ? AND tenant_id = ?",
+                (sequence_run_id, tenant_id),
+            ).fetchone()
+        if row is None:
+            raise NotFoundError("sequence run not found")
+        return {
+            "sequence_run_id": row["id"],
+            "tenant_id": row["tenant_id"],
+            "sequence_id": row["sequence_id"],
+            "revision": row["revision"],
+            "idempotency_key": row["idempotency_key"],
+            "status": row["status"],
+            "result": json.loads(row["result_json"]),
+            "created_at": row["created_at"],
+            "finished_at": row["finished_at"],
+        }
+
+    def list_sequence_events(
+        self, sequence_id: str, tenant_id: str, after: int = 0, limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        if after < 0 or not 1 <= limit <= 1000:
+            raise ValueError("invalid sequence event cursor or limit")
+        with self._lock:
+            rows = self._conn().execute(
+                "SELECT * FROM events WHERE tenant_id = ? AND aggregate_kind IN ('sequence', 'sequence_run') "
+                "AND aggregate_id IN (?, ?) AND sequence > ? ORDER BY sequence ASC LIMIT ?",
+                (tenant_id, sequence_id, sequence_id, after, limit),
+            ).fetchall()
+        return [
+            {
+                "event_id": row["id"],
+                "tenant_id": row["tenant_id"],
+                "sequence": row["sequence"],
+                "type": row["type"],
+                "aggregate": {"kind": row["aggregate_kind"], "id": row["aggregate_id"]},
+                "actor": {"kind": row["actor_kind"], "id": row["actor_id"]},
+                "payload": json.loads(row["payload_json"]),
+                "visibility": row["visibility"],
+                "schema_version": row["schema_version"],
+                "occurred_at": row["created_at"],
+            }
+            for row in rows
+        ]
+
+    def list_events(self, tenant_id: str, after: int = 0, limit: int = 100) -> List[Dict[str, Any]]:
+        if after < 0 or not 1 <= limit <= 1000:
+            raise ValueError("invalid event cursor or limit")
+        with self._lock:
+            rows = self._conn().execute(
+                "SELECT * FROM events WHERE tenant_id = ? AND sequence > ? "
+                "ORDER BY sequence ASC LIMIT ?",
+                (tenant_id, after, limit),
+            ).fetchall()
+        result: List[Dict[str, Any]] = []
+        for row in rows:
+            result.append(
+                {
+                    "event_id": row["id"],
+                    "tenant_id": row["tenant_id"],
+                    "sequence": row["sequence"],
+                    "type": row["type"],
+                    "aggregate": {
+                        "kind": row["aggregate_kind"],
+                        "id": row["aggregate_id"],
+                    },
+                    "actor": {"kind": row["actor_kind"], "id": row["actor_id"]},
+                    "payload": json.loads(row["payload_json"]),
+                    "visibility": row["visibility"],
+                    "schema_version": row["schema_version"],
+                    "occurred_at": row["created_at"],
+                }
+            )
+        return result
+
+    def latest_sequence(self, tenant_id: str) -> int:
+        with self._lock:
+            row = self._conn().execute(
+                "SELECT COALESCE(MAX(sequence), 0) AS latest FROM events WHERE tenant_id = ?",
+                (tenant_id,),
+            ).fetchone()
+        return int(row["latest"])
+
+    def start_run(
+        self,
+        run_id: str,
+        action_id: str,
+        tenant_id: str,
+        principal_id: str,
+        tool_id: str,
+        idempotency_key: str,
+        status: str,
+        plan_id: Optional[str] = None,
+        request_digest: str = "",
+    ) -> Dict[str, Any]:
+        if not idempotency_key or len(idempotency_key) > 256:
+            raise ValueError("invalid idempotency key")
+        with self._lock:
+            connection = self._conn()
+            existing = connection.execute(
+                "SELECT id FROM runs WHERE tenant_id = ? AND idempotency_key = ?",
+                (tenant_id, idempotency_key),
+            ).fetchone()
+            if existing is not None:
+                existing_run = self.get_run(existing["id"], tenant_id)
+                if existing_run.get("tool_id") != tool_id:
+                    raise ConflictError("idempotency key is bound to another tool")
+                if (existing_run.get("plan_id") or None) != (plan_id or None):
+                    raise ConflictError("idempotency key is bound to another plan")
+                if existing_run.get("request_digest", "") != request_digest:
+                    raise ConflictError("idempotency key is bound to another request")
+                return {
+                    "created": False,
+                    "run": existing_run,
+                    "action_id": existing_run["action_id"],
+                }
+            now = _timestamp(_utcnow())
+            payload = {
+                "run_id": run_id,
+                "tool_id": tool_id,
+                "status": status,
+                "idempotency_key": idempotency_key,
+            }
+            payload_json = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+            event_id = "evt_" + hash_token(
+                f"{tenant_id}:{run_id}:{os.urandom(16).hex()}"
+            )[:26]
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    "INSERT INTO runs("
+                    "id, tenant_id, plan_id, idempotency_key, request_digest, status, created_at"
+                    ") VALUES(?, ?, ?, ?, ?, ?, ?)",
+                    (run_id, tenant_id, plan_id, idempotency_key, request_digest, status, now),
+                )
+                connection.execute(
+                    "INSERT INTO actions("
+                    "id, tenant_id, run_id, step_id, tool_id, status, attempt_count, created_at"
+                    ") VALUES(?, ?, ?, NULL, ?, ?, 1, ?)",
+                    (
+                        action_id,
+                        tenant_id,
+                        run_id,
+                        tool_id,
+                        status if status == "waiting_approval" else "running",
+                        now,
+                    ),
+                )
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="principal",
+                    actor_id=principal_id,
+                    action="run.created",
+                    target=run_id,
+                    outcome="success",
+                    event_type="run.created",
+                    aggregate_kind="run",
+                    aggregate_id=run_id,
+                    payload_json=payload_json,
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+            return {
+                "created": True,
+                "run": self.get_run(run_id, tenant_id),
+                "action_id": action_id,
+            }
+
+    def complete_run(
+        self,
+        run_id: str,
+        action_id: str,
+        tenant_id: str,
+        principal_id: str,
+        result: Dict[str, Any],
+        evidence_status: str,
+        provenance: Dict[str, Any],
+        disclosure: str,
+        success: bool = True,
+    ) -> Dict[str, Any]:
+        if evidence_status not in {
+            "verified",
+            "rejected",
+            "unknown",
+            "unavailable",
+            "simulated",
+            "research_only",
+        }:
+            raise ValueError("invalid evidence status")
+        if not isinstance(result, dict) or not isinstance(provenance, dict):
+            raise ValueError("run result and provenance must be objects")
+        now = _timestamp(_utcnow())
+        result_json = json.dumps(
+            result,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        provenance_payload = dict(provenance)
+        observed_at = provenance_payload.setdefault("observed_at", now)
+        observed_datetime = _parse_utc_timestamp(observed_at, "observed_at")
+        try:
+            freshness_seconds = int(provenance_payload.get("freshness_seconds", 60))
+        except (TypeError, ValueError):
+            freshness_seconds = 60
+        freshness_seconds = max(0, min(freshness_seconds, 86_400))
+        provenance_payload.setdefault(
+            "fresh_until",
+            _timestamp(
+                observed_datetime
+                + timedelta(seconds=freshness_seconds)
+            ),
+        )
+        provenance_payload.setdefault(
+            "output_digest", "sha256:" + hash_token(result_json)
+        )
+        provenance_payload.setdefault(
+            "input_digest", "sha256:" + hash_token(f"run:{run_id}")
+        )
+        provenance_payload.setdefault(
+            "method_ref",
+            f"procedure.{provenance_payload.get('adapter_id', 'unknown')}.v1",
+        )
+        provenance_payload.setdefault("artifact_ref", None)
+        provenance_payload.setdefault(
+            "source",
+            {
+                "adapter_id": provenance_payload.get("adapter_id", "unknown"),
+                "adapter_version": provenance_payload.get("adapter_version", "unknown"),
+                "origin": provenance_payload.get("origin", "unknown"),
+                "input_digest": provenance_payload.get("input_digest"),
+            },
+        )
+        provenance_payload["disclosure"] = disclosure
+        provenance_json = json.dumps(
+            provenance_payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+            allow_nan=False,
+        )
+        evidence_id = "ev_" + hash_token(
+            f"{tenant_id}:{run_id}:{os.urandom(16).hex()}"
+        )[:26]
+        final_status = "succeeded" if success else "failed"
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                run_row = connection.execute(
+                    "SELECT * FROM runs WHERE id = ? AND tenant_id = ?",
+                    (run_id, tenant_id),
+                ).fetchone()
+                if run_row is None:
+                    raise NotFoundError("run not found")
+                action_row = connection.execute(
+                    "SELECT * FROM actions WHERE id = ? AND run_id = ? AND tenant_id = ?",
+                    (action_id, run_id, tenant_id),
+                ).fetchone()
+                if action_row is None:
+                    raise ScopeViolation("action is not bound to this run")
+                if run_row["status"] != "running":
+                    existing_evidence = connection.execute(
+                        "SELECT e.status, e.result_json FROM evidence e "
+                        "JOIN action_evidence ae ON ae.evidence_id = e.id "
+                        "WHERE ae.action_id = ? ORDER BY e.created_at DESC LIMIT 1",
+                        (action_id,),
+                    ).fetchone()
+                    if (
+                        run_row["status"] == final_status
+                        and action_row["status"] == final_status
+                        and existing_evidence is not None
+                        and existing_evidence["status"] == evidence_status
+                        and existing_evidence["result_json"] == result_json
+                    ):
+                        connection.execute("ROLLBACK")
+                        return self.get_run(run_id, tenant_id)
+                    raise ConflictError("run has already reached a terminal state")
+                connection.execute(
+                    "INSERT INTO evidence("
+                    "id, tenant_id, kind, status, provenance_json, result_json, artifact_ref, created_at"
+                    ") VALUES(?, ?, 'action_result', ?, ?, ?, ?, ?)",
+                    (
+                        evidence_id,
+                        tenant_id,
+                        evidence_status,
+                        provenance_json,
+                        result_json,
+                        provenance_payload.get("artifact_ref"),
+                        now,
+                    ),
+                )
+                connection.execute(
+                    "INSERT INTO action_evidence(action_id, evidence_id) VALUES(?, ?)",
+                    (action_id, evidence_id),
+                )
+                connection.execute(
+                    "UPDATE actions SET status = ?, finished_at = ? WHERE id = ? AND tenant_id = ? AND status = 'running'",
+                    (final_status, now, action_id, tenant_id),
+                )
+                connection.execute(
+                    "UPDATE runs SET status = ?, finished_at = ? WHERE id = ? AND tenant_id = ? AND status = 'running'",
+                    (final_status, now, run_id, tenant_id),
+                )
+                evidence_payload = {
+                    "evidence_id": evidence_id,
+                    "run_id": run_id,
+                    "status": evidence_status,
+                }
+                evidence_event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{evidence_id}:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="system",
+                    actor_id=principal_id,
+                    action="evidence.created",
+                    target=evidence_id,
+                    outcome="success",
+                    event_type="evidence.created",
+                    aggregate_kind="evidence",
+                    aggregate_id=evidence_id,
+                    payload_json=json.dumps(
+                        evidence_payload,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                    payload=evidence_payload,
+                    now=now,
+                    event_id=evidence_event_id,
+                )
+                run_payload = {
+                    "run_id": run_id,
+                    "status": final_status,
+                    "evidence_id": evidence_id,
+                }
+                run_event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{run_id}:{final_status}:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="system",
+                    actor_id=principal_id,
+                    action=f"run.{final_status}",
+                    target=run_id,
+                    outcome="success" if success else "failure",
+                    event_type=f"run.{final_status}",
+                    aggregate_kind="run",
+                    aggregate_id=run_id,
+                    payload_json=json.dumps(
+                        run_payload,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ),
+                    payload=run_payload,
+                    now=now,
+                    event_id=run_event_id,
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        return self.get_run(run_id, tenant_id)
+
+    def get_run(self, run_id: str, tenant_id: str) -> Dict[str, Any]:
+        with self._lock:
+            run = self._conn().execute(
+                "SELECT * FROM runs WHERE id = ?", (run_id,)
+            ).fetchone()
+            if run is None:
+                raise NotFoundError("run not found")
+            if run["tenant_id"] != tenant_id:
+                raise ScopeViolation("run is outside tenant scope")
+            action = self._conn().execute(
+                "SELECT * FROM actions WHERE run_id = ? AND tenant_id = ? ORDER BY created_at LIMIT 1",
+                (run_id, tenant_id),
+            ).fetchone()
+            evidence = None
+            if action is not None:
+                evidence = self._conn().execute(
+                    "SELECT e.* FROM evidence e JOIN action_evidence ae "
+                    "ON ae.evidence_id = e.id WHERE ae.action_id = ?",
+                    (action["id"],),
+                ).fetchone()
+        evidence_record = None
+        if evidence is not None:
+            evidence_record = {
+                "evidence_id": evidence["id"],
+                "kind": evidence["kind"],
+                "status": evidence["status"],
+                "provenance": json.loads(evidence["provenance_json"]),
+                "result": json.loads(evidence["result_json"]),
+                "artifact_ref": evidence["artifact_ref"],
+                "supersedes": evidence["supersedes"],
+                "created_at": evidence["created_at"],
+            }
+        return {
+            "run_id": run["id"],
+            "tenant_id": run["tenant_id"],
+            "plan_id": run["plan_id"],
+            "status": run["status"],
+            "idempotency_key": run["idempotency_key"],
+            "request_digest": run["request_digest"],
+            "created_at": run["created_at"],
+            "finished_at": run["finished_at"],
+            "action_id": action["id"] if action is not None else None,
+            "tool_id": action["tool_id"] if action is not None else None,
+            "evidence": evidence_record,
+        }
+
+    def cancel_run(
+        self, run_id: str, tenant_id: str, principal_id: str
+    ) -> Dict[str, Any]:
+        """Cancel a queued or locally running action before it can be retried."""
+        now = _timestamp(_utcnow())
+        with self._lock:
+            connection = self._conn()
+            run = connection.execute(
+                "SELECT * FROM runs WHERE id = ? AND tenant_id = ?",
+                (run_id, tenant_id),
+            ).fetchone()
+            if run is None:
+                raise NotFoundError("run not found")
+            if run["status"] in {"succeeded", "failed", "cancelled", "unknown"}:
+                raise ConflictError("run is not cancellable in its current state")
+            action = connection.execute(
+                "SELECT id FROM actions WHERE run_id = ? AND tenant_id = ? ORDER BY created_at LIMIT 1",
+                (run_id, tenant_id),
+            ).fetchone()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    "UPDATE runs SET status = 'cancelled', finished_at = ? WHERE id = ? AND tenant_id = ?",
+                    (now, run_id, tenant_id),
+                )
+                if action is not None:
+                    connection.execute(
+                        "UPDATE actions SET status = 'cancelled', finished_at = ? WHERE id = ? AND tenant_id = ?",
+                        (now, action["id"], tenant_id),
+                    )
+                payload = {"run_id": run_id, "status": "cancelled"}
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{run_id}:cancel:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="principal",
+                    actor_id=principal_id,
+                    action="run.cancelled",
+                    target=run_id,
+                    outcome="success",
+                    event_type="run.cancelled",
+                    aggregate_kind="run",
+                    aggregate_id=run_id,
+                    payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        return self.get_run(run_id, tenant_id)
+
+    def get_run_by_idempotency(self, tenant_id: str, idempotency_key: str) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            row = self._conn().execute(
+                "SELECT id FROM runs WHERE tenant_id = ? AND idempotency_key = ?",
+                (tenant_id, idempotency_key),
+            ).fetchone()
+        if row is None:
+            return None
+        return self.get_run(row["id"], tenant_id)
+
+    def oldest_sequence(self, tenant_id: str) -> int:
+        with self._lock:
+            row = self._conn().execute(
+                "SELECT COALESCE(MIN(sequence), 0) AS oldest FROM events WHERE tenant_id = ?",
+                (tenant_id,),
+            ).fetchone()
+        return int(row["oldest"])
+
+    def cursor_requires_resync(self, tenant_id: str, after: int) -> bool:
+        if after < 0:
+            raise ValueError("invalid event cursor")
+        oldest = self.oldest_sequence(tenant_id)
+        return oldest > 0 and after < oldest - 1
+
+    def prune_events(self, tenant_id: str, retain_latest: int) -> None:
+        if retain_latest < 1:
+            raise ValueError("retain_latest must be positive")
+        with self._lock:
+            connection = self._conn()
+            row = connection.execute(
+                "SELECT COALESCE(MAX(sequence), 0) AS latest FROM events WHERE tenant_id = ?",
+                (tenant_id,),
+            ).fetchone()
+            latest = int(row["latest"])
+            threshold = max(latest - retain_latest + 1, 1)
+            pending = connection.execute(
+                "SELECT COUNT(*) AS count FROM outbox o JOIN events e ON e.id = o.event_id "
+                "WHERE o.tenant_id = ? AND e.sequence < ? AND o.status != 'delivered'",
+                (tenant_id, threshold),
+            ).fetchone()
+            if int(pending["count"]) > 0:
+                raise ConflictError("cannot prune events with undelivered outbox records")
+            connection.execute(
+                "DELETE FROM outbox WHERE tenant_id = ? AND event_id IN "
+                "(SELECT id FROM events WHERE tenant_id = ? AND sequence < ?)",
+                (tenant_id, tenant_id, threshold),
+            )
+            connection.execute(
+                "DELETE FROM events WHERE tenant_id = ? AND sequence < ?",
+                (tenant_id, threshold),
+            )

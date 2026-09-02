@@ -18,7 +18,7 @@ from .distributed_rpc import DistributedWorkerPool, RaftConsensusCoordinator
 from .llm_connector import FoundationModelAdapter
 from .lean_bridge import LeanTheoremProverBridge, FormalProofResult
 from .stress_benchmark import AdversarialStressTester, StressTestReport
-from .self_compilation import AutonomousSelfCompiler, CompilationResult
+from .self_compilation import AutonomousSelfCompiler, CapabilityDisabled, CompilationResult
 from .causal_discovery import CausalDiscoveryEngine, CausalDAG
 from .cooperative_game import MultiAgentGameSolver, ParetoSolution
 from .cryptographic_ledger import CryptographicInvariantLedger, LedgerBlock
@@ -253,6 +253,7 @@ __all__ = [
     "AdversarialStressTester",
     "StressTestReport",
     "AutonomousSelfCompiler",
+    "CapabilityDisabled",
     "CompilationResult",
     "CausalDiscoveryEngine",
     "CausalDAG",

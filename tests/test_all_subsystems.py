@@ -3,6 +3,9 @@ Comprehensive End-to-End Test Suite for All 28 ZASI Subsystems
 """
 import unittest
 import os
+import gc
+import tempfile
+import warnings
 from src import (
     SystemState,
     Proposal,
@@ -35,6 +38,7 @@ from src import (
     P2PGossipSwarm,
     AutonomousCodeSynthesizer,
     MicroVMSandbox,
+    CapabilityDisabled,
     ZeroKnowledgeProofEngine,
     ModelEpistemicProtocol,
     DysonComputeOrchestrator,
@@ -75,6 +79,23 @@ class TestZASISubsystems(unittest.TestCase):
         restored_mem = storage.load_from_disk()
         self.assertIn("Alpha", restored_mem.nodes)
         if os.path.exists(db_path): os.remove(db_path)
+
+    def test_persistent_hypergraph_storage_closes_sqlite_connections(self):
+        with tempfile.TemporaryDirectory() as directory:
+            db_path = os.path.join(directory, "memory.db")
+            memory = DynamicHypergraphMemory()
+            memory.insert_entity("Alpha", {"type": "agent"})
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always", ResourceWarning)
+                storage = PersistentHypergraphStorage(db_path=db_path)
+                storage.sync_to_disk(memory)
+                storage.load_from_disk()
+                del storage
+                gc.collect()
+            self.assertEqual(
+                [warning for warning in caught if warning.category is ResourceWarning],
+                [],
+            )
 
     def test_counterfactual_world_simulator(self):
         sim = CounterfactualWorldSimulator(horizon_steps=4)
@@ -126,9 +147,8 @@ class TestZASISubsystems(unittest.TestCase):
     def test_autonomous_self_compiler(self):
         compiler = AutonomousSelfCompiler()
         code = "def optimized_policy(val):\n    return val * 2 + 1\n"
-        res = compiler.compile_dynamic_subroutine("v_jit_test", code)
-        self.assertTrue(res.success)
-        self.assertEqual(res.exec_function(5), 11)
+        with self.assertRaises(CapabilityDisabled):
+            compiler.compile_dynamic_subroutine("v_jit_test", code)
 
     def test_causal_discovery_engine(self):
         causal = CausalDiscoveryEngine()
@@ -165,7 +185,8 @@ class TestZASISubsystems(unittest.TestCase):
     def test_microvm_sandbox(self):
         sandbox = MicroVMSandbox()
         res = sandbox.execute_in_sandbox("echo 'zasi_vm_online'")
-        self.assertEqual(res.exit_code, 0)
+        self.assertEqual(res.exit_code, -1)
+        self.assertFalse(res.isolated_env)
 
     def test_zk_stark_engine(self):
         zk = ZeroKnowledgeProofEngine()

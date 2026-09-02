@@ -45,6 +45,14 @@ def _record_exec(version_id: str, source: str, success: bool, error: str = "") -
     return entry
 
 
+class CapabilityDisabled(RuntimeError):
+    """Raised when research-only dynamic execution is requested in the control plane."""
+
+
+class SecurityError(ValueError):
+    """Raised when a candidate fails static inspection."""
+
+
 @dataclass
 class CompilationResult:
     success: bool
@@ -54,9 +62,10 @@ class CompilationResult:
     ast_audit_passed: bool
 
 class AutonomousSelfCompiler:
-    def __init__(self):
+    def __init__(self, research_worker: Any = None):
         self.compiled_versions: Dict[str, Any] = {}
         self.forbidden_calls: Set[str] = {"exec", "eval", "compile", "__import__", "open", "system", "popen", "spawn"}
+        self.research_worker = research_worker
 
     def _audit_ast_safety(self, tree: ast.AST) -> bool:
         for node in ast.walk(tree):
@@ -73,43 +82,20 @@ class AutonomousSelfCompiler:
 
     def compile_dynamic_subroutine(self, version_id: str, py_source: str) -> CompilationResult:
         """
-        Parses, validates with AST safety audit, and compiles Python AST into executable bytecode.
-        Every exec() is recorded in the tamper-evident exec audit log.
+        Dynamic execution is not a control-plane capability.
+
+        Research compilation must be submitted to a separately deployed worker
+        with an OS-level sandbox, signed artifact flow, and independent
+        verification. This class deliberately does not provide a fallback.
         """
-        tree = ast.parse(py_source)
-        ast_safe = self._audit_ast_safety(tree)
-
-        code_obj = compile(tree, filename=f"<zasi_jit_{version_id}>", mode="exec")
-        
-        # Build sandboxed execution globals
-        isolated_globals: Dict[str, Any] = {
-            "__builtins__": {
-                "range": range, "len": len, "min": min, "max": max, "sum": sum,
-                "abs": abs, "round": round, "int": int, "float": float, "str": str,
-                "bool": bool, "dict": dict, "list": list, "set": set, "tuple": tuple
-            }
-        }
-        namespace: Dict[str, Any] = {}
-
-        # --- Exec Audit: record before execution ---
-        try:
-            exec(code_obj, isolated_globals, namespace)  # noqa: S102
-            _record_exec(version_id, py_source, success=True)
-        except Exception as exc:
-            _record_exec(version_id, py_source, success=False, error=str(exc))
-            raise
-
-        func = namespace.get("optimized_policy")
-        if not func:
-            raise ValueError("Dynamic source must define 'optimized_policy'.")
-
-        self.compiled_versions[version_id] = func
-        return CompilationResult(
-            success=True,
-            version=version_id,
-            bytecode_size_bytes=len(code_obj.co_code),
-            exec_function=func,
-            ast_audit_passed=ast_safe
+        _record_exec(
+            version_id,
+            py_source,
+            success=False,
+            error="dynamic execution disabled; submit to research worker",
+        )
+        raise CapabilityDisabled(
+            "Dynamic self-compilation is disabled; use the isolated research worker."
         )
 
     @staticmethod
