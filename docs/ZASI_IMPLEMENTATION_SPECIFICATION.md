@@ -1759,18 +1759,19 @@ working-tree evidence, the signed implementation commits, hosted PR checks, and
 unverified deployment gates. The core PostgreSQL/Redis, CI, cockpit, and
 encrypted-backup hardening is recorded through signed code commit `49bba1c`,
 with the scheduler fixture and bounded outbox worker follow-up in signed
-commits `25ad5f3` and `1c1dd62`. PR [#29](https://github.com/cvsz/zasi/pull/29) passed hosted
+commits `25ad5f3`, `1c1dd62`, and `7ba35f9`. PR [#29](https://github.com/cvsz/zasi/pull/29) passed hosted
 checks for exact pushed verification head `f7f313932696c953300bda6ca3c7676f5a8cf29f`,
 which includes the bounded outbox worker and evidence updates; the hosted
-verification row below records that application-code head. There is no
+verification row below records that application-code head, while the latest
+worker-identity fix remains a separate locally verified follow-up. There is no
 staging deployment, production checkout, or production release authorization.
 The existing `.coverage` deletion is preserved and is not part of the
 implementation claim.
 
 | Command or inspection | Observed result | Evidence class |
 |---|---|---|
-| `python3 -m unittest discover -s tests -q` | 270 tests passed, 2 optional live-service checks skipped | Local functional regression |
-| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 270 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
+| `python3 -m unittest discover -s tests -q` | 271 tests passed, 2 optional live-service checks skipped | Local functional regression |
+| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 271 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
 | Focused control-plane/security suite (`tests.test_control_plane_core`, `tests.test_control_plane_broker`, `tests.test_control_plane_api`, `tests.test_security_hardening`, `tests.test_egress_security`) | Passed, including memory-hard API-key verification and TLS 1.2 floor tests | Local governed/security regression |
 | Focused outbox worker suite (`tests.test_outbox_worker tests.test_control_plane_core`) | 20 tests passed; bounded polling, interruptible shutdown, retry/dead-letter preservation, configuration fail-closed behavior, and worker identifier validation covered | Local outbox worker regression |
 | `python3 -m unittest tests.test_api -q` | 8 legacy compatibility tests passed, including retired webhook and truthful legacy OpenAPI assertions | Local migration-surface regression |
