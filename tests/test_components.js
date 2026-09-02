@@ -24,5 +24,15 @@ assert(content.includes('MCPPage'), 'app.jsx must declare MCPPage');
 
 assert(content.includes('HypergraphCanvas'), 'app.jsx must declare Three.js HypergraphCanvas');
 assert(content.includes('useTelemetry'), 'app.jsx must declare useTelemetry hook');
+assert(content.includes("from 'react'"), 'app.jsx must use bundled React imports');
+assert(content.includes("from 'react-router-dom'"), 'app.jsx must use bundled router imports');
+assert(content.includes("from 'three'"), 'app.jsx must use bundled Three.js import');
+assert(!content.includes('dangerouslySetInnerHTML'), 'app.jsx must not render untrusted HTML');
+assert(!content.includes("/api/tick"), 'cockpit must not expose legacy GET mutation controls');
+assert(!content.includes("/api/mutate"), 'cockpit must not expose legacy mutation controls');
+assert(!content.includes("/api/rsi/upgrade"), 'cockpit must not expose legacy RSI hot swap');
+assert(!fs.readFileSync(path.join(__dirname, '../web/index.html'), 'utf8').includes('unpkg.com'), 'production page must not load CDN runtime dependencies');
+assert(!fs.readFileSync(path.join(__dirname, '../web/index.html'), 'utf8').includes('cdnjs.cloudflare.com'), 'production page must not load CDN runtime dependencies');
+assert(!fs.readFileSync(path.join(__dirname, '../web/static/app.js'), 'utf8').includes('innerHTML'), 'legacy dashboard must remain inert');
 
 console.log('[✓] All React Router v6 component assertions passed successfully!');
