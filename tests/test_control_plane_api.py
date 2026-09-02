@@ -224,13 +224,21 @@ class ControlPlaneAPITests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(plan.status_code, 201)
             self.assertEqual(plan.json()["steps"][0]["side_effect"], "none")
+            self.assertEqual(plan.json()["steps"][0]["tool_version"], "1.0.0")
+
+            definition = self.app.state.registry.get("registry.system.status")
+            self.app.state.registry._tools["registry.system.status"] = replace(
+                definition, version="2.0.0"
+            )
 
             run = await client.post(
                 f"/api/v2/plans/{plan.json()['plan_id']}/run",
                 headers={**headers, "Idempotency-Key": "plan-run-1"},
             )
-            self.assertEqual(run.status_code, 200)
-            self.assertEqual(run.json()["status"], "succeeded")
+            self.assertEqual(run.status_code, 409)
+            self.assertEqual(
+                run.json()["error"]["code"], "CAPABILITY_VERSION_MISMATCH"
+            )
 
             forbidden_get = await client.get(
                 f"/api/v2/intents/{intent_body['intent_id']}/plan",
