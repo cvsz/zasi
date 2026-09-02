@@ -67,11 +67,11 @@ This is a source inspection snapshot, not a production-readiness claim. It preve
 
 | Repository surface | Observed current behavior | v33 interpretation |
 |---|---|---|
-| `backend/app.py` | Authoritative FastAPI/ASGI owner with fail-closed session authentication, typed routes, policy/broker dispatch, schema-10 SQLite/PostgreSQL state including durable Goal/Task schedules, task runs, and leased action runs, Redis-backed shared rate limits, durable SSE replay/resync, and bundled cockpit serving. | Current governed reference slice; staging/production remain blocked until managed operations and deployment evidence are supplied. |
+| `backend/app.py` | Authoritative FastAPI/ASGI owner with fail-closed session authentication, typed routes, policy/broker dispatch, schema-11 SQLite/PostgreSQL state including durable Goal/Task schedules, task runs, idempotency records, and leased action runs, Redis-backed shared rate limits, durable SSE replay/resync, and bundled cockpit serving. | Current governed reference slice; staging/production remain blocked until managed operations and deployment evidence are supplied. |
 | `backend/server.py` | Legacy standard-library compatibility server remains isolated from the authoritative import path; its historical WebSocket, catalog, chat, and mutation surfaces are not the production owner. | Compatibility/research edge only; do not use it as production evidence. |
 | `web/static/app.tsx` + `web/static/cockpit.tsx` + `web/static/app.jsx` | React 19 + React Router 7 cockpit uses a strict TypeScript root mount and fully checked TypeScript source for the authenticated v2 session, snapshot, capability registry, and SSE event feed. The historical JSX path is a compatibility re-export; the Vite output is the runtime bundle and no CDN runtime is required. | Current cockpit surface for Observe/Assist and governed command presentation; voice, humanoid, engineering visuals, accessibility, and performance evidence remain disclosure-bound. |
 | `src/javis_voice_multimodal.py` | Voice, CAD, visual, and briefing dataclasses remain adapter/fixture contracts. Server-owned verification is required; unavailable and unverified outputs are explicit. | Adapter contract and test fixture source, not evidence of real STT, anti-replay biometrics, CAD parsing, or visual analysis. |
-| SQLite/PostgreSQL state | `ControlPlaneStore` and `PostgresControlPlaneStore` persist tenants, principals, devices, sessions, capabilities, intents, plans, approvals, runs, actions, evidence, audit, events, outbox, rate limits, artifacts, memory, briefings, sequences, schema-10 Goal/Task schedules, task runs, and leased action runs. Redis provides authenticated shared rate-limit coordination. | Local SQLite and shared PostgreSQL/Redis paths are implemented; managed backup, staging, and multi-process deployment evidence remain release gates. |
+| SQLite/PostgreSQL state | `ControlPlaneStore` and `PostgresControlPlaneStore` persist tenants, principals, devices, sessions, capabilities, intents, plans, approvals, runs, actions, evidence, audit, events, outbox, idempotency records, rate limits, artifacts, memory, briefings, sequences, schema-11 Goal/Task schedules, task runs, and leased action runs. Redis provides authenticated shared rate-limit coordination. | Local SQLite and shared PostgreSQL/Redis paths are implemented; managed backup, staging, and multi-process deployment evidence remain release gates. |
 | `/api/tick`, `/api/execute/{key}`, `/api/mutate`, `/api/rsi/upgrade` | Compatibility routes are retired with typed 410 responses; no privileged GET path is used by the authoritative app. | Preserve the safe migration response and use v2 typed plans/broker for future capability work. |
 | `docs/javis/*.mp4` | Reference recordings only; no executable contract, telemetry, or acceptance evidence. | Use for UX acceptance scenarios and visual language, never for capability verification. |
 
@@ -2012,7 +2012,7 @@ Durability requirements:
 - execution history
 - clock/timezone normalization
 
-### 40.7 Implemented reference overlay (schema 10)
+### 40.7 Implemented reference overlay (schema 11)
 
 The reference repository now implements a bounded, tenant-scoped scheduler
 slice. `schedules` persist `once` and `interval` entries with a UTC
@@ -2226,7 +2226,7 @@ score =
 - memory writes are auditable
 - project boundaries are enforced
 
-### 42.6 Implemented reference overlay (schema 10)
+### 42.6 Implemented reference overlay (schema 11)
 
 `memory_items` now carries an explicit memory class, optional project
 namespace, source reference, structured provenance, trust level, verification
@@ -3073,7 +3073,7 @@ GET    /api/v2/connectors/{connector_id}/health
 
 ### 50.6.1 Current reference routes
 
-The implemented schema-10 surface is intentionally narrower than the target
+The implemented schema-11 surface is intentionally narrower than the target
 API above:
 
 ```text

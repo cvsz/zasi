@@ -91,7 +91,7 @@ export ZASI_ROLLBACK_ADMIN_URL="postgresql:///postgres?host=/var/run/postgresql&
 export ZASI_BACKUP_KEY_B64="$(python3 -c 'import base64,secrets; print(base64.b64encode(secrets.token_bytes(32)).decode())')"
 python3 scripts/rollback_drill.py \
   --allow-local-rehearsal \
-  --expected-schema-version 10
+  --expected-schema-version 11
 ```
 
 For a local peer-authenticated administrator URL, run the command as the

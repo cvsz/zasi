@@ -127,7 +127,7 @@ These results establish a baseline only. They do not prove authorization, tenant
 The current tree now contains the first governed vertical slice described in
 Section 2. `backend.app` is the sole authoritative ASGI owner; it initializes
 the durable `ControlPlaneStore`, registers code-owned tool manifests, and
-serves the bundled cockpit. The repository schema is version 10. SQLite and
+serves the bundled cockpit. The repository schema is version 11. SQLite and
 the authenticated PostgreSQL adapter are implemented; Redis supplies shared
 rate-limit coordination and readiness. Staging and production settings still
 require explicit service URLs, an external secret provider, and a managed
@@ -475,7 +475,7 @@ Requirements:
 - Correlation IDs MUST propagate into logs, actions, events, evidence, and connector requests.
 - The API/event envelope `schema_version` is independent from the repository
   migration schema. The current API/event envelope is version 1; the current
-  local SQLite/PostgreSQL repository schema is version 9.
+  local SQLite/PostgreSQL repository schema is version 11.
 
 ### 9.2 Intent
 
@@ -934,9 +934,15 @@ Requirements:
   resume cursor. If no cursor is supplied, replay starts at the beginning of
   the retained tenant history.
 - If more than one cursor source is supplied, all values MUST be identical.
+- A finite replay response MUST report the last cursor actually returned in
+  `stream.end` and `X-ZASI-Event-Cursor`; it MUST NOT jump to a newer global
+  cursor that was not included in that page.
 - If the requested cursor is outside retention, the server MUST emit resync.required and a snapshot reference.
 - The client MUST fetch the authoritative snapshot, replace local state, then reconnect from the returned cursor.
 - A reconnect that merely opens a socket without resync is not a successful recovery.
+- A long-lived stream MUST revalidate the authenticated session and scope
+  snapshot during polling and terminate with a bounded reason after revocation,
+  expiration, or scope drift.
 - WebSocket is optional and MUST follow the same auth, cursor, scope, and resync contract.
 
 Compatibility routes:
@@ -974,6 +980,7 @@ Compatibility routes:
 | audit_records | id, tenant_id, actor_json, action, target, outcome, redacted_metadata |
 | events | id, tenant_id, sequence, type, aggregate_json, payload_json |
 | outbox | id, tenant_id, event_id, destination, status, next_attempt_at, attempt_count, max_attempts, claim_token, lease_until, dead_lettered_at |
+| idempotency_records | tenant_id, operation, idempotency_key, request_digest, response_json, created_at |
 | rate_limits | tenant_id, subject, bucket, count, reset_at |
 | sequence_runs | id, tenant_id, sequence_id, revision, idempotency_key, status, result_json, timestamps |
 | connector_grants | id, tenant_id, connector_id, scopes, secret_ref, status |
@@ -983,6 +990,13 @@ Compatibility routes:
 | briefings | id, tenant_id, principal_id, source-backed content, generated_at |
 
 Every tenant-owned table MUST carry tenant_id or be reachable only through a tenant-owned parent with an enforced repository constraint.
+
+For retryable state-changing operations, the idempotency record MUST be
+written in the same transaction as the domain transition and event. A replay
+with the same tenant, operation, key, and request digest returns the original
+response without repeating the side effect; a different immutable request is
+a conflict. Stored replay responses MUST not contain bearer tokens, pairing
+challenges, lease tokens, or other secret material.
 
 ### 13.2 Transaction rule
 
@@ -1802,18 +1816,25 @@ Every capability that cannot complete this path remains disabled, simulated, res
 
 Evidence capture date: **2026-09-02 UTC**. The results below distinguish local
 working-tree evidence, the signed implementation commits, hosted PR checks, and
-unverified deployment gates. The core PostgreSQL/Redis, CI, cockpit, and
-encrypted-backup hardening is recorded through signed code commit `49bba1c`,
+unverified deployment gates. The earlier PostgreSQL/Redis, CI, cockpit, and
+encrypted-backup baseline remains recorded through signed code commit `49bba1c`,
 with the scheduler fixture, bounded outbox worker, protected release signing,
 and durable action-worker follow-up in signed commits `25ad5f3`, `1c1dd62`,
-`7ba35f9`, `eaf4c15`, `17e3771`, `3e61e9a`, and `71db73a`.
+`7ba35f9`, `eaf4c15`, `17e3771`, `3e61e9a`, and `71db73a`. The current control-
+plane hardening is in signed commit `880aa7f32f0b888b988f92afaf1739cd6929ad91`,
+the current frontend/static-hosting hardening is in signed commit
+`d60f11878560abe19a2a4d270080257203db2d55`, and the current container
+permission hardening is in signed commit
+`d169fa9b9e54ed0bf5263baa8e9bd36db5b05f59`.
 The legacy-boundary quarantine and truthfulness regression is recorded in
 signed commit `afcc04c`; the compatibility-status label correction is in
 signed commit `6d0eaec`, with the documentation reconciliation in `15dd528`.
-[#29](https://github.com/cvsz/zasi/pull/29) passed hosted checks for the prior
-release-gate head `e19d4de7e0d7d0e47745e0cf0982ab5b4806798a` and the current
+#29](https://github.com/cvsz/zasi/pull/29) passed hosted checks for the prior
+release-gate head `e19d4de7e0d7d0e47745e0cf0982ab5b4806798a` and the prior
 implementation verification head `6d0eaec`, which includes the durable
 action-worker implementation, legacy-boundary hardening, and evidence updates.
+Those hosted results do not cover the current signed hardening heads above;
+hosted checks for the current branch head remain pending until it is pushed.
 There is no
 staging deployment, production checkout, or production release authorization.
 The existing `.coverage` deletion is preserved and is not part of the
@@ -1821,10 +1842,10 @@ implementation claim.
 
 | Command or inspection | Observed result | Evidence class |
 |---|---|---|
-| `python3 -m unittest discover -s tests -q` | 299 tests passed, 2 optional live-service checks skipped | Local functional regression |
-| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 299 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
+| `python3 -m unittest discover -s tests -q` | 312 tests passed, 2 optional live-service checks skipped | Local functional regression |
+| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 312 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
 | Focused control-plane/security suite (`tests.test_control_plane_core`, `tests.test_control_plane_broker`, `tests.test_control_plane_api`, `tests.test_security_hardening`, `tests.test_egress_security`) | Passed, including memory-hard API-key verification and TLS 1.2 floor tests | Local governed/security regression |
-| Focused outbox worker suite (`tests.test_outbox_worker tests.test_control_plane_core`) | 20 tests passed; bounded polling, interruptible shutdown, retry/dead-letter preservation, configuration fail-closed behavior, and worker identifier validation covered | Local outbox worker regression |
+| Focused outbox worker suite (`tests.test_outbox_worker tests.test_control_plane_core`) | 28 tests passed; bounded polling, interruptible shutdown, retry/dead-letter preservation, expired-lease reclaim, conditional-claim race handling, configuration fail-closed behavior, and worker identifier validation covered | Local outbox worker regression |
 | `PYTHONPATH=. python3 -m unittest tests.test_release_signing -v` | 4 tests passed; artifact selection/checksum determinism and protected release workflow requirements covered | Local release-signing regression |
 | `python3 -m unittest tests.test_api -q` | 8 legacy compatibility tests passed, including retired webhook and truthful legacy OpenAPI assertions | Local migration-surface regression |
 | `PYTHONPATH=. python3 -m unittest tests.test_legacy_truthfulness -v` | 8 tests passed; fixed-token removal, loopback binding, escaped HUD values, disabled demo/chat/subsystem execution, retired OpenAPI operations, and disabled background workers were verified | Local legacy-boundary regression |
@@ -1839,11 +1860,11 @@ implementation claim.
 | `zasi-outbox-worker --once` against a temporary SQLite profile | Bounded one-iteration run passed; output contained only sanitized status/count fields and no secret material | Local worker CLI smoke |
 | `python3 scripts/run_action_worker.py --once` against a temporary SQLite profile | Direct source-checkout CLI smoke passed; one bounded R0/R1 poll completed with sanitized status/count output and no secret material | Local durable action-worker CLI smoke |
 | `scripts/sign_release_artifacts.py` in an isolated temporary output directory with the configured local GPG key | Wheel, sdist, SBOM, and SHA256SUMS were signed and verified; public key export and checksum verification passed; temporary signatures were outside the repository | Local artifact-signing smoke |
-| `ZASI_DATABASE_BACKEND=postgresql` with `PostgresControlPlaneStore` against the shared cluster | Schema 10 initialization, integrity check, authenticated session, project-memory/briefing/schedule repository paths, readiness, and custom-format backup catalog smoke passed | Local PostgreSQL integration |
-| Shared PostgreSQL/Redis ASGI smoke with a uniquely scoped tenant probe | Unauthenticated goals access returned `401`; authenticated session bootstrap returned `201` and remained scoped to `local`; `/health/ready` returned HTTP `200` with PostgreSQL schema 10 and Redis `ready`; a foreign-tenant goal returned `404` and was absent from the local goal list; exact probe rows were removed and cleanup was verified | Local authenticated API, dependency, and tenant-isolation evidence |
-| `PostgresControlPlaneStore` against an ephemeral database on the shared PostgreSQL cluster | Schema 10 initialization, tenant-scoped Goal/Task DAG lifecycle, schedule occurrence deduplication, task-run lease ownership/reclaim, atomic completion, and goal completion passed; the ephemeral database was removed after verification | Local PostgreSQL vertical-slice integration |
-| `scripts/backup_control_plane.py create/validate/restore --backend postgresql` with an ephemeral 32-byte key injected through `ZASI_BACKUP_KEY_B64` | Fresh schema-10 encrypted archive was created/validated at mode `600`, restored into a uniquely named temporary PostgreSQL database with the local PostgreSQL administrator, verified by `PostgresControlPlaneStore` as schema `10` with integrity `True`, and removed by an exit trap. The least-privileged `zasi` role remains unable to create/drop validation databases. | Local encrypted PostgreSQL backup, restore, and integrity evidence; managed retention/key rotation and staging restore remain open |
-| `scripts/rollback_drill.py --allow-local-rehearsal --expected-schema-version 10` against the shared PostgreSQL cluster | Fresh dump/encryption/archive validation passed; restore into a random `zasi_rollback_drill_*` database passed schema-10 and integrity checks; source schema/integrity observation remained unchanged; the temporary database was removed. The command rejects staging/production profiles and emits no target database or secret. | Local rollback rehearsal evidence only; managed retention/key rotation, staging canary, production cutover, and rollback observation remain open |
+| `ZASI_DATABASE_BACKEND=postgresql` with `PostgresControlPlaneStore` against the shared cluster | Schema 11 initialization, integrity check, authenticated session, project-memory/briefing/schedule repository paths, readiness, and custom-format backup catalog smoke passed | Local PostgreSQL integration |
+| Shared PostgreSQL/Redis ASGI smoke with a uniquely scoped tenant probe | Unauthenticated goals access returned `401`; authenticated session bootstrap returned `201` and remained scoped to `local`; `/health/ready` returned HTTP `200` with PostgreSQL schema 11, Redis `ready`, and the frontend bundle `ready`; a foreign-tenant goal returned `404` and was absent from the local goal list; exact probe rows were removed and cleanup was verified | Local authenticated API, dependency, and tenant-isolation evidence |
+| `PostgresControlPlaneStore` against an ephemeral database on the shared PostgreSQL cluster | Schema 11 initialization, tenant-scoped Goal/Task DAG lifecycle, schedule occurrence deduplication, task-run lease ownership/reclaim, atomic completion, idempotency persistence, and goal completion passed; the ephemeral database was removed after verification | Local PostgreSQL vertical-slice integration |
+| `scripts/backup_control_plane.py create/validate/restore --backend postgresql` with an ephemeral 32-byte key injected through `ZASI_BACKUP_KEY_B64` | Fresh schema-11 encrypted archive was created/validated at mode `600`, restored into a uniquely named temporary PostgreSQL database with the local PostgreSQL administrator, verified by `PostgresControlPlaneStore` as schema `11` with integrity `True`, and removed by an exit trap. The least-privileged `zasi` role remains unable to create/drop validation databases. | Local encrypted PostgreSQL backup, restore, and integrity evidence; managed retention/key rotation and staging restore remain open |
+| `scripts/rollback_drill.py --allow-local-rehearsal --expected-schema-version 11` against the shared PostgreSQL cluster | Fresh dump/encryption/archive validation passed; restore into a random `zasi_rollback_drill_*` database passed schema-11 and integrity checks; source schema/integrity observation remained unchanged; the temporary database was removed. The command rejects staging/production profiles and emits no target database or secret. | Local rollback rehearsal evidence only; managed retention/key rotation, staging canary, production cutover, and rollback observation remain open |
 | `ZASI_REDIS_URL` with `RedisRuntime` against the shared ACL user | Authenticated ping, atomic namespaced rate-limit, and ASGI request smoke passed; the live host ACL has `default` disabled and `zasi` limited to `~zasi:*` plus `PING`, `EVAL`, `INCRBY`, and `EXPIRE`; direct `CONFIG`/`GET`/`SET`, ACL introspection, outside-namespace keys, and unauthenticated access were denied | Local Redis integration and least-privilege ACL audit |
 | Private `.env` service credential shape | Mode `600`; `zasi` PostgreSQL/Redis URLs and `PGPASSWORD`/`REDIS_PASSWORD` contain operator-supplied high-entropy hex material; the value is ignored by Git and absent from tracked source | Local secret-handling inspection |
 | `npm audit --omit=dev --json` | 0 info/low/moderate/high/critical findings after the React Router 7.18.3 upgrade | Local dependency audit |
@@ -1851,10 +1872,11 @@ implementation claim.
 | `docker compose config` | Passed with explicit local API key/CORS inputs | Local configuration rendering |
 | ASGI smoke: session bootstrap, authenticated OpenAPI, header-based SSE resume, `/health/live`, `/health/ready`, `/`, and an unknown API route | Session `201`; authenticated OpenAPI `200`; SSE resume `200` with `stream.end`; liveness/readiness/root `200`; unknown API route returned JSON 404 | Local HTTP smoke |
 | `docker build --pull -t zasi:architecture-implementation .` | Passed for the implementation branch | Local container build |
-| `docker build --pull` plus isolated hardened container smoke | Current image returned HTTP `200` from `/health/ready` with `status=ready` and schema 10; UID `10001:10001`, read-only rootfs, all capabilities dropped, no-new-privileges, PID limit, memory limit, and CPU limit were verified; external egress, research execution, and physical actuation reported disabled; temporary container was removed | Local runtime/container evidence |
+| `docker build --pull` plus isolated hardened container smoke | Current image returned HTTP `200` from `/health/ready` with `status=ready`, schema 11, and frontend bundle `ready`; UID `10001:10001`, read-only rootfs, all capabilities dropped, no-new-privileges, PID limit, memory limit, and CPU limit were verified; external egress, research execution, and physical actuation reported disabled; temporary container was removed | Local runtime/container evidence |
 | `python3 scripts/generate_sbom.py --output dist/zasi-sbom.cdx.json --resolve-installed` in the isolated project environment | CycloneDX 1.5 SBOM generated with 376 components and a serial number | Local supply-chain evidence |
 | `(cd dist && sha256sum --check SHA256SUMS)` and GPG verification of wheel, sdist, and SBOM signatures | Passed with the configured cvsz signing identity | Local artifact integrity evidence |
 | PR #29 hosted checks for exact pushed head `d6e9df50f33939efdad75ebc615bb708a52c40d7` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12 with the isolated dependency audit, React/TypeScript validation, distribution, Docker image, and Docker build checks passed; PR package publication skipped. This head contains the signed implementation, legacy-boundary, rollback-rehearsal, and evidence-documentation commits. | Hosted CI evidence; not release approval |
+| Current signed implementation head `d169fa9b9e54ed0bf5263baa8e9bd36db5b05f59` | Control-plane, frontend, and container hardening commits are GPG-signed and locally verified; current local test, runtime, artifact, and SBOM evidence is recorded above. This head has not yet received hosted CI results. | Local commit/artifact provenance; hosted CI pending |
 | GitHub Issue #18 | Remains `OPEN`; current status comments are maintained in the [roadmap thread](https://github.com/cvsz/zasi/issues/18) | External roadmap status, not release approval |
 
 The `ResourceWarning` regression test is intentionally retained. The original
@@ -1873,7 +1895,7 @@ the acceptance criteria in [#9](https://github.com/cvsz/zasi/issues/9) through
 | Issue / phase | Current status | Evidence and remaining release gate |
 |---|---|---|
 | [#9 / P0](https://github.com/cvsz/zasi/issues/9) | Partial, local | `backend.app` is the authoritative ASGI owner; fail-closed settings, readiness, compatibility quarantine, and registry-derived status exist. Duplicate-port ownership detection and hosted runtime ownership evidence remain open. |
-| [#10 / P1](https://github.com/cvsz/zasi/issues/10) | Partial, local PostgreSQL/Redis and encrypted backup mechanics | Tenant-scoped identity, hashed sessions, devices, audit, events, rate limits, schema-10 migrations, PostgreSQL repository, Redis coordination, authenticated API smoke, AES-GCM schema-10 archive create/validate/restore, SQLite restore integrity, temporary PostgreSQL restore integrity checks, and a bounded local rollback rehearsal exist. External identity/managed secrets, multi-process restart proof, managed object-storage retention/key rotation, staging restore, and production rollback operations remain open. |
+| [#10 / P1](https://github.com/cvsz/zasi/issues/10) | Partial, local PostgreSQL/Redis and encrypted backup mechanics | Tenant-scoped identity, hashed sessions, devices, audit, events, rate limits, schema-11 migrations, PostgreSQL repository, Redis coordination, authenticated API smoke, AES-GCM schema-11 archive create/validate/restore, SQLite restore integrity, temporary PostgreSQL restore integrity checks, and a bounded local rollback rehearsal exist. External identity/managed secrets, multi-process restart proof, managed object-storage retention/key rotation, staging restore, and production rollback operations remain open. |
 | [#11 / P2](https://github.com/cvsz/zasi/issues/11) | Partial, local | Typed intents/plans, deterministic risk policy, exact-digest approval records, evidence provenance, and governed MCP calls exist. Full R0–R5 capability inventory, production verification procedures, and complete claim-to-evidence coverage remain open. |
 | [#12 / P3](https://github.com/cvsz/zasi/issues/12) | Partial, local | Transactional events/outbox, bounded `zasi-outbox-worker` delivery loop, leased claims, authenticated SSE replay, cursor validation, retention gaps, and snapshot resync exist. A continuously deployed production worker, 10,000-event performance evidence, backpressure policy, and multi-process delivery proof remain open. |
 | [#13 / P4](https://github.com/cvsz/zasi/issues/13) | Partial, durable reference worker | Stable tool registry, request digests, run idempotency, approval gating, immutable queued payloads, worker leases/tokens, atomic evidence/events, bounded local retry, timeout/cancellation/unknown semantics, explicit authenticated reconciliation, and the R0/R1 `zasi-action-worker` path exist. Certified isolation, higher-risk worker deployment, external-side-effect proof, multi-process recovery, and production worker evidence remain open. |
