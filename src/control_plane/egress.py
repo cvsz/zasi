@@ -58,6 +58,12 @@ def _default_resolver(hostname: str, port: int):
     )
 
 
+def _secure_tls_context() -> ssl.SSLContext:
+    context = ssl.create_default_context()
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+    return context
+
+
 def _host_allowed(hostname: str, allowed_hosts: FrozenSet[str]) -> bool:
     normalized = hostname.rstrip(".").lower()
     for candidate in allowed_hosts:
@@ -239,7 +245,7 @@ class EgressBroker:
                 if peer_address not in allowed_addresses:
                     raise EgressDenied("connected peer was not in the validated address set")
                 if destination.scheme == "https":
-                    context = ssl.create_default_context()
+                    context = _secure_tls_context()
                     sock = context.wrap_socket(
                         sock,
                         server_hostname=destination.hostname,

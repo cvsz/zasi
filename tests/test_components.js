@@ -31,8 +31,12 @@ assert(!content.includes('dangerouslySetInnerHTML'), 'app.jsx must not render un
 assert(!content.includes("/api/tick"), 'cockpit must not expose legacy GET mutation controls');
 assert(!content.includes("/api/mutate"), 'cockpit must not expose legacy mutation controls');
 assert(!content.includes("/api/rsi/upgrade"), 'cockpit must not expose legacy RSI hot swap');
-assert(!fs.readFileSync(path.join(__dirname, '../web/index.html'), 'utf8').includes('unpkg.com'), 'production page must not load CDN runtime dependencies');
-assert(!fs.readFileSync(path.join(__dirname, '../web/index.html'), 'utf8').includes('cdnjs.cloudflare.com'), 'production page must not load CDN runtime dependencies');
+const productionHtml = fs.readFileSync(path.join(__dirname, '../web/index.html'), 'utf8');
+const scriptSources = [...productionHtml.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["']/gi)].map((match) => match[1]);
+const localOrigin = 'https://zasi.invalid';
+assert(scriptSources.every((source) => new URL(source, localOrigin).origin === localOrigin), 'production page must load scripts from the local bundle only');
+const legacyApi = fs.readFileSync(path.join(__dirname, '../src/api_server.py'), 'utf8');
+assert(legacyApi.includes('integrity="sha384-CI3ELBVUz9XQO+97x6nwMDPosPR5XvsxW2ua7N1Xeygeh1IxtgqtCkGfQY9WWdHu"'), 'legacy CDN script must use the pinned SRI digest');
 assert(!fs.readFileSync(path.join(__dirname, '../web/static/app.js'), 'utf8').includes('innerHTML'), 'legacy dashboard must remain inert');
 
 console.log('[✓] All React Router v6 component assertions passed successfully!');

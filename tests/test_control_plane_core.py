@@ -1,4 +1,5 @@
 import datetime as dt
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -55,7 +56,13 @@ class ControlPlaneCoreTests(unittest.TestCase):
         self.assertEqual(settings.profile, "production")
         self.assertEqual(settings.database_backend, "postgresql")
         self.assertNotEqual(settings.api_key_digest, b"test-secret")
+        self.assertNotEqual(
+            settings.api_key_digest,
+            hashlib.sha256(b"test-secret").digest(),
+        )
         self.assertEqual(len(settings.api_key_digest), 32)
+        self.assertTrue(settings.api_key_matches("test-secret"))
+        self.assertFalse(settings.api_key_matches("wrong-secret"))
 
     def test_local_configuration_does_not_create_implicit_credential(self):
         with self.assertRaises(ConfigurationError):

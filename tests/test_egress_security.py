@@ -1,15 +1,21 @@
 import socket
+import ssl
 import unittest
 
 from src.control_plane.egress import (
     EgressDenied,
     EgressPolicy,
+    _secure_tls_context,
     validate_destination,
     validate_redirect,
 )
 
 
 class EgressSecurityTests(unittest.TestCase):
+    def test_tls_context_requires_tls_12_or_newer(self):
+        context = _secure_tls_context()
+        self.assertGreaterEqual(context.minimum_version, ssl.TLSVersion.TLSv1_2)
+
     def test_loopback_ipv4_is_rejected_even_when_hostname_is_allowlisted(self):
         def resolver(host, port):
             return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", port))]

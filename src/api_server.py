@@ -46,7 +46,9 @@ class ZASIWebServer:
 <head>
     <title>J.A.R.V.I.S. Holographic Tactical HUD</title>
     <meta http-equiv="refresh" content="3">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"
+            integrity="sha384-CI3ELBVUz9XQO+97x6nwMDPosPR5XvsxW2ua7N1Xeygeh1IxtgqtCkGfQY9WWdHu"
+            crossorigin="anonymous"></script>
     <style>
         body {{ font-family: 'Consolas', 'Courier New', monospace; background: #030712; color: #38bdf8; margin: 0; padding: 20px; overflow-x: hidden; }}
         h1 {{ color: #00f0ff; text-shadow: 0 0 10px rgba(0, 240, 255, 0.7); border-bottom: 1px solid #0284c7; padding-bottom: 10px; }}

@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 import hashlib
 import hmac
 import os
+import secrets
 from pathlib import Path
 from typing import Mapping, Optional, Tuple
 from urllib.parse import urlsplit
@@ -13,6 +14,18 @@ class ConfigurationError(ValueError):
     """Raised when a profile cannot be started safely."""
 
 
+def _derive_api_key_digest(api_key: str, salt: bytes) -> bytes:
+    """Derive a memory-hard verifier for a bootstrap API key."""
+    return hashlib.scrypt(
+        api_key.encode("utf-8"),
+        salt=salt,
+        n=2**14,
+        r=8,
+        p=1,
+        dklen=32,
+    )
+
+
 @dataclass(frozen=True)
 class Settings:
     profile: str
@@ -20,6 +33,7 @@ class Settings:
     port: int
     cors_origins: Tuple[str, ...]
     api_key_digest: bytes = field(repr=False, compare=False)
+    api_key_salt: bytes = field(repr=False, compare=False)
     database_path: str
     max_body_bytes: int
     auth_rate_limit: int = 10
@@ -48,7 +62,8 @@ class Settings:
         raw_api_key = source.get("ZASI_API_KEY", "")
         if not raw_api_key or not raw_api_key.strip():
             raise ConfigurationError("ZASI_API_KEY is required; insecure defaults are disabled")
-        api_key_digest = hashlib.sha256(raw_api_key.encode("utf-8")).digest()
+        api_key_salt = secrets.token_bytes(16)
+        api_key_digest = _derive_api_key_digest(raw_api_key, api_key_salt)
 
         origins_value = source.get("ZASI_CORS_ORIGINS")
         if origins_value is None and profile == "local":
@@ -186,6 +201,7 @@ class Settings:
             port=port,
             cors_origins=origins,
             api_key_digest=api_key_digest,
+            api_key_salt=api_key_salt,
             database_path=database_path,
             max_body_bytes=max_body_bytes,
             auth_rate_limit=auth_rate_limit,
@@ -208,5 +224,5 @@ class Settings:
         """Compare a supplied bootstrap key without retaining its plaintext."""
         if not isinstance(candidate, str) or not candidate:
             return False
-        candidate_digest = hashlib.sha256(candidate.encode("utf-8")).digest()
+        candidate_digest = _derive_api_key_digest(candidate, self.api_key_salt)
         return hmac.compare_digest(candidate_digest, self.api_key_digest)
