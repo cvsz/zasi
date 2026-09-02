@@ -8,6 +8,7 @@ const READY_PATH = '/health/ready';
 const READY_TIMEOUT_MS = 15000;
 let mainWindow;
 let pythonProcess;
+let backendLifecycle;
 
 function redactedLine(value) {
   return String(value)
@@ -20,7 +21,7 @@ function startBackend() {
     throw new Error('ZASI_API_KEY is required before starting the Electron shell');
   }
   const repoRoot = path.join(__dirname, '..');
-  pythonProcess = spawn('python3', ['-m', 'backend.app'], {
+  const child = spawn('python3', ['-m', 'backend.app'], {
     cwd: repoRoot,
     env: {
       ...process.env,
@@ -31,10 +32,15 @@ function startBackend() {
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  pythonProcess.stdout.on('data', (data) => console.log(`[ZASI backend] ${redactedLine(data)}`));
-  pythonProcess.stderr.on('data', (data) => console.error(`[ZASI backend] ${redactedLine(data)}`));
-  pythonProcess.on('error', (error) => console.error(`[ZASI backend] process error: ${redactedLine(error.message)}`));
-  pythonProcess.on('exit', (code, signal) => {
+  pythonProcess = child;
+  const lifecycle = { child, exited: false, killTimer: null };
+  backendLifecycle = lifecycle;
+  child.stdout.on('data', (data) => console.log(`[ZASI backend] ${redactedLine(data)}`));
+  child.stderr.on('data', (data) => console.error(`[ZASI backend] ${redactedLine(data)}`));
+  child.on('error', (error) => console.error(`[ZASI backend] process error: ${redactedLine(error.message)}`));
+  child.on('exit', (code, signal) => {
+    lifecycle.exited = true;
+    if (lifecycle.killTimer) clearTimeout(lifecycle.killTimer);
     if (code !== 0 && !app.isQuitting) console.error(`[ZASI backend] exited (${code ?? 'null'}, ${signal ?? 'unknown'})`);
   });
 }
@@ -99,13 +105,22 @@ function createWindow() {
 }
 
 function stopBackend() {
-  if (!pythonProcess || pythonProcess.killed) return;
-  pythonProcess.kill('SIGTERM');
+  const lifecycle = backendLifecycle;
   const processToStop = pythonProcess;
-  setTimeout(() => {
-    if (!processToStop.killed) processToStop.kill('SIGKILL');
-  }, 3000).unref();
+  backendLifecycle = null;
   pythonProcess = null;
+  if (!lifecycle || !processToStop || lifecycle.child !== processToStop) return;
+  if (lifecycle.exited || processToStop.exitCode !== null || processToStop.signalCode !== null) return;
+  try {
+    processToStop.kill('SIGTERM');
+  } catch {
+    return;
+  }
+  lifecycle.killTimer = setTimeout(() => {
+    if (lifecycle.exited || processToStop.exitCode !== null || processToStop.signalCode !== null) return;
+    try { processToStop.kill('SIGKILL'); } catch { /* already exited */ }
+  }, 3000);
+  lifecycle.killTimer.unref();
 }
 
 app.whenReady().then(async () => {

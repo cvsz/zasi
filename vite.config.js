@@ -1,5 +1,16 @@
 import { defineConfig } from 'vite';
 
+const configuredBasePath = (process.env.VITE_BASE_PATH || './').trim();
+if (
+  !configuredBasePath ||
+  (configuredBasePath !== './' && !configuredBasePath.startsWith('/'))
+) {
+  throw new Error('VITE_BASE_PATH must be ./ or an absolute path prefix');
+}
+const assetBasePath = configuredBasePath.endsWith('/')
+  ? configuredBasePath
+  : `${configuredBasePath}/`;
+
 function apiOriginCspPlugin() {
   return {
     name: 'zasi-api-origin-csp',
@@ -25,6 +36,7 @@ function apiOriginCspPlugin() {
 
 export default defineConfig({
   root: 'web',
+  base: assetBasePath,
   plugins: [apiOriginCspPlugin()],
   build: {
     outDir: '../web/dist',

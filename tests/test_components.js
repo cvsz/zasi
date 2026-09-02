@@ -29,6 +29,19 @@ assert(appJsx.includes("export { default } from './cockpit';"), 'compatibility m
 assert(appTsx.includes('createRoot'), 'TypeScript entrypoint must own React root creation');
 const productionHtml = fs.readFileSync(path.join(__dirname, '../web/index.html'), 'utf8');
 assert(productionHtml.includes('./static/app.tsx'), 'production page must load the TypeScript entrypoint');
+const viteConfig = fs.readFileSync(path.join(__dirname, '../vite.config.js'), 'utf8');
+assert(viteConfig.includes('VITE_BASE_PATH'), 'build must expose an explicit static hosting base path');
+assert(viteConfig.includes("|| './'"), 'local and Electron builds must retain relative asset URLs by default');
+const dockerfile = fs.readFileSync(path.join(__dirname, '../Dockerfile'), 'utf8');
+assert(dockerfile.includes('install -d -m 700 /app/data'), 'Docker data directory must be private before dropping privileges');
+const electronMain = fs.readFileSync(path.join(__dirname, '../electron/main.js'), 'utf8');
+assert(electronMain.includes('backendLifecycle'), 'Electron shell must track backend exit state');
+assert(electronMain.includes('SIGKILL'), 'Electron shell must escalate a stuck backend shutdown');
+assert(electronMain.includes('exitCode'), 'Electron shell must wait for actual child exit before suppressing escalation');
+assert(cockpitTsx.includes('ROUTER_BASENAME'), 'cockpit routing must account for a project Pages basename');
+assert(cockpitTsx.includes('basename={ROUTER_BASENAME}'), 'cockpit router must apply the Pages basename');
+const pagesWorkflow = fs.readFileSync(path.join(__dirname, '../.github/workflows/pages.yml'), 'utf8');
+assert(pagesWorkflow.includes('VITE_BASE_PATH'), 'Pages workflow must provide its project base path');
 
 assert(cockpitTsx.includes('BrowserRouter'), 'typed cockpit must import and use BrowserRouter');
 assert(cockpitTsx.includes('Routes'), 'typed cockpit must declare Routes');

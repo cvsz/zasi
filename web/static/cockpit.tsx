@@ -22,6 +22,9 @@ import {
 } from 'react-router-dom';
 
 const API_ROOT = (import.meta.env.VITE_API_ROOT || '').replace(/\/$/, '');
+const ROUTER_BASENAME = import.meta.env.BASE_URL.startsWith('/')
+    ? import.meta.env.BASE_URL.replace(/\/$/, '') || undefined
+    : undefined;
 
 type JsonRecord = Record<string, unknown>;
 
@@ -752,7 +755,7 @@ function AuthenticatedApp() {
 }
 
 function App() {
-    return <ThemeProvider><ToastProvider><AuthProvider><BrowserRouter><AuthenticatedApp /></BrowserRouter></AuthProvider></ToastProvider></ThemeProvider>;
+    return <ThemeProvider><ToastProvider><AuthProvider><BrowserRouter basename={ROUTER_BASENAME}><AuthenticatedApp /></BrowserRouter></AuthProvider></ToastProvider></ThemeProvider>;
 }
 
 // Kept as the migrated cockpit implementation while app.tsx owns the typed entrypoint.
