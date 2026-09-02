@@ -1,39 +1,53 @@
-# 🌌 ZASI System Architecture & Formal Specification v32.0.0
+# ZASI system architecture and ownership
 
-## 1. System Overview
-ZASI is structured across **5 architectural tiers** integrating **176 specialized subsystems**:
+This page is the short operational summary. The normative contract is
+[ZASI_IMPLEMENTATION_SPECIFICATION.md](ZASI_IMPLEMENTATION_SPECIFICATION.md),
+and the product/system vision is
+[ZASI_FULL_ARCHITECTURE.md](ZASI_FULL_ARCHITECTURE.md).
 
+## Runtime ownership
+
+`backend.app` is the only authoritative application entry point. It owns the
+ASGI lifecycle, authenticated session, tenant scope, policy evaluation, typed
+tool registry, SQLite repository, audit/event/outbox records, SSE replay, and
+the bundled cockpit fallback. `main.py` and `backend.server.py` are not
+production owners; their explicit compatibility/demo commands are quarantined.
+
+```text
+browser / Electron
+        |
+        | authenticated JSON + bearer SSE
+        v
+backend.app (ASGI)
+  identity -> policy -> intent/plan -> broker -> evidence
+        |                    |
+        +---- SQLite ---------+---- events + durable outbox
 ```
-[Tier 1: Formal Safety & Invariant SMT Core (#1–#60)] ──> [Tier 2: Quantum & Compute Substrates (#61–#128)]
-                                                                          │
-[Tier 5: Hyper-Cosmology & Singularity (#169–#176)] <── [Tier 4: Apex (#137–#168)] <── [Tier 3: Physical Hardware (#129–#136)]
-```
 
-## 2. Invariant Safety Formalism
-Every state transition $\Delta s$ is formally bounded by First-Order SMT solvers:
-$$\forall s \in \mathcal{S}, \quad \mathcal{V}(s) = \text{True} \implies \mathcal{V}(s + \Delta s) = \text{True}$$
+The control plane is server-authoritative. A UI route, model response, voice
+signal, or MCP payload cannot grant a capability or bypass the broker.
 
-## 3. Real Physical Hardware Actuation (#129–#136)
-- **FPGA Matrix Core**: AMD Alveo U280 executing systolic matmul at 327,235 TFLOPs with 0.42 μs latency.
-- **QPU Physical Bridge**: IBM Heron 156-qubit QPU interface with Zero-Noise Extrapolation (ZNE).
-- **Satellite Radar Ingestion**: Real-time 1m resolution Sentinel-1 SAR stream covering 12.4M km²/hr.
-- **Robotics RTOS**: Deterministic EtherCAT 10 kHz motion controller with SIL-3 safety invariants.
-- **6G Sub-THz Telecom**: Non-terrestrial LEO satellite constellation URLLC slicing (0.28 ms latency).
-- **Genomic Basecaller**: Oxford Nanopore PromethION streaming at 1,420 kbp/s with 99.994% SNV accuracy.
-- **Confidential HSM**: FIPS 140-3 Level 4 hardware security module with AMD SEV-SNP enclaves.
-- **Actuation Director**: Master coordinator binding 2 Billion real-world physical nodes into formal harmony.
+## Capability truth model
 
-## 4. Hyper-Cosmology Subsystems (#169–#176)
-- **#169 Tachyon Retrocausal QEC**: Pre-syndrome inversion for zero-latency quantum error correction.
-- **#170 Stellar Gravitational Wave Array**: Cosmic tensor perturbation analysis.
-- **#171 Plasma Wakefield Positron Accelerator**: 100 GeV/m ultra-relativistic gradient engine.
-- **#172 Quantum Vacuum Casimir Actuator**: Sub-nanometer force modulation for molecular nanotechnology.
-- **#173 Dark Matter Axion Haloscope**: Primordial dark matter detection array.
-- **#174 Non-Hermitian Exceptional Point Sensor**: High-order topological perturbation sensor.
-- **#175 Wormhole Geodesic Router**: Hyperbolic trans-spatial routing via ER=EPR geometries.
-- **#176 Infinite Hilbert Singularity Supreme**: Omniversal axiomatic convergence and superintelligence core.
+The historical 176-entry catalog is inventory only. Runtime responses expose
+implementation state, runtime state, evidence state, allowed risk tiers,
+verification references, and operator disclosure separately. The reference
+profile has one locally verified read-only system-status tool; external
+connectors, research execution, runtime hot swap, physical actuation, and
+unverified formal/cryptographic claims remain disabled or unavailable.
 
-## 5. Full-Stack Command Cockpit (React 18 + React Router v6)
-- **Frontend Architecture**: Client-side SPA rendered with React 18, React Router v6, Babel standalone, and Three.js 176-node hypergraph.
-- **Real-Time Data Flow**: Native RFC 6455 WebSocket push every 2 seconds (`/ws`) + SSE streaming dialogue (`/api/jarvis/stream`).
-- **Persistence Layer**: SQLite state store (`data/zasi_state.db`) synchronized with hot-mutation endpoints.
+## State and event flow
+
+State-changing operations commit domain state, audit metadata, an append-only
+tenant event, and an outbox row in one transaction. SSE cursors are tenant
+scoped. A cursor outside retention emits `resync.required`; clients must fetch
+`/api/v2/snapshot` before reconnecting. Event delivery is replay-safe and does
+not imply that a capability is live.
+
+## Profiles
+
+Local uses loopback-oriented configuration and SQLite. Staging and production
+configuration require an explicit PostgreSQL URL, external secret provider,
+and managed backup policy; the current reference binary intentionally refuses
+to start those profiles until the production repository adapter exists. This is
+a deliberate NO-GO boundary, not a claim of PostgreSQL readiness.
