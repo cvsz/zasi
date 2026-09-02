@@ -5,16 +5,16 @@
 [![PyPI Downloads](https://img.shields.io/pypi/dm/zasi.svg?color=blue)](https://pypi.org/project/zasi/)
 [![npm](https://img.shields.io/npm/v/zasi-cockpit.svg?logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/zasi-cockpit)
 [![Subsystems](https://img.shields.io/badge/subsystems-176%20Online-green.svg)](docs/SUBSYSTEMS_REFERENCE.md)
-[![Tests](https://img.shields.io/badge/tests-172%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-215%20passing-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.14-blue.svg)](https://python.org)
 [![React](https://img.shields.io/badge/frontend-React%2018%20%2B%20React%20Router%20v6-61dafb.svg)](web/)
 [![Discussions](https://img.shields.io/badge/community-Discussions-orange.svg)](https://github.com/cvsz/zasi/discussions)
 [![License](https://img.shields.io/badge/license-MIT-purple.svg)](LICENSE)
 
 > The identity and release badges above are retained for repository continuity.
-> The subsystem and test badges describe the historical prototype snapshot; the
-> governed reference profile and current verification evidence are documented
-> below.
+> The subsystem badge describes the historical prototype snapshot; the test
+> badge reflects the latest full local suite. The governed reference profile
+> and current verification evidence are documented below.
 
 # ZASI — governed J.A.R.V.I.S. control-plane reference platform
 
@@ -37,7 +37,9 @@ disabled.
 ## Run the authoritative application
 
 ```bash
-export ZASI_API_KEY='choose-a-local-secret'
+set -a
+. .env
+set +a
 npm ci --ignore-scripts
 npm run build
 python3 -m backend.app
@@ -51,9 +53,10 @@ not production owners.
 Create a session and call the read-only status tool:
 
 ```bash
+python3 -c 'import json, os; print(json.dumps({"api_key": os.environ["ZASI_API_KEY"]}))' |
 curl -sS http://127.0.0.1:8080/api/v2/sessions \
   -H 'Content-Type: application/json' \
-  --data '{"api_key":"choose-a-local-secret"}'
+  --data-binary @-
 ```
 
 All authenticated v2 resources require the returned bearer session; the session

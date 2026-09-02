@@ -26,8 +26,10 @@ cryptographic assurance, or AGI/ASI capability.
 The release is `NO-GO` for public production use until the remaining mandatory
 H5/H7/H8 evidence is supplied: production repository and migration path,
 backup/restore and crash-recovery evidence, external egress worker and
-dead-letter integration, signed SBOM/artifacts, vulnerability/container scans,
-staging canary, rollback observation, and independent verification.
+dead-letter integration, hosted release provenance, vulnerability/container
+scans, staging canary, rollback observation, and independent verification.
+Local wheel, sdist, SBOM, checksum, and GPG-signature verification now exists
+for the implementation branch, but it is not a production release certificate.
 
 ## Evidence bundle requirement
 

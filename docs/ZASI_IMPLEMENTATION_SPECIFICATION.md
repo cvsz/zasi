@@ -1686,19 +1686,21 @@ Every capability that cannot complete this path remains disabled, simulated, res
 
 ### 26.1 Evidence boundary
 
-Evidence capture date: **2026-09-02 UTC**. The results below are local working-
-tree evidence. No commit SHA, hosted-CI result, staging deployment, production
-checkout, or signed release artifact is inferred from these commands. The
-working tree contains uncommitted changes; the existing `.coverage` deletion is
+Evidence capture date: **2026-09-02 UTC**. The results below distinguish local
+working-tree evidence, the signed implementation commits, hosted PR checks, and
+unverified deployment gates. The implementation branch is
+`0e0a469` and PR [#29](https://github.com/cvsz/zasi/pull/29) has passed its
+hosted checks. There is no staging deployment, production checkout, or
+production release authorization. The existing `.coverage` deletion is
 preserved and is not part of the implementation claim.
 
 | Command or inspection | Observed result | Evidence class |
 |---|---|---|
-| `python3 -m unittest discover -s tests -q` | 212 tests passed | Local functional regression |
-| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 212 tests passed; no unclosed SQLite warning | Local resource-lifecycle regression |
-| Focused control-plane/security suite (`tests.test_control_plane_core`, `tests.test_control_plane_broker`, `tests.test_control_plane_api`, `tests.test_security_hardening`, `tests.test_egress_security`) | 38 tests passed | Local governed/security regression |
+| `python3 -m unittest discover -s tests -q` | 215 tests passed | Local functional regression |
+| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 215 tests passed; no unclosed SQLite warning | Local resource-lifecycle regression |
+| Focused control-plane/security suite (`tests.test_control_plane_core`, `tests.test_control_plane_broker`, `tests.test_control_plane_api`, `tests.test_security_hardening`, `tests.test_egress_security`) | Passed, including memory-hard API-key verification and TLS 1.2 floor tests | Local governed/security regression |
 | `python3 -m unittest tests.test_api -q` | 8 legacy compatibility tests passed, including retired webhook and truthful legacy OpenAPI assertions | Local migration-surface regression |
-| `python3 -m compileall -q backend src/control_plane main.py` | Passed | Local syntax check |
+| `python3 -m compileall -q backend src scripts tests main.py` | Passed | Local syntax check |
 | `node tests/test_components.js` | Passed | Local bundle/source safety assertions |
 | `node --check electron/main.js` | Passed | Local Electron syntax check |
 | `npm run build` | Vite production bundle passed; emitted a chunk-size advisory | Local frontend build |
@@ -1706,8 +1708,12 @@ preserved and is not part of the implementation claim.
 | `npm audit --omit=dev --json` | No high/critical findings; two moderate React Router findings remain and the automated fix requires a major v7 migration | Local dependency audit |
 | `docker compose config` | Passed with explicit local API key/CORS inputs | Local configuration rendering |
 | ASGI smoke: session bootstrap, authenticated OpenAPI, header-based SSE resume, `/health/live`, `/health/ready`, `/`, and an unknown API route | Session `201`; authenticated OpenAPI `200`; SSE resume `200` with `stream.end`; liveness/readiness/root `200`; unknown API route returned JSON 404 | Local HTTP smoke |
-| `docker build --pull -t zasi:control-plane-verification .` | Not completed: the isolated frontend `npm ci` failed after 220 seconds while fetching `yocto-queue` with registry `ECONNRESET` | Container verification blocked by external network failure; no image claim |
-| GitHub Issues #9–#18 | All remained `OPEN` when inspected on 2026-09-02 UTC | External roadmap status, not implementation evidence |
+| `docker build --pull -t zasi:architecture-implementation .` | Passed for the implementation branch | Local container build |
+| Hardened container smoke | `/health/ready` returned `ready`; UID `10001:10001`, read-only rootfs, all capabilities dropped, and no-new-privileges verified; external egress and physical actuation reported disabled | Local runtime/container evidence |
+| `python3 scripts/generate_sbom.py --output dist/zasi-sbom.cdx.json --resolve-installed` | CycloneDX 1.5 SBOM generated with 342 components and deterministic serial | Local supply-chain evidence |
+| `sha256sum --check dist/SHA256SUMS` and GPG verification of wheel, sdist, and SBOM signatures | Passed with the configured cvsz signing identity | Local artifact integrity evidence |
+| PR #29 hosted checks for commit `0e0a469` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12, lint, distribution, and Docker checks passed; PR package publication skipped | Hosted CI evidence |
+| GitHub Issue #18 | Remains `OPEN`; PR/evidence comment recorded at [#issuecomment-5503404521](https://github.com/cvsz/zasi/issues/18#issuecomment-5503404521) | External roadmap status, not release approval |
 
 The `ResourceWarning` regression test is intentionally retained. The original
 legacy hypergraph adapter used `with sqlite3.connect(...)`, which commits but
@@ -1732,7 +1738,7 @@ the acceptance criteria in [#9](https://github.com/cvsz/zasi/issues/9) through
 | [#14 / P5](https://github.com/cvsz/zasi/issues/14) | Partial, React 18 JavaScript | Dependencies are bundled and locked, the cockpit uses authenticated v2 transport, safe rendering, CSP, and reconnect/resync state. React 19 + TypeScript, full accessibility/performance evidence, and broad event-driven workspace coverage remain open. |
 | [#15 / P6](https://github.com/cvsz/zasi/issues/15) | Not implemented; target only | The repository has intents, plans, sequences, memory items, and unavailable briefings, but not the required durable Goal/Task DAG, scheduler, project memory router, or productivity connectors. |
 | [#16 / P7](https://github.com/cvsz/zasi/issues/16) | Unavailable by design | Artifact quarantine and provenance contracts exist; real CAD/STEP, vision, STT/TTS, anti-replay speaker verification, and hardware integration are not enabled. |
-| [#17 / P8](https://github.com/cvsz/zasi/issues/17) | Partial packaging hardening; NO-GO | Workflows, non-root container configuration, installer backup behavior, lockfiles, and local audit/build checks exist. Signed SBOM/provenance, vulnerability and container scans, staging canary, rollback observation, and independent verification are absent. |
+| [#17 / P8](https://github.com/cvsz/zasi/issues/17) | Partial packaging hardening; NO-GO | Workflows, non-root container configuration, installer backup behavior, lockfiles, local signed wheel/sdist/SBOM/checksum evidence, hosted CodeQL, and container builds exist. Dedicated vulnerability/container scan evidence, hosted release provenance, staging canary, rollback observation, and independent verification remain open. |
 | [#18 roadmap](https://github.com/cvsz/zasi/issues/18) | Open roadmap | The phase order and release gates are captured here; issue completion must not be inferred from local test output. |
 
 ### 26.3 Release decision from the evidence
