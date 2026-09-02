@@ -83,6 +83,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("name: zasi-signed-release", release_workflow)
         self.assertIn("workflow_run:", publish_workflow)
         self.assertIn('workflows: ["Create GitHub Release"]', publish_workflow)
+        self.assertIn("      actions: read\n      id-token: write", publish_workflow)
         self.assertIn("actions/download-artifact@v4", publish_workflow)
         self.assertIn(
             "run-id: ${{ github.event.workflow_run.id }}", publish_workflow
