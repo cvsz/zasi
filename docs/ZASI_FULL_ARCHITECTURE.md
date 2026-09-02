@@ -67,11 +67,11 @@ This is a source inspection snapshot, not a production-readiness claim. It preve
 
 | Repository surface | Observed current behavior | v33 interpretation |
 |---|---|---|
-| `backend/app.py` | Authoritative FastAPI/ASGI owner with fail-closed session authentication, typed routes, policy/broker dispatch, schema-8 SQLite/PostgreSQL state including a bounded Goal/Task DAG, Redis-backed shared rate limits, durable SSE replay/resync, and bundled cockpit serving. | Current governed reference slice; staging/production remain blocked until managed operations and deployment evidence are supplied. |
+| `backend/app.py` | Authoritative FastAPI/ASGI owner with fail-closed session authentication, typed routes, policy/broker dispatch, schema-9 SQLite/PostgreSQL state including durable Goal/Task schedules and runs, Redis-backed shared rate limits, durable SSE replay/resync, and bundled cockpit serving. | Current governed reference slice; staging/production remain blocked until managed operations and deployment evidence are supplied. |
 | `backend/server.py` | Legacy standard-library compatibility server remains isolated from the authoritative import path; its historical WebSocket, catalog, chat, and mutation surfaces are not the production owner. | Compatibility/research edge only; do not use it as production evidence. |
 | `web/static/app.tsx` + `web/static/cockpit.tsx` + `web/static/app.jsx` | React 19 + React Router 7 cockpit uses a strict TypeScript root mount and fully checked TypeScript source for the authenticated v2 session, snapshot, capability registry, and SSE event feed. The historical JSX path is a compatibility re-export; the Vite output is the runtime bundle and no CDN runtime is required. | Current cockpit surface for Observe/Assist and governed command presentation; voice, humanoid, engineering visuals, accessibility, and performance evidence remain disclosure-bound. |
 | `src/javis_voice_multimodal.py` | Voice, CAD, visual, and briefing dataclasses remain adapter/fixture contracts. Server-owned verification is required; unavailable and unverified outputs are explicit. | Adapter contract and test fixture source, not evidence of real STT, anti-replay biometrics, CAD parsing, or visual analysis. |
-| SQLite/PostgreSQL state | `ControlPlaneStore` and `PostgresControlPlaneStore` persist tenants, principals, devices, sessions, capabilities, intents, plans, approvals, runs, actions, evidence, audit, events, outbox, rate limits, artifacts, memory, briefings, sequences, and the schema-8 Goal/Task DAG. Redis provides authenticated shared rate-limit coordination. | Local SQLite and shared PostgreSQL/Redis paths are implemented; managed backup, staging, and multi-process deployment evidence remain release gates. |
+| SQLite/PostgreSQL state | `ControlPlaneStore` and `PostgresControlPlaneStore` persist tenants, principals, devices, sessions, capabilities, intents, plans, approvals, runs, actions, evidence, audit, events, outbox, rate limits, artifacts, memory, briefings, sequences, schema-9 Goal/Task schedules and task runs. Redis provides authenticated shared rate-limit coordination. | Local SQLite and shared PostgreSQL/Redis paths are implemented; managed backup, staging, and multi-process deployment evidence remain release gates. |
 | `/api/tick`, `/api/execute/{key}`, `/api/mutate`, `/api/rsi/upgrade` | Compatibility routes are retired with typed 410 responses; no privileged GET path is used by the authoritative app. | Preserve the safe migration response and use v2 typed plans/broker for future capability work. |
 | `docs/javis/*.mp4` | Reference recordings only; no executable contract, telemetry, or acceptance evidence. | Use for UX acceptance scenarios and visual language, never for capability verification. |
 
@@ -2012,6 +2012,30 @@ Durability requirements:
 - execution history
 - clock/timezone normalization
 
+### 40.7 Implemented reference overlay (schema 9)
+
+The reference repository now implements a bounded, tenant-scoped scheduler
+slice. `schedules` persist `once` and `interval` entries with a UTC
+`next_run_at`, `misfire_policy`, a tenant idempotency key, and cancellation
+state. `task_runs` persist each occurrence, its stable operation idempotency
+key, attempt count, result/error envelope, and a worker lease. A claim holds a
+database transaction while it checks dependencies, inserts the occurrence, and
+advances the interval cursor; a duplicate poll therefore cannot create a
+second occurrence for the same schedule/time key.
+
+The reusable `DurableScheduler.poll()` worker claims due schedules only. It
+does not execute task instructions. A schedule will not overlap an existing
+running occurrence, including one whose lease has expired and needs explicit
+reconciliation. Expired or retryable runs are reclaimed with a fresh lease
+while retaining the operation idempotency key; failed runs become `retry`
+until the bounded attempt limit, then `dead_lettered` with task/schedule state
+and an audit event. Direct-run cancellation releases the task lease, and
+schedule cancellation is durable, clears active schedule-run leases, and
+emits per-run cancellation events.
+Ordinary reads and event payloads never return lease tokens. These guarantees
+are local repository evidence, not proof of a continuously deployed worker or
+of safe external side effects.
+
 ---
 
 ## 41. Executive Briefing Engine
@@ -2083,6 +2107,21 @@ CLI
 Scheduled delivery
 Webhook / notification adapter
 ```
+
+### 41.5 Implemented reference overlay
+
+The current `BriefingAggregator` builds the brief from authenticated local
+goals, dependency state, task-run outcomes, pending approval plans, and a
+connector health registry. Local records receive `verified_local` source
+metadata with observation and freshness timestamps. Connector entries for
+GitHub, email, calendar, files, and web are explicit `unavailable` records in
+the reference profile; no network adapter is implied by their names.
+
+The persisted API response is `partial` when requested external sources are
+unavailable. Each returned operational item and each claim contains evidence
+metadata, while missing-source records retain their disclosure. This is an
+evidence-backed local briefing path, not a live inbox/calendar/repository
+integration or a notification delivery guarantee.
 
 ---
 
@@ -2176,6 +2215,21 @@ score =
 - user corrections supersede inferred memories
 - memory writes are auditable
 - project boundaries are enforced
+
+### 42.6 Implemented reference overlay (schema 9)
+
+`memory_items` now carries an explicit memory class, optional project
+namespace, source reference, structured provenance, trust level, verification
+time, and freshness deadline. The repository rejects project-class writes
+without a project namespace, rejects a project namespace attached to workspace
+scope, and unscoped retrieval never mixes project rows into the workspace
+result. Expired active rows are atomically marked `stale`
+and audited; stale rows require an explicit retrieval flag.
+
+The current router uses bounded text retrieval after tenant/project filtering.
+It does not claim embeddings, semantic ranking, hypergraph retrieval, or
+external document ingestion. Those remain separate capability gates until a
+real indexed source and its access-control evidence are supplied.
 
 ---
 
@@ -3006,6 +3060,35 @@ POST   /api/v2/tools/{tool_name}/invoke
 GET    /api/v2/connectors
 GET    /api/v2/connectors/{connector_id}/health
 ```
+
+### 50.6.1 Current reference routes
+
+The implemented schema-9 surface is intentionally narrower than the target
+API above:
+
+```text
+POST   /api/v2/goals/{goal_id}/schedules
+GET    /api/v2/goals/{goal_id}/schedules
+GET    /api/v2/schedules/{schedule_id}
+POST   /api/v2/schedules/{schedule_id}/claim
+POST   /api/v2/schedules/{schedule_id}/cancel
+POST   /api/v2/task-runs/{run_id}/claim
+POST   /api/v2/task-runs/{run_id}/complete
+GET    /api/v2/task-runs/{run_id}
+GET    /api/v2/tasks/{task_id}/runs
+
+POST   /api/v2/briefings
+GET    /api/v2/briefings/{briefing_id}
+POST   /api/v2/memory
+GET    /api/v2/memory/search
+DELETE /api/v2/memory/{memory_id}
+GET    /api/v2/connectors
+```
+
+All these routes use the authenticated tenant context. Lease credentials are
+returned only by claim responses and are never included in ordinary reads or
+events. The connector route reports health/contracts; it does not authorize
+or perform external writes in the reference profile.
 
 ### 50.7 Engineering APIs
 
