@@ -1713,8 +1713,9 @@ Every capability that cannot complete this path remains disabled, simulated, res
 
 Evidence capture date: **2026-09-02 UTC**. The results below distinguish local
 working-tree evidence, the signed implementation commits, hosted PR checks, and
-unverified deployment gates. The substantive PostgreSQL/Redis, CI, and cockpit
-modernization implementation and encrypted-backup hardening are recorded through `ec0ba2e`; PR [#29](https://github.com/cvsz/zasi/pull/29)
+unverified deployment gates. The substantive PostgreSQL/Redis, CI, cockpit, and
+encrypted-backup hardening implementation is recorded through signed head
+`c8ea6b3`; PR [#29](https://github.com/cvsz/zasi/pull/29)
 passed its hosted checks for that head. There is no staging deployment, production checkout, or
 production release authorization. The existing `.coverage` deletion is
 preserved and is not part of the implementation claim.
@@ -1745,7 +1746,7 @@ preserved and is not part of the implementation claim.
 | Hardened container smoke | `/health/ready` returned `ready`; UID `10001:10001`, read-only rootfs, all capabilities dropped, and no-new-privileges verified; external egress and physical actuation reported disabled | Local runtime/container evidence |
 | `python3 scripts/generate_sbom.py --output dist/zasi-sbom.cdx.json --resolve-installed` in the isolated project environment | CycloneDX 1.5 SBOM generated with 370 components and deterministic serial; the environment resolved cryptography 50.0.1 | Local supply-chain evidence |
 | `sha256sum --check dist/SHA256SUMS` and GPG verification of wheel, sdist, and SBOM signatures | Passed with the configured cvsz signing identity | Local artifact integrity evidence |
-| PR #29 hosted checks for commit `ec0ba2e` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12 with the isolated dependency audit, React/TypeScript validation, distribution, and Docker checks passed; PR package publication skipped | Hosted CI evidence for the pushed runtime/CI/cockpit implementation |
+| PR #29 hosted checks for commit `c8ea6b3` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12 with the isolated dependency audit, React/TypeScript validation, distribution, and Docker checks passed; PR package publication skipped | Hosted CI evidence for the pushed runtime/CI/cockpit/Goal-Task implementation |
 | GitHub Issue #18 | Remains `OPEN`; current status comments are maintained in the [roadmap thread](https://github.com/cvsz/zasi/issues/18) | External roadmap status, not release approval |
 
 The `ResourceWarning` regression test is intentionally retained. The original
