@@ -1843,8 +1843,10 @@ React/TypeScript, distribution, Docker image, and Docker build checks passed;
 PR-only GHCR publication remained skipped by policy. PR #31 merged the release,
 backup, plan-version, and protected-reference changes at exact head
 `7bc520ec3f01d8461ebd1a370a932bb2ca94267a` with merge commit
-`bfcb4f52878a11723b29297f98d82976ecf87c66`. The documentation and publication
-permission correction is tracked by the current PR #32.
+`bfcb4f52878a11723b29297f98d82976ecf87c66`. PR #32 then merged the
+documentation and publication-permission correction at exact head
+`7a47917fd865b1a1ce4816e75761d9e70cdf2715` with merge commit
+`1e0f8735263bbf7171a8a18edb855c27a88051bd`.
 There is no
 staging deployment, production checkout, or production release authorization.
 The existing `.coverage` deletion is preserved and is not part of the
@@ -1889,7 +1891,7 @@ implementation claim.
 | `(cd dist && sha256sum --check SHA256SUMS)` and GPG verification of wheel, sdist, and SBOM signatures | Passed with the configured cvsz signing identity | Local artifact integrity evidence |
 | PR #29 hosted checks for exact merged head `c713a19be0aee6b7ab4bc0719238c6cc6b9ad50f` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12 with the isolated dependency audit, React/TypeScript validation, distribution, Docker image, and Docker build checks passed; PR package publication skipped. | Historical hosted CI evidence; not release approval |
 | PR #31 hosted checks for exact merged head `7bc520ec3f01d8461ebd1a370a932bb2ca94267a` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12, React/TypeScript validation, distribution, Docker image, and Docker build checks passed; PR-only GHCR publication was skipped. | Current merged hosted CI evidence; not release approval |
-| PR #32 follow-up review | Open at the signed documentation and publication-permission correction head; required hosted checks are passing, but this PR is not yet merged. | Current hosted review gate |
+| PR #32 hosted checks for exact merged head `7a47917fd865b1a1ce4816e75761d9e70cdf2715` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12, React/TypeScript validation, distribution, Docker image, and Docker build checks passed; the `actions: read` release-permission regression was included. | Current merged hosted CI evidence; not release approval |
 | GitHub Issue #18 | Remains `OPEN`; current status comments are maintained in the [roadmap thread](https://github.com/cvsz/zasi/issues/18) | External roadmap status, not release approval |
 
 The `ResourceWarning` regression test is intentionally retained. The original
