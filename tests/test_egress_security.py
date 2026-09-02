@@ -152,51 +152,65 @@ class EgressSecurityTests(unittest.TestCase):
             self.assertTrue(resolver_done.wait(1))
 
     def test_resolver_slot_contention_shares_one_absolute_deadline(self):
-        held_slots = 0
-        for _ in range(egress_module._MAX_CONCURRENT_RESOLVERS):
-            if egress_module._resolver_slots.acquire(blocking=False):
-                held_slots += 1
-        self.assertEqual(held_slots, egress_module._MAX_CONCURRENT_RESOLVERS)
+        class FakeClock:
+            now = 100.0
 
-        slot_released = threading.Event()
-        resolver_started = threading.Event()
-        resolver_release = threading.Event()
-        resolver_done = threading.Event()
+            @classmethod
+            def monotonic(cls):
+                return cls.now
 
-        def release_one_slot():
-            egress_module._resolver_slots.release()
-            slot_released.set()
+        acquire_timeouts = []
+        result_timeouts = []
 
-        def slow_resolver(host, port):
-            resolver_started.set()
-            try:
-                resolver_release.wait(1)
-            finally:
-                resolver_done.set()
+        class FakeSlots:
+            def acquire(self, timeout):
+                acquire_timeouts.append(timeout)
+                FakeClock.now += 0.04
+                return True
+
+            def release(self):
+                return None
+
+        class FakeQueue:
+            def __init__(self, maxsize):
+                self.value = None
+
+            def put(self, value):
+                self.value = value
+
+            def get(self, timeout):
+                result_timeouts.append(timeout)
+                return self.value
+
+        class ImmediateThread:
+            def __init__(self, target, name, daemon):
+                self.target = target
+
+            def start(self):
+                self.target()
+
+        def resolver(host, port):
             return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port))]
 
-        release_timer = threading.Timer(0.04, release_one_slot)
-        release_timer.daemon = True
-        release_timer.start()
-        started_at = time.monotonic()
-        try:
-            policy = EgressPolicy(
-                allowed_hosts=frozenset({"public.example"}),
-                total_timeout_sec=0.08,
-            )
-            with patch("src.control_plane.egress._default_resolver", side_effect=slow_resolver):
-                with self.assertRaises(EgressRequestFailed):
-                    validate_destination("https://public.example/hook", policy)
-            elapsed = time.monotonic() - started_at
-            self.assertTrue(slot_released.is_set())
-            self.assertTrue(resolver_started.is_set())
-            self.assertLess(elapsed, 0.105)
-        finally:
-            resolver_release.set()
-            self.assertTrue(resolver_done.wait(1))
-            release_timer.cancel()
-            for _ in range(held_slots - 1):
-                egress_module._resolver_slots.release()
+        policy = EgressPolicy(
+            allowed_hosts=frozenset({"public.example"}),
+            total_timeout_sec=0.08,
+        )
+        with patch.object(egress_module, "_resolver_slots", FakeSlots()):
+            with patch.object(egress_module.time, "monotonic", FakeClock.monotonic):
+                with patch.object(egress_module.queue, "Queue", return_value=FakeQueue(1)):
+                    with patch.object(egress_module.threading, "Thread", ImmediateThread):
+                        destination = validate_destination(
+                            "https://public.example/hook",
+                            policy,
+                            resolver=resolver,
+                        )
+
+        self.assertEqual(destination.addresses[0][1][0], "93.184.216.34")
+        self.assertEqual(len(acquire_timeouts), 1)
+        self.assertAlmostEqual(acquire_timeouts[0], 0.08)
+        self.assertEqual(len(result_timeouts), 1)
+        self.assertAlmostEqual(result_timeouts[0], 0.04)
 
 
 if __name__ == "__main__":
