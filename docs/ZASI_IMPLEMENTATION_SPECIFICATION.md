@@ -1179,7 +1179,7 @@ The UI MUST show a reconnecting/degraded state and a resync prompt when event hi
 - Do not print environment variables or tokens in stdout/stderr.
 - Packaged launch MUST use only the bundled runtime under `process.resourcesPath`; source-checkout interpreter selection MUST NOT become a packaged runtime fallback.
 - Packaged state MUST default to Electron `app.getPath('userData')` for the SQLite database and artifact quarantine when explicit paths are absent; explicit packaged state paths MUST be absolute, and relative overrides MUST fail closed.
-- A packaged Python runtime MUST be relocatable: its interpreter and `pyvenv.cfg` MUST resolve inside the platform runtime root, and `pyvenv.cfg` MUST declare a relative `home` that resolves to a directory inside that root. Standard host-linked virtual environments MUST be rejected.
+- A packaged Python runtime MUST be relocatable: its interpreter, `pyvenv.cfg`, and canonicalized `home` target MUST resolve inside the platform runtime root, and `pyvenv.cfg` MUST declare a relative `home` that resolves to a directory inside that root. Standard host-linked virtual environments and in-tree symlinks escaping the root MUST be rejected. Cross-platform validation MUST normalize Windows-style relative separators.
 
 ## 16. Multimodal and device contracts
 

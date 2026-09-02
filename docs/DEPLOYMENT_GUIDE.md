@@ -212,7 +212,9 @@ Packaged startup defaults SQLite state to
 `app.getPath('userData')/artifacts`. Explicit `ZASI_DATABASE_PATH` and
 `ZASI_ARTIFACT_DIRECTORY` values must be absolute in packaged mode. The runtime
 validator also requires a relative `pyvenv.cfg` `home` that resolves inside the
-platform bundle and rejects interpreter/configuration symlinks escaping it.
+platform bundle and rejects interpreter/configuration/home symlinks escaping
+it. Windows-style relative home separators are normalized while validating
+cross-platform runtime inputs.
 
 ## Environment contract
 

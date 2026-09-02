@@ -62,9 +62,13 @@ function runtimeExecutablePath(runtimeRoot, platform) {
   )) || null;
 }
 
+function normalizeRuntimeHome(home) {
+  return home.replace(/[\\/]+/g, path.sep);
+}
+
 function isRelativeRuntimeHome(home) {
   if (!home || path.isAbsolute(home) || path.win32.isAbsolute(home)) return false;
-  const normalized = home.replaceAll('\\', '/');
+  const normalized = normalizeRuntimeHome(home);
   let depth = 0;
   for (const segment of normalized.split('/')) {
     if (!segment || segment === '.') continue;
@@ -89,8 +93,15 @@ function hasRelocatablePythonHome(platformRoot) {
   }
   const homeMatch = config.match(/^\s*home\s*=\s*(.+?)\s*$/im);
   if (!homeMatch || !isRelativeRuntimeHome(homeMatch[1])) return false;
-  const homePath = path.resolve(platformRoot, homeMatch[1]);
-  return isPathWithin(path.resolve(platformRoot), homePath) && isDirectory(homePath);
+  const rootPath = path.resolve(platformRoot);
+  const homePath = path.resolve(rootPath, normalizeRuntimeHome(homeMatch[1]));
+  try {
+    const realRoot = fs.realpathSync(rootPath);
+    const realHome = fs.realpathSync(homePath);
+    return isPathWithin(realRoot, realHome) && isDirectory(realHome);
+  } catch {
+    return false;
+  }
 }
 
 function isValidRuntimeBundle(runtimeRoot, platform) {

@@ -14,7 +14,8 @@ function makeFixture() {
     fs.mkdirSync(path.dirname(executable), { recursive: true });
     fs.writeFileSync(executable, 'runtime', { mode: 0o755 });
     fs.mkdirSync(path.join(root, 'runtimes', platform, 'bundled'));
-    fs.writeFileSync(path.join(root, 'runtimes', platform, 'pyvenv.cfg'), 'home = .\n');
+    const home = platform === 'win32' ? 'home = .\\bundled\n' : 'home = .\n';
+    fs.writeFileSync(path.join(root, 'runtimes', platform, 'pyvenv.cfg'), home);
   }
   const appRoot = path.join(root, 'app');
   for (const directory of ['backend', 'src', 'web/dist', 'config']) {
@@ -75,8 +76,22 @@ function testPackagingRejectsRuntimeSymlinkEscape() {
   );
 }
 
+function testPackagingRejectsRuntimeHomeSymlinkEscape() {
+  const fixture = makeFixture();
+  const platformRoot = path.join(fixture.runtimeRoot, 'linux');
+  const externalRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'zasi-electron-package-home-external-'));
+  fs.rmdirSync(path.join(platformRoot, 'bundled'));
+  fs.symlinkSync(externalRoot, path.join(platformRoot, 'bundled'), 'dir');
+  fs.writeFileSync(path.join(platformRoot, 'pyvenv.cfg'), 'home = bundled\n');
+  assert.throws(
+    () => resolvePackagingConfig(fixture),
+    (error) => error && error.code === 'ELECTRON_RUNTIME_INCOMPLETE',
+  );
+}
+
 testPackagingRequiresCompleteRuntimeBundles();
 testPackagingFailsClosedWhenRuntimeIsMissing();
 testPackagingRejectsNonRelocatableRuntime();
 testPackagingRejectsRuntimeSymlinkEscape();
+testPackagingRejectsRuntimeHomeSymlinkEscape();
 console.log('electron packaging tests passed');

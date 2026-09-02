@@ -120,6 +120,20 @@ function testPackagedCheckoutRejectsAbsolutePythonHome() {
   );
 }
 
+function testPackagedCheckoutRejectsRuntimeHomeSymlinkOutsideBundle() {
+  const resourcesPath = makePackagedResources();
+  const platformRoot = path.join(resourcesPath, 'backend-runtimes', 'linux');
+  const externalRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'zasi-electron-home-external-'));
+  fs.rmdirSync(path.join(platformRoot, 'bundled'));
+  fs.symlinkSync(externalRoot, path.join(platformRoot, 'bundled'), 'dir');
+  fs.writeFileSync(path.join(platformRoot, 'pyvenv.cfg'), 'home = bundled\n');
+
+  assert.throws(
+    () => resolveBackendLaunch({ packaged: true, platform: 'linux', resourcesPath, env: {} }),
+    (error) => error && error.code === 'PACKAGED_RUNTIME_UNAVAILABLE',
+  );
+}
+
 function testPackagedStateDefaultsUseWritableUserData() {
   const userDataPath = fs.mkdtempSync(path.join(os.tmpdir(), 'zasi-electron-user-data-'));
   const launchEnv = applyPackagedStateDefaults({ ZASI_API_KEY: 'test-key' }, userDataPath);
@@ -149,6 +163,7 @@ testPackagedWindowsUsesVenvScriptsPython();
 testPackagedCheckoutRejectsAStandalonePythonExecutable();
 testPackagedCheckoutRejectsRuntimeSymlinkOutsideBundle();
 testPackagedCheckoutRejectsAbsolutePythonHome();
+testPackagedCheckoutRejectsRuntimeHomeSymlinkOutsideBundle();
 testPackagedStateDefaultsUseWritableUserData();
 testPackagedStateRejectsRelativeOverrides();
 console.log('electron runtime tests passed');

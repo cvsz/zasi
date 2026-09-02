@@ -116,8 +116,9 @@ writable `app.getPath('userData')` directory when those paths are not supplied.
 Any explicit packaged `ZASI_DATABASE_PATH` or `ZASI_ARTIFACT_DIRECTORY` must be
 absolute; relative paths are rejected so installed resources cannot become the
 state directory. Each runtime's `pyvenv.cfg` must use a relative `home` inside
-the bundled platform root, and interpreter/configuration symlinks that resolve
-outside that root are rejected.
+the bundled platform root, and interpreter/configuration/home symlinks that
+resolve outside that root are rejected. Windows-style relative home separators
+are normalized during cross-platform packaging validation.
 
 ## Verification
 
