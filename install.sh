@@ -71,9 +71,11 @@ node tests/test_components.js
 "${PYTHON_CMD}" -m compileall -q backend src main.py
 
 echo -e "${BLUE}[*] Building Python distribution${NC}"
-"${PYTHON_CMD}" -m build
+build_output="$(mktemp -d)"
+trap 'rm -rf -- "${build_output}"' EXIT
+"${PYTHON_CMD}" -m build --outdir "${build_output}"
 
-wheel_file="$(find "${REPO_ROOT}/dist" -maxdepth 1 -type f -name 'zasi-*.whl' -print | sort | head -n 1)"
+wheel_file="$(find "${build_output}" -maxdepth 1 -type f -name 'zasi-*.whl' -print | sort | head -n 1)"
 [[ -n "${wheel_file}" ]] || die "no wheel was produced"
 "${PYTHON_CMD}" -m pip install --upgrade "${wheel_file}"
 

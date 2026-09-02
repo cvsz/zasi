@@ -13,6 +13,7 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
 COPY pyproject.toml README.md /app/
+COPY main.py /app/main.py
 COPY backend /app/backend
 COPY src /app/src
 COPY scripts /app/scripts

@@ -34,6 +34,7 @@ assert(viteConfig.includes('VITE_BASE_PATH'), 'build must expose an explicit sta
 assert(viteConfig.includes("|| './'"), 'local and Electron builds must retain relative asset URLs by default');
 const dockerfile = fs.readFileSync(path.join(__dirname, '../Dockerfile'), 'utf8');
 assert(dockerfile.includes('install -d -m 700 /app/data'), 'Docker data directory must be private before dropping privileges');
+assert(dockerfile.includes('COPY main.py /app/main.py'), 'Docker image must package the zasi-demo entrypoint module');
 const electronMain = fs.readFileSync(path.join(__dirname, '../electron/main.js'), 'utf8');
 assert(electronMain.includes('backendLifecycle'), 'Electron shell must track backend exit state');
 assert(electronMain.includes('SIGKILL'), 'Electron shell must escalate a stuck backend shutdown');

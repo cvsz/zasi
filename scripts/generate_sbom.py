@@ -20,6 +20,13 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - Python 3.9 compatibility path
     tomllib = None  # type: ignore[assignment]
 
+try:
+    from packaging.markers import default_environment
+    from packaging.requirements import Requirement
+except ImportError:  # pragma: no cover - packaging is supplied by build tooling
+    default_environment = None  # type: ignore[assignment]
+    Requirement = None  # type: ignore[assignment,misc]
+
 
 def _load_toml(path: Path) -> Dict[str, Any]:
     if tomllib is None:
@@ -58,7 +65,7 @@ def _npm_components(lock_data: Dict[str, Any]) -> List[Dict[str, Any]]:
     packages = lock_data.get("packages")
     if not isinstance(packages, dict):
         raise ValueError("package-lock.json must contain a packages object")
-    components: List[Dict[str, Any]] = []
+    coordinates: Dict[Tuple[str, str], Dict[str, Any]] = {}
     for package_path, package_data in packages.items():
         if not package_path or not package_path.startswith("node_modules/"):
             continue
@@ -66,6 +73,28 @@ def _npm_components(lock_data: Dict[str, Any]) -> List[Dict[str, Any]]:
             continue
         name = package_path.rsplit("node_modules/", 1)[-1]
         version = str(package_data["version"])
+        coordinate = (name, version)
+        aggregate = coordinates.setdefault(
+            coordinate,
+            {"dev": True, "integrity": None},
+        )
+        # A package may occur at multiple install locations.  CycloneDX models
+        # the package coordinate once; retain production reachability if any
+        # location is non-development-only.
+        aggregate["dev"] = bool(aggregate["dev"]) and bool(
+            package_data.get("dev", False)
+        )
+        integrity = package_data.get("integrity")
+        if isinstance(integrity, str):
+            previous_integrity = aggregate["integrity"]
+            if previous_integrity is not None and previous_integrity != integrity:
+                raise ValueError(
+                    f"conflicting npm integrity values for {name}@{version}"
+                )
+            aggregate["integrity"] = integrity
+
+    components: List[Dict[str, Any]] = []
+    for (name, version), aggregate in coordinates.items():
         component: Dict[str, Any] = {
             "type": "library",
             "bom-ref": _npm_purl(name, version),
@@ -76,11 +105,11 @@ def _npm_components(lock_data: Dict[str, Any]) -> List[Dict[str, Any]]:
                 {"name": "zasi:ecosystem", "value": "npm"},
                 {
                     "name": "npm:dev",
-                    "value": str(bool(package_data.get("dev", False))).lower(),
+                    "value": str(bool(aggregate["dev"])).lower(),
                 },
             ],
         }
-        integrity = package_data.get("integrity")
+        integrity = aggregate["integrity"]
         if isinstance(integrity, str):
             component["properties"].append(
                 {"name": "npm:integrity", "value": integrity}
@@ -95,13 +124,66 @@ def _npm_components(lock_data: Dict[str, Any]) -> List[Dict[str, Any]]:
 def _python_components(
     project_dependencies: Sequence[str], resolve_installed: bool
 ) -> List[Dict[str, Any]]:
-    queue = list(project_dependencies)
+    # The second tuple member is the parent package's selected extras.  The
+    # third marks child requirements whose marker was already evaluated while
+    # traversing that parent.
+    queue: List[Tuple[str, Tuple[str, ...], bool]] = [
+        (declaration, (), False) for declaration in project_dependencies
+    ]
     components: Dict[Tuple[str, str], Dict[str, Any]] = {}
-    while queue:
-        declaration = queue.pop(0)
+    processed: set[Tuple[str, str, Tuple[str, ...]]] = set()
+
+    def parse_requirement(declaration: str) -> Tuple[str, str, Tuple[str, ...], Any]:
+        if Requirement is not None:
+            parsed = Requirement(declaration)
+            return (
+                parsed.name,
+                str(parsed.specifier),
+                tuple(sorted(parsed.extras)),
+                parsed,
+            )
         name = _requirement_name(declaration)
+        remainder = declaration[declaration.find(name) + len(name) :].strip()
+        extras_match = re.match(r"^\[([^]]*)\]", remainder)
+        extras = (
+            tuple(sorted(item.strip() for item in extras_match.group(1).split(",") if item.strip()))
+            if extras_match
+            else ()
+        )
+        return name, remainder, extras, None
+
+    def marker_matches(marker: Any, extras: Tuple[str, ...]) -> bool:
+        if marker is None:
+            return True
+        if default_environment is None:
+            # This fallback is only reachable in an environment without the
+            # build-time packaging library.  Do not silently include a
+            # dependency whose marker cannot be evaluated.
+            return False
+        environment = default_environment()
+        contexts = {"", *extras}
+        return any(
+            marker.evaluate({**environment, "extra": extra}) for extra in contexts
+        )
+
+    while queue:
+        declaration, marker_context, marker_checked = queue.pop(0)
+        try:
+            name, spec, selected_extras, parsed = parse_requirement(declaration)
+        except ValueError:
+            if ";" not in declaration:
+                raise
+            name = _requirement_name(declaration)
+            spec = declaration[declaration.find(name) + len(name) :].strip()
+            selected_extras = ()
+            parsed = None
+        if (
+            not marker_checked
+            and parsed is not None
+            and not marker_matches(parsed.marker, marker_context)
+        ):
+            continue
         normalized_name = name.lower().replace("_", "-")
-        spec = declaration[declaration.find(name) + len(name) :].strip()
         resolved_version: Optional[str] = None
         distribution = None
         if resolve_installed:
@@ -112,8 +194,10 @@ def _python_components(
                 pass
         version = resolved_version or spec or "unresolved"
         key = (normalized_name, version)
-        if key in components:
+        process_key = (normalized_name, version, selected_extras)
+        if process_key in processed:
             continue
+        processed.add(process_key)
         resolution = "installed" if resolved_version else "declared"
         component: Dict[str, Any] = {
             "type": "library",
@@ -124,23 +208,25 @@ def _python_components(
                 {"name": "zasi:version-spec", "value": spec or "unspecified"},
             ],
         }
+        if selected_extras:
+            component["properties"].append(
+                {"name": "zasi:extras", "value": ",".join(selected_extras)}
+            )
         if resolved_version:
             component["bom-ref"] = _pypi_purl(name, resolved_version)
             component["purl"] = _pypi_purl(name, resolved_version)
-        components[key] = component
+        components.setdefault(key, component)
 
         if distribution is not None:
             for child in distribution.requires or ():
                 try:
-                    from packaging.requirements import Requirement
-
                     parsed = Requirement(child)
-                    if parsed.marker is not None and not parsed.marker.evaluate():
+                    if not marker_matches(parsed.marker, selected_extras):
                         continue
-                    queue.append(str(parsed))
-                except (ImportError, ValueError):
+                    queue.append((str(parsed), (), True))
+                except (ImportError, TypeError, ValueError):
                     if ";" not in child:
-                        queue.append(child)
+                        queue.append((child, (), True))
     return list(components.values())
 
 
