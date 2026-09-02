@@ -102,9 +102,9 @@ There must be one authoritative runtime entry point after Phase P0. The followin
 
 | Existing surface | Current behavior | Required disposition |
 |---|---|---|
-| backend/server.py | Raw ThreadingTCPServer API, WebSocket handling, background ticks, telemetry, webhooks, chat, MCP, mutation, RSI routes | Migrate behind the authoritative application; retain only an explicit compatibility adapter |
-| src/api_server.py | Separate legacy HTTP server, generated dashboard HTML, hardcoded token default, binds all interfaces | Quarantine; no production startup path |
-| main.py | Starts the legacy server on the same nominal port | Replace with one lifecycle command and readiness handshake |
+| backend/server.py | Loopback-only ThreadingTCPServer compatibility API; status/host telemetry/catalog disclosures remain, side-effect routes return 410, and historical chat/subsystem/background workers are disabled | Retain only as an explicit read-only compatibility adapter; never a production owner |
+| src/api_server.py | Separate legacy HUD compatibility server with escaped HTML, no fixed token, loopback binding, and no start without an explicit token | Quarantine; no production startup path |
+| main.py | `main()` launches the authoritative app; `legacy_demo_main()` exits with a simulation-only/disabled disclosure | Keep one lifecycle command; retain demo source only for continuity |
 | Electron main process | Spawns Python and loads localhost after a fixed delay | Use process supervision, readiness polling, origin restrictions, and clean shutdown |
 | web/static/app.tsx + web/static/cockpit.tsx + web/static/app.jsx | React 19 and React Router v7 cockpit with a strict TypeScript root entrypoint and fully checked TypeScript cockpit source; historical JSX path is a compatibility re-export | Keep the Vite bundle authoritative and retain the compatibility export while adding typed source coverage |
 | web/static/app.js | Legacy dashboard with direct HTML insertion and GET mutation calls | Quarantine and delete only after compatibility tests and operator sign-off |
@@ -127,7 +127,7 @@ These results establish a baseline only. They do not prove authorization, tenant
 The current tree now contains the first governed vertical slice described in
 Section 2. `backend.app` is the sole authoritative ASGI owner; it initializes
 the durable `ControlPlaneStore`, registers code-owned tool manifests, and
-serves the bundled cockpit. The repository schema is version 9. SQLite and
+serves the bundled cockpit. The repository schema is version 10. SQLite and
 the authenticated PostgreSQL adapter are implemented; Redis supplies shared
 rate-limit coordination and readiness. Staging and production settings still
 require explicit service URLs, an external secret provider, and a managed
@@ -145,6 +145,13 @@ completion events. The one enabled runtime
 tool is the local system-status observation; its evidence is `verified` by a
 named local readiness procedure and is not a claim about the historical
 catalog.
+
+The legacy compatibility boundary was then hardened in signed commit
+`afcc04c`: the old demo exits with a simulation-only/disabled disclosure, the
+legacy chat and subsystem methods cannot execute historical capability-shaped
+operations, background tick/WebSocket/webhook workers stay disabled, the HUD
+has no fixed token and binds only to loopback when explicitly enabled, and
+runtime snapshot values are HTML-escaped.
 
 This section is an implementation status statement, not a release certificate.
 The exact commands and observed results for the current checkout are recorded
@@ -173,7 +180,7 @@ The findings below are source-grounded design risks. Severity is based on the co
 | F-001 | Critical | API authentication is disabled when the environment key is empty; WebSocket upgrade handling runs before the API auth check; CORS defaults to wildcard | Unauthenticated access and cross-origin control-plane exposure | Fail closed at configuration load; authenticate WebSocket handshake; explicit origin allowlist |
 | F-002 | Critical | GET routes can tick daemon state, execute a subsystem, and mutate or trigger RSI behavior | CSRF, replay, crawler, and cache-triggered side effects | Mutations require POST or command submission; remove privileged GET routes or return 410 |
 | F-003 | Critical | Dynamic compilation uses exec with a deny-list; sandbox fallback runs bash on the host while reporting restricted isolation | Arbitrary code execution and false isolation claim | Disable in production; separate research runner; fail closed when isolation is unavailable |
-| F-004 | Critical | Legacy server has a hardcoded token default, binds all interfaces, and interpolates runtime values into HTML | Secret exposure, remote reachability, and injection risk | Remove hardcoded secrets; bind loopback by default; eliminate legacy server path |
+| F-004 | Critical (historical) | The legacy baseline had a hardcoded token default, all-interface binding, and raw HTML interpolation; the current compatibility code removes the default, binds loopback, escapes snapshot values, and disables the demo/background workers | Retained compatibility source could regress or be mistaken for the authoritative owner | Keep the current quarantine tests and require the governed `backend.app` path for production |
 | F-005 | High | Legacy UI uses innerHTML with logs and catalog fields and inline onclick handlers | DOM XSS and unsafe command invocation | Use text nodes, escaped templates, event delegation, CSP, and typed route handlers |
 | F-006 | High | Some CDN scripts have integrity attributes, while router, Babel, and other runtime scripts do not | Supply-chain tampering and non-reproducible UI | Bundle dependencies, lock versions, or require SRI with a verified build manifest |
 | F-007 | Critical | Telemetry, formal, CAD, and subsystem responses contain fixed or caller-controlled capability claims | Operators and downstream automation can trust false evidence | Add evidence provenance, freshness, capability state, and explicit simulation labels |
@@ -1799,7 +1806,9 @@ unverified deployment gates. The core PostgreSQL/Redis, CI, cockpit, and
 encrypted-backup hardening is recorded through signed code commit `49bba1c`,
 with the scheduler fixture, bounded outbox worker, protected release signing,
 and durable action-worker follow-up in signed commits `25ad5f3`, `1c1dd62`,
-`7ba35f9`, `eaf4c15`, `17e3771`, `3e61e9a`, and `71db73a`. PR
+`7ba35f9`, `eaf4c15`, `17e3771`, `3e61e9a`, and `71db73a`.
+The legacy-boundary quarantine and truthfulness regression is recorded in
+signed commit `afcc04c`.
 [#29](https://github.com/cvsz/zasi/pull/29) passed hosted checks for the prior
 release-gate head `e19d4de7e0d7d0e47745e0cf0982ab5b4806798a` and the current
 exact verification head `abc4574c6038243e351a1927a0986c4e2cd28a7c`, which
@@ -1811,12 +1820,13 @@ implementation claim.
 
 | Command or inspection | Observed result | Evidence class |
 |---|---|---|
-| `python3 -m unittest discover -s tests -q` | 285 tests passed, 2 optional live-service checks skipped | Local functional regression |
-| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 285 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
+| `python3 -m unittest discover -s tests -q` | 293 tests passed, 2 optional live-service checks skipped | Local functional regression |
+| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 293 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
 | Focused control-plane/security suite (`tests.test_control_plane_core`, `tests.test_control_plane_broker`, `tests.test_control_plane_api`, `tests.test_security_hardening`, `tests.test_egress_security`) | Passed, including memory-hard API-key verification and TLS 1.2 floor tests | Local governed/security regression |
 | Focused outbox worker suite (`tests.test_outbox_worker tests.test_control_plane_core`) | 20 tests passed; bounded polling, interruptible shutdown, retry/dead-letter preservation, configuration fail-closed behavior, and worker identifier validation covered | Local outbox worker regression |
 | `PYTHONPATH=. python3 -m unittest tests.test_release_signing -v` | 4 tests passed; artifact selection/checksum determinism and protected release workflow requirements covered | Local release-signing regression |
 | `python3 -m unittest tests.test_api -q` | 8 legacy compatibility tests passed, including retired webhook and truthful legacy OpenAPI assertions | Local migration-surface regression |
+| `PYTHONPATH=. python3 -m unittest tests.test_legacy_truthfulness -v` | 8 tests passed; fixed-token removal, loopback binding, escaped HUD values, disabled demo/chat/subsystem execution, retired OpenAPI operations, and disabled background workers were verified | Local legacy-boundary regression |
 | `python3 -m compileall -q backend src scripts tests main.py` | Passed | Local syntax check |
 | `python3 -m unittest tests.test_encrypted_backup -q` | 10 passed, including AES-256-GCM tamper and wrong-key rejection, atomic mode-600 files, missing-source rejection, no-clobber restore, and SQLite restore integrity | Local encrypted backup/restore regression |
 | `node tests/test_components.js` | Passed; verifies React 19/Router 7 pins, typed entrypoint ownership, local scripts, and governed route declarations | Local bundle/source safety assertions |

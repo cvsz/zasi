@@ -89,3 +89,9 @@ reconciled before retry; external egress is disabled in the reference profile.
 Historical prototype classes under `src/` may still be imported by research or
 legacy tests. Their names and docstrings are not API capability evidence and
 they are not imported by the authoritative `backend.app` process.
+
+The older `backend.server` process is loopback-only and retained for migration
+tests. Its compatibility chat and subsystem execution methods are disabled,
+its background tick/WebSocket/webhook workers do not start, and side-effecting
+routes return `410`. The `zasi-demo` command is also disabled by default; use
+`backend.app` and the authenticated v2 contracts for the reference runtime.

@@ -707,14 +707,14 @@ The table below is a compatibility inventory and target boundary, not a statemen
 
 | Endpoint | Protocol | Current evidence | v33 boundary |
 |---|---|---|---|
-| `/api/status` | REST | Present in `backend/server.py` | Keep as authenticated health/version projection. |
-| `/api/telemetry` | REST | Present; host telemetry projection | Add freshness and evidence classification. |
-| `/api/subsystems` | REST | Present; registry projection | Return maturity and runtime state per subsystem. |
-| `/api/jarvis/chat` | REST | Present; chat path | Keep compatibility path; route new work through typed intent/plan contracts. |
-| `/api/jarvis/stream` | SSE | Present as compatibility stream | Replace delay-based/demo streaming with typed run events and reconnect semantics. |
-| `/api/mcp` | JSON-RPC 2.0 | Present as an MCP-facing path | Put tool discovery and invocation behind capability, auth, and approval checks. |
+| `/api/status` | REST | Present as a public compatibility disclosure; it reports zero live subsystems and unverified capability state | Keep it explicitly non-authoritative; use authenticated v2 readiness and snapshot contracts. |
+| `/api/telemetry` | REST | Present as local host telemetry with capability-shaped fields disabled | Add freshness and evidence classification without fabricating hardware values. |
+| `/api/subsystems` | REST | Present as a historical 176-entry inventory with every entry disabled/unverified | Return maturity and runtime state per subsystem; never treat inventory as execution authority. |
+| `/api/jarvis/chat` | REST | Retired with HTTP 410; direct compatibility method is reference-disabled | Route new work through typed intent/plan contracts. |
+| `/api/jarvis/stream` | SSE | Retired with HTTP 410; delay-based demo streaming is disabled | Replace with typed run events and reconnect semantics. |
+| `/api/mcp` | JSON-RPC 2.0 | Retired with HTTP 410 on the legacy server | Use the governed `/api/v2/mcp` registry, auth, policy, approval, and audit path. |
 | `/api/actions`, `/api/approvals`, `/api/audit` | REST | Architecture targets; not equivalent to verified durable services | Implement as v33 resources with persistence and immutable audit events. |
-| `/ws` | WebSocket | Raw broadcaster path exists | Require authentication before upgrade, origin/session checks, bounded queues, cursors, replay, and resync. |
+| `/ws` | WebSocket | Historical broadcaster source is retained but its worker is disabled in the compatibility server | Require a separately governed adapter with origin/session checks, bounded queues, cursors, replay, and resync before re-enabling. |
 
 ### Event envelope
 
