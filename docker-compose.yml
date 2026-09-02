@@ -8,7 +8,7 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     volumes:
-      - ./data:/app/data
+      - zasi-data:/app/data
     environment:
       # The bundled image is the local/reference profile until a PostgreSQL,
       # managed-secret, backup, and deployment evidence bundle is supplied.
@@ -41,3 +41,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+volumes:
+  zasi-data:
+    name: zasi-control-plane-data

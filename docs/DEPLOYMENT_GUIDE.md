@@ -6,7 +6,9 @@ Docker build, or generated UI is not production deployment evidence.
 ## Local
 
 ```bash
-export ZASI_API_KEY='choose-a-local-secret'
+set -a
+. .env
+set +a
 npm ci --ignore-scripts
 npm run build
 python3 -m backend.app
@@ -19,8 +21,8 @@ curl -fsS http://127.0.0.1:8080/health/live
 curl -fsS http://127.0.0.1:8080/health/ready
 ```
 
-The API key is required at startup and is never committed. The local database
-defaults to `data/zasi_control_plane.db`; quarantined artifact files live
+The API key is required at startup and is never committed. The direct local
+process uses `data/zasi_control_plane.db`; quarantined artifact files live
 outside the web bundle. Use `ControlPlaneStore.backup_to()` for a consistent
 SQLite backup and restore it into a clean validation environment before
 calling a backup usable.
@@ -28,23 +30,28 @@ calling a backup usable.
 ## Container reference profile
 
 ```bash
-export ZASI_API_KEY='choose-a-container-secret'
-export ZASI_CORS_ORIGINS='http://localhost:8080'
+set -a
+. .env
+set +a
 docker compose up -d --build
 docker compose ps
 ```
 
 The image builds the Vite cockpit in a separate Node stage, runs the Python
 service as UID 10001, drops Linux capabilities, uses a read-only root
-filesystem with an explicit data mount, and checks `/health/ready`. The
-compose default is the local/reference profile. Do not expose it publicly
-without an independently reviewed ingress, secret, backup, database, and
-release evidence bundle.
+filesystem with the named `zasi-control-plane-data` volume, and checks
+`/health/ready`. The named volume preserves ownership compatibility with the
+non-root service; inspect it with `docker volume inspect
+zasi-control-plane-data`. The compose default is the local/reference profile.
+Do not expose it publicly without an independently reviewed ingress, secret,
+backup, database, and release evidence bundle.
 
 ## Electron
 
 ```bash
-export ZASI_API_KEY='choose-a-desktop-secret'
+set -a
+. .env
+set +a
 npm ci --ignore-scripts
 npm run build
 npm run electron
