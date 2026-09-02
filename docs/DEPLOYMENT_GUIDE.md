@@ -190,7 +190,22 @@ Electron starts `backend.app` on loopback, polls authenticated-agnostic HTTP
 readiness for process/dependency state, restricts navigation to that origin,
 disables Node integration, enables context isolation and sandboxing, and
 terminates the child process on exit. The renderer still obtains an API
-session; process readiness is not user authorization.
+session; process readiness is not user authorization. This source-checkout
+command is not a packaged-runtime proof.
+
+For a packaged desktop build, provide real dependency-complete Python virtual
+environments for all declared targets and run `npm run electron-build`:
+
+```text
+<runtime-root>/linux/bin/python3         + pyvenv.cfg
+<runtime-root>/darwin/bin/python3       + pyvenv.cfg
+<runtime-root>/win32/Scripts/python.exe  + pyvenv.cfg
+```
+
+Set `ZASI_ELECTRON_RUNTIME_ROOT` to the parent directory. The builder fails
+closed without these runtimes and places the backend, source, config, and
+frontend resources outside `asar`; no desktop artifact is usable until its
+packaged runtime has been launched and readiness-checked.
 
 ## Environment contract
 
