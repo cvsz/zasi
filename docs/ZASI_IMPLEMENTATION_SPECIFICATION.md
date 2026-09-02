@@ -795,6 +795,17 @@ cancellation, and durable task-run history. It does not execute task
 instructions or grant external side effects; a governed worker must consume a
 claimed run through the action broker.
 
+The durable outbox delivery worker is exposed as `zasi-outbox-worker` and
+`scripts/run_outbox_worker.py`. It claims only committed outbox rows through
+the repository lease, dispatches a configured handler, retries failures through
+the stored attempt policy, and exits on `SIGINT` or `SIGTERM`. `event_stream`
+rows may be acknowledged without an external handler because the reference
+events table is already the authoritative stream source. Every other
+destination fails closed when no handler is configured. This worker does not
+execute task instructions, invoke arbitrary tools, or enable external writes.
+Use `zasi-outbox-worker --once` for a bounded operational probe and an
+explicitly supervised long-running invocation for deployment validation.
+
 ### 12.4 Approvals, audit, and evidence
 
 | Method | Route | Risk | Behavior |
@@ -1755,9 +1766,10 @@ not part of the implementation claim.
 
 | Command or inspection | Observed result | Evidence class |
 |---|---|---|
-| `python3 -m unittest discover -s tests -q` | 265 tests passed, 2 optional live-service checks skipped | Local functional regression |
-| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 265 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
+| `python3 -m unittest discover -s tests -q` | 270 tests passed, 2 optional live-service checks skipped | Local functional regression |
+| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 270 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
 | Focused control-plane/security suite (`tests.test_control_plane_core`, `tests.test_control_plane_broker`, `tests.test_control_plane_api`, `tests.test_security_hardening`, `tests.test_egress_security`) | Passed, including memory-hard API-key verification and TLS 1.2 floor tests | Local governed/security regression |
+| Focused outbox worker suite (`tests.test_outbox_worker tests.test_control_plane_core`) | 20 tests passed; bounded polling, interruptible shutdown, retry/dead-letter preservation, configuration fail-closed behavior, and worker identifier validation covered | Local outbox worker regression |
 | `python3 -m unittest tests.test_api -q` | 8 legacy compatibility tests passed, including retired webhook and truthful legacy OpenAPI assertions | Local migration-surface regression |
 | `python3 -m compileall -q backend src scripts tests main.py` | Passed | Local syntax check |
 | `python3 -m unittest tests.test_encrypted_backup -q` | 10 passed, including AES-256-GCM tamper and wrong-key rejection, atomic mode-600 files, missing-source rejection, no-clobber restore, and SQLite restore integrity | Local encrypted backup/restore regression |
@@ -1766,6 +1778,7 @@ not part of the implementation claim.
 | `node --check electron/main.js` | Passed | Local Electron syntax check |
 | `npm run build` | Vite production bundle passed; emitted a chunk-size advisory | Local frontend build |
 | `python3 -m build` | Source distribution and wheel build passed | Local package build |
+| `zasi-outbox-worker --once` against a temporary SQLite profile | Bounded one-iteration run passed; output contained only sanitized status/count fields and no secret material | Local worker CLI smoke |
 | `ZASI_DATABASE_BACKEND=postgresql` with `PostgresControlPlaneStore` against the shared cluster | Schema 9 initialization, integrity check, authenticated session, project-memory/briefing/schedule repository paths, readiness, and custom-format backup catalog smoke passed | Local PostgreSQL integration |
 | Shared PostgreSQL/Redis ASGI smoke with a uniquely scoped tenant probe | Unauthenticated goals access returned `401`; authenticated session bootstrap returned `201` and remained scoped to `local`; `/health/ready` returned HTTP `200` with PostgreSQL and Redis `ready`; a foreign-tenant goal returned `404` and was absent from the local goal list; exact probe rows were removed and cleanup was verified | Local authenticated API, dependency, and tenant-isolation evidence |
 | `PostgresControlPlaneStore` against an ephemeral database on the shared PostgreSQL cluster | Schema 9 initialization, tenant-scoped Goal/Task DAG lifecycle, schedule occurrence deduplication, task-run lease ownership/reclaim, atomic completion, and goal completion passed; the ephemeral database was removed after verification | Local PostgreSQL vertical-slice integration |
@@ -1801,7 +1814,7 @@ the acceptance criteria in [#9](https://github.com/cvsz/zasi/issues/9) through
 | [#9 / P0](https://github.com/cvsz/zasi/issues/9) | Partial, local | `backend.app` is the authoritative ASGI owner; fail-closed settings, readiness, compatibility quarantine, and registry-derived status exist. Duplicate-port ownership detection and hosted runtime ownership evidence remain open. |
 | [#10 / P1](https://github.com/cvsz/zasi/issues/10) | Partial, local PostgreSQL/Redis and encrypted backup mechanics | Tenant-scoped identity, hashed sessions, devices, audit, events, rate limits, schema-9 migrations, PostgreSQL repository, Redis coordination, authenticated API smoke, AES-GCM schema-9 archive create/validate, SQLite restore integrity, and historical temporary PostgreSQL restore checks exist. A fresh schema-9 temporary restore, external identity/managed secrets, multi-process restart proof, managed object-storage retention/key rotation, staging restore, and rollback operations remain open. |
 | [#11 / P2](https://github.com/cvsz/zasi/issues/11) | Partial, local | Typed intents/plans, deterministic risk policy, exact-digest approval records, evidence provenance, and governed MCP calls exist. Full R0–R5 capability inventory, production verification procedures, and complete claim-to-evidence coverage remain open. |
-| [#12 / P3](https://github.com/cvsz/zasi/issues/12) | Partial, local | Transactional events/outbox, leased claims, authenticated SSE replay, cursor validation, retention gaps, and snapshot resync exist. A production worker, 10,000-event performance evidence, backpressure policy, and multi-process delivery proof remain open. |
+| [#12 / P3](https://github.com/cvsz/zasi/issues/12) | Partial, local | Transactional events/outbox, bounded `zasi-outbox-worker` delivery loop, leased claims, authenticated SSE replay, cursor validation, retention gaps, and snapshot resync exist. A continuously deployed production worker, 10,000-event performance evidence, backpressure policy, and multi-process delivery proof remain open. |
 | [#13 / P4](https://github.com/cvsz/zasi/issues/13) | Partial, reference-only | Stable tool registry, request digests, run idempotency, approval gating, fail-closed dynamic execution, and trusted handlers exist. External action workers, reconciliation of unknown side effects, durable cancellation/timeout workers, and certified sandbox evidence remain open. |
 | [#14 / P5](https://github.com/cvsz/zasi/issues/14) | Partial, React 19 / Router 7 with checked TypeScript source | Dependencies are bundled and locked, the cockpit uses authenticated v2 transport, safe rendering, CSP, reconnect/resync state, and a strict TypeScript root entrypoint; the cockpit source is now checked in `cockpit.tsx` and `app.jsx` is only a compatibility export. Accessibility/performance evidence and broad event-driven workspace coverage remain open. |
 | [#15 / P6](https://github.com/cvsz/zasi/issues/15) | Partial, local durable orchestration/reference connectors | SQLite/PostgreSQL goals, tasks, schedules, task runs, project-scoped memory, source-backed briefings, and connector health now provide tenant scope, dependency gating, occurrence/idempotency keys, worker leases, restart persistence, stale invalidation, authenticated routes, and atomic events. A continuously deployed production worker, real GitHub/email/calendar/files adapters, semantic retrieval, external-source freshness, and independent multi-process evidence remain open. |
@@ -1818,8 +1831,8 @@ disclosures. It is **NO-GO for public production, external writes, hardware,
 self-evolution, formal/cryptographic assurance, or ASI/AGI claims**.
 
 The next implementation work is finite and ordered: complete the missing P0/P1
-ownership and production repository operations, then add the P3/P4 worker and
-reconciliation path, then finish the remaining P6 production worker, real
+ownership and production repository operations, then add the P4 action worker
+and reconciliation path, then finish the remaining P6 production worker, real
 connector adapters, semantic retrieval, and freshness evidence before the P8
 signed staging release process. An open GitHub issue, a target architecture
 diagram, a passing local test, or a historical badge cannot substitute for the

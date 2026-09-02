@@ -85,6 +85,25 @@ zasi-control-plane-data`. The compose default is the local/reference profile.
 Do not expose it publicly without an independently reviewed ingress, secret,
 backup, database, and release evidence bundle.
 
+## Durable outbox worker
+
+The outbox worker is a separate supervised process. It does not execute task
+instructions or grant external side effects:
+
+```bash
+set -a
+. .env
+set +a
+zasi-outbox-worker --once
+```
+
+For a deployed process, run `zasi-outbox-worker` under a supervisor with an
+explicit stop/restart policy and a configured destination handler. The
+reference profile can acknowledge its durable `event_stream` rows; unknown
+external destinations retry and eventually dead-letter when no handler is
+configured. A worker command returning successfully is not evidence of
+production deployment, external delivery, or multi-process correctness.
+
 ## Electron
 
 ```bash
