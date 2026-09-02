@@ -49,6 +49,7 @@ class ControlPlaneCoreTests(unittest.TestCase):
                 "ZASI_CORS_ORIGINS": "https://cockpit.example",
                 "ZASI_DATABASE_BACKEND": "postgresql",
                 "ZASI_DATABASE_URL": "postgresql://db.example/zasi",
+                "ZASI_REDIS_URL": "rediss://zasi:generated-secret@cache.example/0",
                 "ZASI_SECRET_PROVIDER": "vault",
                 "ZASI_BACKUP_POLICY": "managed-encrypted",
             }
@@ -63,6 +64,21 @@ class ControlPlaneCoreTests(unittest.TestCase):
         self.assertEqual(len(settings.api_key_digest), 32)
         self.assertTrue(settings.api_key_matches("test-secret"))
         self.assertFalse(settings.api_key_matches("wrong-secret"))
+
+    def test_production_configuration_rejects_unauthenticated_redis(self):
+        with self.assertRaises(ConfigurationError):
+            Settings.from_mapping(
+                {
+                    "ZASI_PROFILE": "production",
+                    "ZASI_API_KEY": "test-secret",
+                    "ZASI_CORS_ORIGINS": "https://cockpit.example",
+                    "ZASI_DATABASE_BACKEND": "postgresql",
+                    "ZASI_DATABASE_URL": "postgresql://db.example/zasi",
+                    "ZASI_REDIS_URL": "redis://cache.example/0",
+                    "ZASI_SECRET_PROVIDER": "vault",
+                    "ZASI_BACKUP_POLICY": "managed-encrypted",
+                }
+            )
 
     def test_local_configuration_does_not_create_implicit_credential(self):
         with self.assertRaises(ConfigurationError):
@@ -206,6 +222,37 @@ class ControlPlaneCoreTests(unittest.TestCase):
         self.assertTrue(store.cursor_requires_resync("ten-a", after=0))
         self.assertFalse(store.cursor_requires_resync("ten-a", after=2))
         store.close()
+
+    def test_retention_prune_commits_and_survives_store_restart(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database_path = str(Path(directory) / "events.db")
+            store = ControlPlaneStore(database_path)
+            store.initialize()
+            store.create_tenant("ten-a")
+            for index in range(3):
+                store.append_audited_event(
+                    tenant_id="ten-a",
+                    actor_kind="system",
+                    actor_id="test",
+                    action=f"event-{index}",
+                    target="test",
+                    outcome="success",
+                    event_type="test.event",
+                    aggregate_kind="test",
+                    aggregate_id=str(index),
+                    payload={"index": index},
+                )
+            for outbox in store.list_outbox():
+                store.claim_outbox(outbox["id"])
+                store.finish_outbox(outbox["id"], success=True)
+            store.prune_events("ten-a", retain_latest=1)
+            store.close()
+
+            restored = ControlPlaneStore(database_path)
+            restored.initialize()
+            self.assertEqual(restored.oldest_sequence("ten-a"), 3)
+            self.assertTrue(restored.cursor_requires_resync("ten-a", after=0))
+            restored.close()
 
     def test_approval_binds_exact_plan_digest_and_can_be_revoked(self):
         store = ControlPlaneStore(":memory:")

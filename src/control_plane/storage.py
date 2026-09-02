@@ -26,6 +26,11 @@ class ConflictError(RuntimeError):
     """The requested state transition conflicts with the durable record."""
 
 
+def _is_unique_integrity_error(error: BaseException) -> bool:
+    """Recognize SQLite and PostgreSQL unique-key violations without coupling imports."""
+    return isinstance(error, sqlite3.IntegrityError) or getattr(error, "sqlstate", None) == "23505"
+
+
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -660,11 +665,12 @@ class ControlPlaneStore:
                     event_id=event_id,
                 )
                 connection.execute("COMMIT")
-            except sqlite3.IntegrityError as exc:
+            except Exception as error:
                 connection.execute("ROLLBACK")
-                raise ConflictError("pairing challenge conflicts with an existing record") from exc
-            except Exception:
-                connection.execute("ROLLBACK")
+                if _is_unique_integrity_error(error):
+                    raise ConflictError(
+                        "pairing challenge conflicts with an existing record"
+                    ) from error
                 raise
         return record
 
@@ -1032,6 +1038,9 @@ class ControlPlaneStore:
             raise ValueError("invalid event visibility")
         if not 1 <= schema_version <= 100:
             raise ValueError("invalid event schema version")
+        sequence_lock = getattr(connection, "lock_event_sequence", None)
+        if sequence_lock is not None:
+            sequence_lock(tenant_id)
         audit_id = "aud_" + event_id[4:]
         row = connection.execute(
             "SELECT COALESCE(MAX(sequence), 0) + 1 AS next_sequence "
@@ -2391,10 +2400,43 @@ class ControlPlaneStore:
                     event_id=event_id,
                 )
                 connection.execute("COMMIT")
-            except Exception:
+            except Exception as error:
                 connection.execute("ROLLBACK")
+                if _is_unique_integrity_error(error):
+                    raced = connection.execute(
+                        "SELECT * FROM sequence_runs WHERE tenant_id = ? AND idempotency_key = ?",
+                        (tenant_id, idempotency_key),
+                    ).fetchone()
+                    if raced is not None:
+                        if raced["sequence_id"] != sequence_id or raced["revision"] != revision:
+                            raise ConflictError(
+                                "idempotency key is bound to another sequence revision"
+                            ) from error
+                        return {
+                            "created": False,
+                            "run": self.get_sequence_run(raced["id"], tenant_id),
+                        }
                 raise
             return {"created": True, "run": self.get_sequence_run(sequence_run_id, tenant_id)}
+
+    def get_sequence_run_by_idempotency(
+        self,
+        sequence_id: str,
+        tenant_id: str,
+        revision: int,
+        idempotency_key: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Return a completed or in-flight sequence run for a safe retry."""
+        with self._lock:
+            row = self._conn().execute(
+                "SELECT * FROM sequence_runs WHERE tenant_id = ? AND idempotency_key = ?",
+                (tenant_id, idempotency_key),
+            ).fetchone()
+        if row is None:
+            return None
+        if row["sequence_id"] != sequence_id or row["revision"] != revision:
+            raise ConflictError("idempotency key is bound to another sequence revision")
+        return self.get_sequence_run(row["id"], tenant_id)
 
     def complete_sequence_run(
         self,
@@ -2624,8 +2666,32 @@ class ControlPlaneStore:
                     event_id=event_id,
                 )
                 connection.execute("COMMIT")
-            except Exception:
+            except Exception as error:
                 connection.execute("ROLLBACK")
+                if _is_unique_integrity_error(error):
+                    raced = connection.execute(
+                        "SELECT id FROM runs WHERE tenant_id = ? AND idempotency_key = ?",
+                        (tenant_id, idempotency_key),
+                    ).fetchone()
+                    if raced is not None:
+                        existing_run = self.get_run(raced["id"], tenant_id)
+                        if existing_run.get("tool_id") != tool_id:
+                            raise ConflictError(
+                                "idempotency key is bound to another tool"
+                            ) from error
+                        if (existing_run.get("plan_id") or None) != (plan_id or None):
+                            raise ConflictError(
+                                "idempotency key is bound to another plan"
+                            ) from error
+                        if existing_run.get("request_digest", "") != request_digest:
+                            raise ConflictError(
+                                "idempotency key is bound to another request"
+                            ) from error
+                        return {
+                            "created": False,
+                            "run": existing_run,
+                            "action_id": existing_run["action_id"],
+                        }
                 raise
             return {
                 "created": True,
@@ -2963,25 +3029,31 @@ class ControlPlaneStore:
             raise ValueError("retain_latest must be positive")
         with self._lock:
             connection = self._conn()
-            row = connection.execute(
-                "SELECT COALESCE(MAX(sequence), 0) AS latest FROM events WHERE tenant_id = ?",
-                (tenant_id,),
-            ).fetchone()
-            latest = int(row["latest"])
-            threshold = max(latest - retain_latest + 1, 1)
-            pending = connection.execute(
-                "SELECT COUNT(*) AS count FROM outbox o JOIN events e ON e.id = o.event_id "
-                "WHERE o.tenant_id = ? AND e.sequence < ? AND o.status != 'delivered'",
-                (tenant_id, threshold),
-            ).fetchone()
-            if int(pending["count"]) > 0:
-                raise ConflictError("cannot prune events with undelivered outbox records")
-            connection.execute(
-                "DELETE FROM outbox WHERE tenant_id = ? AND event_id IN "
-                "(SELECT id FROM events WHERE tenant_id = ? AND sequence < ?)",
-                (tenant_id, tenant_id, threshold),
-            )
-            connection.execute(
-                "DELETE FROM events WHERE tenant_id = ? AND sequence < ?",
-                (tenant_id, threshold),
-            )
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                row = connection.execute(
+                    "SELECT COALESCE(MAX(sequence), 0) AS latest FROM events WHERE tenant_id = ?",
+                    (tenant_id,),
+                ).fetchone()
+                latest = int(row["latest"])
+                threshold = max(latest - retain_latest + 1, 1)
+                pending = connection.execute(
+                    "SELECT COUNT(*) AS count FROM outbox o JOIN events e ON e.id = o.event_id "
+                    "WHERE o.tenant_id = ? AND e.sequence < ? AND o.status != 'delivered'",
+                    (tenant_id, threshold),
+                ).fetchone()
+                if int(pending["count"]) > 0:
+                    raise ConflictError("cannot prune events with undelivered outbox records")
+                connection.execute(
+                    "DELETE FROM outbox WHERE tenant_id = ? AND event_id IN "
+                    "(SELECT id FROM events WHERE tenant_id = ? AND sequence < ?)",
+                    (tenant_id, tenant_id, threshold),
+                )
+                connection.execute(
+                    "DELETE FROM events WHERE tenant_id = ? AND sequence < ?",
+                    (tenant_id, threshold),
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise

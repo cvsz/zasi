@@ -44,6 +44,7 @@ class Settings:
     artifact_directory: str = ""
     database_backend: str = "sqlite"
     database_url: Optional[str] = None
+    redis_url: Optional[str] = field(default=None, repr=False, compare=False)
     secret_provider: str = "environment"
     backup_policy: str = "local"
     external_egress_enabled: bool = False
@@ -144,6 +145,23 @@ class Settings:
         if database_backend not in {"sqlite", "postgresql"}:
             raise ConfigurationError("ZASI_DATABASE_BACKEND must be sqlite or postgresql")
         database_url = source.get("ZASI_DATABASE_URL", "").strip() or None
+        redis_url = source.get("ZASI_REDIS_URL", "").strip() or None
+        if redis_url:
+            try:
+                parsed_redis = urlsplit(redis_url)
+                parsed_redis_port = parsed_redis.port
+            except ValueError as exc:
+                raise ConfigurationError("ZASI_REDIS_URL contains an invalid URL") from exc
+            if (
+                parsed_redis.scheme not in {"redis", "rediss"}
+                or not parsed_redis.hostname
+                or parsed_redis.path not in {"", "/", "/0"}
+                or parsed_redis.query
+                or parsed_redis.fragment
+                or parsed_redis_port is not None
+                and not 1 <= parsed_redis_port <= 65535
+            ):
+                raise ConfigurationError("ZASI_REDIS_URL must be a redis:// or rediss:// URL")
         secret_provider = source.get("ZASI_SECRET_PROVIDER", "environment").strip().lower()
         backup_policy = source.get("ZASI_BACKUP_POLICY", "local").strip().lower()
         if profile in {"staging", "production"}:
@@ -153,6 +171,14 @@ class Settings:
                 )
             if not database_url.startswith(("postgresql://", "postgres://")):
                 raise ConfigurationError("ZASI_DATABASE_URL must use a PostgreSQL scheme")
+            if not redis_url:
+                raise ConfigurationError(
+                    "staging and production require an explicit Redis URL"
+                )
+            if not urlsplit(redis_url).password:
+                raise ConfigurationError(
+                    "staging and production require an authenticated Redis URL"
+                )
             if secret_provider in {"", "environment"}:
                 raise ConfigurationError(
                     "staging and production require an external secret provider"
@@ -212,6 +238,7 @@ class Settings:
             artifact_directory=artifact_directory,
             database_backend=database_backend,
             database_url=database_url,
+            redis_url=redis_url,
             secret_provider=secret_provider,
             backup_policy=backup_policy,
             external_egress_enabled=external_egress_enabled,

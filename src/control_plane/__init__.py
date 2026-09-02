@@ -5,6 +5,7 @@ from .contracts import Goal, IntentCreateRequest
 from .events import DispatchReport, OutboxDispatcher
 from .identity import hash_token
 from .policy import PolicyDecision, PolicyEngine
+from .postgres_storage import PostgresControlPlaneStore
 from .storage import ConflictError, ControlPlaneStore, ScopeViolation
 
 __all__ = [
@@ -16,6 +17,7 @@ __all__ = [
     "IntentCreateRequest",
     "PolicyDecision",
     "PolicyEngine",
+    "PostgresControlPlaneStore",
     "OutboxDispatcher",
     "ScopeViolation",
     "Settings",

@@ -23,12 +23,14 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from backend.compatibility import COMPATIBILITY_ROUTES
+from backend.frontend_assets import frontend_dist_path
 from backend.readiness import probe as readiness_probe
 from src.control_plane.config import ConfigurationError, Settings
 from src.control_plane.contracts import IntentCreateRequest, RiskTier
 from src.control_plane.execution import ActionBroker, ToolDefinition, ToolRegistry
 from src.control_plane.identity import hash_token, issue_id, issue_token, optional_bearer
 from src.control_plane.policy import PolicyEngine
+from src.control_plane.redis_runtime import RedisRuntime
 from src.control_plane.storage import (
     ConflictError,
     ControlPlaneStore,
@@ -146,6 +148,10 @@ class AuthContext:
     scopes: FrozenSet[str]
 
 
+class _RequestBodyTooLarge(Exception):
+    """Raised before an oversized streamed body can be buffered."""
+
+
 def _error(
     status_code: int,
     code: str,
@@ -214,6 +220,31 @@ def _scope_digest(context: AuthContext) -> str:
     return "sha256:" + hashlib.sha256(scope_material.encode("utf-8")).hexdigest()
 
 
+async def _read_body_limited(request: Request, limit: int) -> bytes:
+    """Read and cache an ASGI body while enforcing the limit per chunk."""
+    cached = getattr(request, "_body", None)
+    if cached is not None:
+        return cached
+    chunks = []
+    total = 0
+    while True:
+        message = await request._receive()  # Starlette's Request.body() uses this receive hook.
+        if message["type"] == "http.disconnect":
+            break
+        if message["type"] != "http.request":
+            continue
+        chunk = message.get("body", b"")
+        total += len(chunk)
+        if total > limit:
+            raise _RequestBodyTooLarge
+        chunks.append(chunk)
+        if not message.get("more_body", False):
+            break
+    body = b"".join(chunks)
+    request._body = body
+    return body
+
+
 def _side_effect_for_risk(risk_tier: str) -> str:
     if risk_tier in {"R0", "R1"}:
         return "none"
@@ -237,12 +268,16 @@ def create_app(
     store: Optional[ControlPlaneStore] = None,
 ) -> FastAPI:
     settings = settings or Settings.from_mapping()
-    if settings.database_backend != "sqlite":
-        raise ConfigurationError(
-            "The reference application only implements the local SQLite repository; "
-            "do not start a PostgreSQL profile without its production repository adapter."
-        )
-    store = store or ControlPlaneStore(settings.database_path)
+    if store is None:
+        if settings.database_backend == "postgresql":
+            from src.control_plane.postgres_storage import PostgresControlPlaneStore
+
+            if not settings.database_url:
+                raise ConfigurationError("PostgreSQL profiles require ZASI_DATABASE_URL")
+            store = PostgresControlPlaneStore(settings.database_url)
+        else:
+            store = ControlPlaneStore(settings.database_path)
+    redis_runtime = RedisRuntime(settings.redis_url) if settings.redis_url else None
     registry = ToolRegistry()
 
     def system_status(_payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -276,6 +311,17 @@ def create_app(
                 detail={"code": "POLICY_DENIED", "message": message},
             )
 
+    async def event_retention_maintenance(application: FastAPI) -> None:
+        """Apply the configured event retention without blocking request handling."""
+        while True:
+            await asyncio.sleep(60)
+            try:
+                application.state.store.prune_events("local", settings.event_retention)
+            except (ConflictError, RuntimeError):
+                # An undelivered outbox record deliberately defers pruning until
+                # the dispatcher has a chance to deliver it.
+                continue
+
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         application.state.store.initialize()
@@ -284,9 +330,14 @@ def create_app(
         for definition in application.state.registry.definitions():
             application.state.store.upsert_capability(definition.manifest())
         os.makedirs(settings.artifact_directory, mode=0o700, exist_ok=True)
+        maintenance_task = asyncio.create_task(event_retention_maintenance(application))
         try:
             yield
         finally:
+            maintenance_task.cancel()
+            await asyncio.gather(maintenance_task, return_exceptions=True)
+            if redis_runtime is not None:
+                redis_runtime.close()
             application.state.store.close()
 
     app = FastAPI(
@@ -301,6 +352,7 @@ def create_app(
     app.state.store = store
     app.state.registry = registry
     app.state.broker = broker
+    app.state.redis_runtime = redis_runtime
 
     def authoritative_openapi() -> Dict[str, Any]:
         if app.openapi_schema is not None:
@@ -363,9 +415,10 @@ def create_app(
                     "Request body exceeds the configured limit.",
                     _request_id(request),
                 )
-        if request.method in {"POST", "PUT", "PATCH", "DELETE"} and not content_length:
-            body = await request.body()
-            if len(body) > settings.max_body_bytes:
+        if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+            try:
+                body = await _read_body_limited(request, settings.max_body_bytes)
+            except _RequestBodyTooLarge:
                 return _error(
                     413,
                     "REQUEST_TOO_LARGE",
@@ -375,38 +428,35 @@ def create_app(
         if (
             request.method in {"POST", "PUT", "PATCH"}
             and request.url.path.startswith("/api/v2/")
-            and (content_length is None or content_length != "0")
+            and body
         ):
-            if body is None and content_length:
-                body = await request.body()
-            if body:
-                media_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
-                if request.url.path.startswith("/api/v2/artifacts"):
-                    allowed_upload_types = {
-                        "application/octet-stream",
-                        "application/step",
-                        "model/step",
-                        "model/stl",
-                        "image/png",
-                        "image/jpeg",
-                        "audio/wav",
-                        "audio/mpeg",
-                        "text/plain",
-                    }
-                    if media_type not in allowed_upload_types:
-                        return _error(
-                            415,
-                            "UNSUPPORTED_MEDIA_TYPE",
-                            "Artifact content type is not supported.",
-                            _request_id(request),
-                        )
-                elif media_type != "application/json":
+            media_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+            if request.url.path.startswith("/api/v2/artifacts"):
+                allowed_upload_types = {
+                    "application/octet-stream",
+                    "application/step",
+                    "model/step",
+                    "model/stl",
+                    "image/png",
+                    "image/jpeg",
+                    "audio/wav",
+                    "audio/mpeg",
+                    "text/plain",
+                }
+                if media_type not in allowed_upload_types:
                     return _error(
                         415,
                         "UNSUPPORTED_MEDIA_TYPE",
-                        "JSON content type is required.",
+                        "Artifact content type is not supported.",
                         _request_id(request),
                     )
+            elif media_type != "application/json":
+                return _error(
+                    415,
+                    "UNSUPPORTED_MEDIA_TYPE",
+                    "JSON content type is required.",
+                    _request_id(request),
+                )
         if request.url.path.startswith("/api/") and request.url.path not in {
             "/health/live",
             "/health/ready",
@@ -415,19 +465,26 @@ def create_app(
             subject_prefix = "auth" if request.url.path == "/api/v2/sessions" else "request"
             try:
                 if subject_prefix == "auth":
-                    allowed, retry_after = request.app.state.store.consume_rate_limit(
+                    rate_limit_args = (
                         "local",
                         f"{subject_prefix}:ip:{remote}",
                         settings.auth_rate_limit,
                         settings.auth_rate_window_seconds,
                     )
                 else:
-                    allowed, retry_after = request.app.state.store.consume_rate_limit(
+                    rate_limit_args = (
                         "local",
                         f"{subject_prefix}:ip:{remote}",
                         settings.request_rate_limit,
                         settings.request_rate_window_seconds,
                     )
+                limiter = request.app.state.redis_runtime
+                if limiter is None:
+                    allowed, retry_after = request.app.state.store.consume_rate_limit(
+                        *rate_limit_args
+                    )
+                else:
+                    allowed, retry_after = limiter.consume_rate_limit(*rate_limit_args)
             except RuntimeError:
                 allowed, retry_after = False, 1
             if not allowed:
@@ -503,7 +560,12 @@ def create_app(
 
     @app.get("/health/ready")
     async def readiness(request: Request):
-        readiness_state = readiness_probe(request.app.state.store, settings, registry)
+        readiness_state = readiness_probe(
+            request.app.state.store,
+            settings,
+            registry,
+            request.app.state.redis_runtime,
+        )
         if readiness_state["status"] != "ready":
             return _error(
                 503,
@@ -534,6 +596,7 @@ def create_app(
             expires_at=expires_at,
             scopes=[
                 "workspace:read",
+                "workspace:write",
                 "intent:create",
                 "plan:create",
                 "approval:write",
@@ -566,6 +629,7 @@ def create_app(
                 "run:cancel",
                 "sequence:write",
                 "workspace:read",
+                "workspace:write",
             ],
             "expires_at": expires_at.isoformat(),
         }
@@ -772,7 +836,13 @@ def create_app(
                 status_code=403,
                 detail={"code": "POLICY_DENIED", "message": "Audit visibility is not permitted."},
             )
-        records = app.state.store.list_audit(context.tenant_id, limit=limit, after=after)
+        try:
+            records = app.state.store.list_audit(context.tenant_id, limit=limit, after=after)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "INVALID_CURSOR", "message": str(exc)},
+            ) from exc
         return {
             "records": records,
             "tenant_id": context.tenant_id,
@@ -1483,6 +1553,20 @@ def create_app(
                 status_code=404,
                 detail={"code": "NOT_FOUND", "message": "Sequence not found."},
             )
+        try:
+            existing_run = request.app.state.store.get_sequence_run_by_idempotency(
+                sequence_id,
+                context.tenant_id,
+                sequence["revision"],
+                idempotency_key,
+            )
+        except ConflictError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "IDEMPOTENCY_CONFLICT", "message": str(exc)},
+            ) from exc
+        if existing_run is not None:
+            return existing_run
         if sequence["status"] not in {"validated", "approved"}:
             raise HTTPException(
                 status_code=409,
@@ -2263,7 +2347,7 @@ def create_app(
     async def retired_mcp():
         return _error(410, "ROUTE_RETIRED", "MCP calls must use the governed broker.")
 
-    frontend_dist = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "web", "dist"))
+    frontend_dist = str(frontend_dist_path())
     if os.path.isdir(os.path.join(frontend_dist, "assets")):
         app.mount(
             "/assets",

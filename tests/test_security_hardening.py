@@ -1,5 +1,6 @@
 import unittest
 
+from backend import server as legacy_server
 from src.javis_voice_multimodal import (
     AudioWaveformPacket,
     JAVISVoiceMultimodalInterface,
@@ -10,6 +11,27 @@ from src.self_compilation import AutonomousSelfCompiler, CapabilityDisabled
 
 
 class SecurityHardeningTests(unittest.TestCase):
+    def test_legacy_websocket_requires_configured_api_key(self):
+        class FakeHandler:
+            path = "/ws"
+            headers = {"X-API-Key": "wrong-secret"}
+            client_address = ("127.0.0.1", 12345)
+            responses = []
+
+            def send_json_response(self, payload, status=200):
+                self.responses.append((payload, status))
+
+        previous_key = legacy_server.ZASI_API_KEY
+        legacy_server.ZASI_API_KEY = "legacy-test-secret"
+        try:
+            handler = FakeHandler()
+            self.assertFalse(legacy_server.ZASIUnifiedHandler._check_api_auth(handler))
+            self.assertEqual(handler.responses[-1][1], 401)
+            handler.headers = {"X-API-Key": "legacy-test-secret"}
+            self.assertTrue(legacy_server.ZASIUnifiedHandler._check_api_auth(handler))
+        finally:
+            legacy_server.ZASI_API_KEY = previous_key
+
     def test_sandbox_rejects_execution_when_isolation_is_unavailable(self):
         sandbox = MicroVMSandbox(has_bwrap=False)
         result = sandbox.execute_in_sandbox("echo must-not-run")

@@ -883,20 +883,21 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
         path = urlparse(self.path).path
         if path in ("/api/status", "/api/openapi.json"):
             return True
-        if not path.startswith("/api/"):
+        if not path.startswith("/api/") and path != "/ws":
             return True
         if not ZASI_API_KEY:
-            try:
-                loopback = ipaddress.ip_address(self.client_address[0]).is_loopback
-            except ValueError:
-                loopback = False
-            if not (LEGACY_COMPAT_LOOPBACK and loopback):
-                self.send_json_response(
-                    {"error": "Legacy server authentication is unavailable"},
-                    status=503,
-                )
-                return False
-            return True
+            if path != "/ws":
+                try:
+                    loopback = ipaddress.ip_address(self.client_address[0]).is_loopback
+                except ValueError:
+                    loopback = False
+                if LEGACY_COMPAT_LOOPBACK and loopback:
+                    return True
+            self.send_json_response(
+                {"error": "Legacy server authentication is unavailable"},
+                status=503,
+            )
+            return False
         provided = self.headers.get("X-API-Key", "")
         if not provided or not hmac.compare_digest(provided, ZASI_API_KEY):
             self.send_json_response(

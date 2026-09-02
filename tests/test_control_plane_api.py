@@ -10,6 +10,15 @@ from src.control_plane.config import Settings
 from src.control_plane.storage import ControlPlaneStore
 
 
+class ChunkedBody(httpx.AsyncByteStream):
+    def __init__(self, chunks):
+        self.chunks = chunks
+
+    async def __aiter__(self):
+        for chunk in self.chunks:
+            yield chunk
+
+
 class ControlPlaneAPITests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.tempdir = tempfile.TemporaryDirectory()
@@ -64,6 +73,46 @@ class ControlPlaneAPITests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(current.status_code, 200)
             self.assertEqual(current.json()["tenant_id"], "local")
+            self.assertIn("workspace:write", current.json()["scopes"])
+            memory = await client.post(
+                "/api/v2/memory",
+                json={"content": "durable workspace note"},
+                headers={"Authorization": f"Bearer {body['access_token']}"},
+            )
+            self.assertEqual(memory.status_code, 201)
+            deleted = await client.delete(
+                f"/api/v2/memory/{memory.json()['memory_id']}",
+                headers={"Authorization": f"Bearer {body['access_token']}"},
+            )
+            self.assertEqual(deleted.status_code, 200)
+
+    async def test_chunked_request_body_is_bounded_before_json_parsing(self):
+        settings = Settings.from_mapping(
+            {
+                "ZASI_PROFILE": "local",
+                "ZASI_API_KEY": "test-bootstrap-secret",
+                "ZASI_CORS_ORIGINS": "http://localhost:5173",
+                "ZASI_DATABASE_PATH": str(Path(self.tempdir.name) / "small-body.db"),
+                "ZASI_MAX_BODY": "64",
+            }
+        )
+        store = ControlPlaneStore(settings.database_path)
+        app = create_app(settings=settings, store=store)
+        try:
+            async with app.router.lifespan_context(app):
+                transport = httpx.ASGITransport(app=app)
+                async with httpx.AsyncClient(
+                    transport=transport, base_url="http://testserver"
+                ) as client:
+                    response = await client.post(
+                        "/api/v2/sessions",
+                        content=ChunkedBody([b'{"api_key":"', b"x" * 128, b'"}']),
+                        headers={"Content-Type": "application/json"},
+                    )
+                    self.assertEqual(response.status_code, 413)
+                    self.assertEqual(response.json()["error"]["code"], "REQUEST_TOO_LARGE")
+        finally:
+            store.close()
 
     async def test_openapi_is_authenticated_and_declares_bearer_security(self):
         async with self.client() as client:
@@ -106,6 +155,28 @@ class ControlPlaneAPITests(unittest.IsolatedAsyncioTestCase):
 
             legacy_mutation = await client.get("/api/tick")
             self.assertEqual(legacy_mutation.status_code, 410)
+
+    async def test_readiness_reports_local_dependencies(self):
+        async with self.client() as client:
+            response = await client.get("/health/ready")
+            self.assertEqual(response.status_code, 200)
+            body = response.json()
+            self.assertEqual(body["status"], "ready")
+            self.assertEqual(body["checks"]["database"], "ready")
+            self.assertEqual(body["checks"]["redis"], "disabled")
+
+    async def test_invalid_audit_cursor_is_a_bounded_client_error(self):
+        async with self.client() as client:
+            session = await client.post(
+                "/api/v2/sessions", json={"api_key": "test-bootstrap-secret"}
+            )
+            headers = {"Authorization": f"Bearer {session.json()['access_token']}"}
+            response = await client.get(
+                "/api/v2/audit?after=not-a-timestamp",
+                headers=headers,
+            )
+            self.assertEqual(response.status_code, 400)
+            self.assertEqual(response.json()["error"]["code"], "INVALID_CURSOR")
 
     async def test_intent_plan_and_scoped_event_replay_are_read_only_until_run(self):
         async with self.client() as client:
@@ -468,6 +539,15 @@ class ControlPlaneAPITests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(run.status_code, 200)
             self.assertEqual(run.json()["status"], "completed")
+            replay = await client.post(
+                f"/api/v2/sequences/{sequence_body['sequence_id']}/run",
+                headers={**headers, "Idempotency-Key": "sequence-run-1"},
+            )
+            self.assertEqual(replay.status_code, 200)
+            self.assertEqual(
+                replay.json()["sequence_run_id"], run.json()["sequence_run_id"]
+            )
+            self.assertEqual(replay.json()["status"], "completed")
 
             artifact = await client.post(
                 "/api/v2/artifacts",
