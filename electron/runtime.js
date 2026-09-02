@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { runtimeExecutablePath } = require('./packaging');
+const { isValidRuntimeBundle, runtimeExecutablePath } = require('./packaging');
 
 function runtimeError(code, message) {
   const error = new Error(message);
@@ -20,12 +20,40 @@ function hasBundledApp(appRoot) {
   });
 }
 
-function isRegularFile(filePath) {
-  try {
-    return fs.statSync(filePath).isFile();
-  } catch {
-    return false;
+function applyPackagedStateDefaults(env, userDataPath) {
+  const launchEnv = { ...env };
+  if (typeof userDataPath !== 'string' || !path.isAbsolute(userDataPath)) {
+    throw runtimeError(
+      'PACKAGED_STATE_PATH_INVALID',
+      'Packaged Electron startup requires an absolute writable user-data directory.',
+    );
   }
+
+  for (const variable of ['ZASI_DATABASE_PATH', 'ZASI_ARTIFACT_DIRECTORY']) {
+    if (Object.prototype.hasOwnProperty.call(launchEnv, variable)) {
+      const value = String(launchEnv[variable]).trim();
+      if (!value || !path.isAbsolute(value)) {
+        throw runtimeError(
+          'PACKAGED_STATE_PATH_INVALID',
+          `${variable} must be an absolute path in packaged Electron mode.`,
+        );
+      }
+      launchEnv[variable] = value;
+    }
+  }
+
+  const resolvedUserDataPath = path.resolve(userDataPath);
+  if (!Object.prototype.hasOwnProperty.call(launchEnv, 'ZASI_DATABASE_PATH')) {
+    launchEnv.ZASI_DATABASE_PATH = path.join(
+      resolvedUserDataPath,
+      'data',
+      'zasi_control_plane.db',
+    );
+  }
+  if (!Object.prototype.hasOwnProperty.call(launchEnv, 'ZASI_ARTIFACT_DIRECTORY')) {
+    launchEnv.ZASI_ARTIFACT_DIRECTORY = path.join(resolvedUserDataPath, 'artifacts');
+  }
+  return launchEnv;
 }
 
 function resolveBackendLaunch({
@@ -54,8 +82,7 @@ function resolveBackendLaunch({
   }
   const runtimeRoot = path.join(resourcesPath, 'backend-runtimes');
   const command = runtimeExecutablePath(runtimeRoot, platform);
-  const platformRoot = path.join(runtimeRoot, platform);
-  if (!command || !isRegularFile(path.join(platformRoot, 'pyvenv.cfg'))) {
+  if (!command || !isValidRuntimeBundle(runtimeRoot, platform)) {
     throw runtimeError(
       'PACKAGED_RUNTIME_UNAVAILABLE',
       `No runnable bundled Python runtime is present for ${platform}.`,
@@ -83,4 +110,4 @@ function resolveBackendLaunch({
   };
 }
 
-module.exports = { resolveBackendLaunch };
+module.exports = { applyPackagedStateDefaults, resolveBackendLaunch };

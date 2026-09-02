@@ -13,7 +13,8 @@ function makeFixture() {
       : path.join(root, 'runtimes', platform, 'bin', 'python3');
     fs.mkdirSync(path.dirname(executable), { recursive: true });
     fs.writeFileSync(executable, 'runtime', { mode: 0o755 });
-    fs.writeFileSync(path.join(root, 'runtimes', platform, 'pyvenv.cfg'), 'home = bundled\n');
+    fs.mkdirSync(path.join(root, 'runtimes', platform, 'bundled'));
+    fs.writeFileSync(path.join(root, 'runtimes', platform, 'pyvenv.cfg'), 'home = .\n');
   }
   const appRoot = path.join(root, 'app');
   for (const directory of ['backend', 'src', 'web/dist', 'config']) {
@@ -48,6 +49,34 @@ function testPackagingFailsClosedWhenRuntimeIsMissing() {
   );
 }
 
+function testPackagingRejectsNonRelocatableRuntime() {
+  const fixture = makeFixture();
+  fs.writeFileSync(
+    path.join(fixture.runtimeRoot, 'linux', 'pyvenv.cfg'),
+    'home = /usr/bin\n',
+  );
+  assert.throws(
+    () => resolvePackagingConfig(fixture),
+    (error) => error && error.code === 'ELECTRON_RUNTIME_INCOMPLETE',
+  );
+}
+
+function testPackagingRejectsRuntimeSymlinkEscape() {
+  const fixture = makeFixture();
+  const pythonPath = path.join(fixture.runtimeRoot, 'linux', 'bin', 'python3');
+  const externalRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'zasi-electron-package-external-'));
+  const externalPython = path.join(externalRoot, 'python3');
+  fs.writeFileSync(externalPython, 'runtime', { mode: 0o755 });
+  fs.unlinkSync(pythonPath);
+  fs.symlinkSync(externalPython, pythonPath);
+  assert.throws(
+    () => resolvePackagingConfig(fixture),
+    (error) => error && error.code === 'ELECTRON_RUNTIME_INCOMPLETE',
+  );
+}
+
 testPackagingRequiresCompleteRuntimeBundles();
 testPackagingFailsClosedWhenRuntimeIsMissing();
+testPackagingRejectsNonRelocatableRuntime();
+testPackagingRejectsRuntimeSymlinkEscape();
 console.log('electron packaging tests passed');

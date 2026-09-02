@@ -1178,6 +1178,8 @@ The UI MUST show a reconnecting/degraded state and a resync prompt when event hi
 - Propagate termination and remove child processes on shutdown.
 - Do not print environment variables or tokens in stdout/stderr.
 - Packaged launch MUST use only the bundled runtime under `process.resourcesPath`; source-checkout interpreter selection MUST NOT become a packaged runtime fallback.
+- Packaged state MUST default to Electron `app.getPath('userData')` for the SQLite database and artifact quarantine when explicit paths are absent; explicit packaged state paths MUST be absolute, and relative overrides MUST fail closed.
+- A packaged Python runtime MUST be relocatable: its interpreter and `pyvenv.cfg` MUST resolve inside the platform runtime root, and `pyvenv.cfg` MUST declare a relative `home` that resolves to a directory inside that root. Standard host-linked virtual environments MUST be rejected.
 
 ## 16. Multimodal and device contracts
 
@@ -1874,7 +1876,7 @@ implementation claim.
 | `python3 -m unittest tests.test_control_plane_api.ControlPlaneAPITests.test_intent_plan_and_scoped_event_replay_are_read_only_until_run -q` | Passed; an approved plan records the resolved tool version and execution rejects registry-version drift with a bounded conflict | Local plan-integrity regression |
 | `python3 -m unittest tests.test_sbom tests.test_installer -v` | 5 tests passed; SBOM npm-coordinate deduplication, selected Python extras, deterministic output, and fresh installer build-output selection are covered | Local packaging regression |
 | `node tests/test_components.js` | Passed; verifies React 19/Router 7 pins, typed entrypoint ownership, local scripts, and governed route declarations | Local bundle/source safety assertions |
-| `npm test` | Passed; frontend structural checks plus source-runtime, packaged-runtime, Windows runtime-layout, and packaged-startup fail-closed tests | Local cockpit/Electron boundary regression |
+| `npm test` | Passed; frontend structural checks plus source-runtime, packaged-runtime, Windows runtime-layout, packaged-startup state-path, symlink-escape, and relocatability fail-closed tests | Local cockpit/Electron boundary regression |
 | `npm run electron-build` without `ZASI_ELECTRON_RUNTIME_ROOT` | Exited before artifact creation with the explicit per-platform runtime requirement | Local packaged-build fail-closed gate |
 | `npm run typecheck` | Passed with TypeScript 7 strict settings for the production entrypoint | Local frontend type safety |
 | `node --check electron/main.js` | Passed | Local Electron syntax check |
