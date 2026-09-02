@@ -1689,9 +1689,9 @@ Every capability that cannot complete this path remains disabled, simulated, res
 
 Evidence capture date: **2026-09-02 UTC**. The results below distinguish local
 working-tree evidence, the signed implementation commits, hosted PR checks, and
-unverified deployment gates. The implementation branch is
-`d5b7160` before the PostgreSQL/Redis hardening increment; PR [#29](https://github.com/cvsz/zasi/pull/29) passed its
-hosted checks. There is no staging deployment, production checkout, or
+unverified deployment gates. The substantive PostgreSQL/Redis and CI
+implementation is recorded through `edcb357`; PR [#29](https://github.com/cvsz/zasi/pull/29)
+passed its hosted checks for that head. There is no staging deployment, production checkout, or
 production release authorization. The existing `.coverage` deletion is
 preserved and is not part of the implementation claim.
 
@@ -1716,8 +1716,8 @@ preserved and is not part of the implementation claim.
 | Hardened container smoke | `/health/ready` returned `ready`; UID `10001:10001`, read-only rootfs, all capabilities dropped, and no-new-privileges verified; external egress and physical actuation reported disabled | Local runtime/container evidence |
 | `python3 scripts/generate_sbom.py --output dist/zasi-sbom.cdx.json --resolve-installed` | CycloneDX 1.5 SBOM generated with 342 components and deterministic serial | Local supply-chain evidence |
 | `sha256sum --check dist/SHA256SUMS` and GPG verification of wheel, sdist, and SBOM signatures | Passed with the configured cvsz signing identity | Local artifact integrity evidence |
-| PR #29 hosted checks for commit `d5b7160` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12, lint, distribution, and Docker checks passed; PR package publication skipped | Hosted CI evidence before this unpushed increment |
-| GitHub Issue #18 | Remains `OPEN`; PR/evidence comment recorded at [#issuecomment-5503404521](https://github.com/cvsz/zasi/issues/18#issuecomment-5503404521) | External roadmap status, not release approval |
+| PR #29 hosted checks for commit `edcb357` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12, lint, distribution, and Docker checks passed; PR package publication skipped | Hosted CI evidence for the pushed runtime/CI implementation |
+| GitHub Issue #18 | Remains `OPEN`; latest PR/evidence comment recorded at [#issuecomment-5504168389](https://github.com/cvsz/zasi/issues/18#issuecomment-5504168389) | External roadmap status, not release approval |
 
 The `ResourceWarning` regression test is intentionally retained. The original
 legacy hypergraph adapter used `with sqlite3.connect(...)`, which commits but
