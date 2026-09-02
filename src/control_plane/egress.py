@@ -4,6 +4,7 @@ from dataclasses import dataclass
 import http.client
 import ipaddress
 import json
+import math
 import queue
 import socket
 import ssl
@@ -79,10 +80,16 @@ def _resolve_with_timeout(
         timeout = float(timeout_sec)
     except (TypeError, ValueError) as exc:
         raise EgressRequestFailed("outbound request timeout is invalid") from exc
-    if timeout <= 0:
+    if not math.isfinite(timeout) or timeout <= 0:
         raise EgressRequestFailed("outbound request exceeded total timeout")
-    if not _resolver_slots.acquire(timeout=timeout):
+    deadline = time.monotonic() + timeout
+    slot_wait = deadline - time.monotonic()
+    if slot_wait <= 0 or not _resolver_slots.acquire(timeout=slot_wait):
         raise EgressRequestFailed("outbound DNS resolver capacity is exhausted")
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        _resolver_slots.release()
+        raise EgressRequestFailed("outbound DNS resolution exceeded total timeout")
 
     result_queue = queue.Queue(maxsize=1)
 
@@ -105,7 +112,10 @@ def _resolve_with_timeout(
         _resolver_slots.release()
         raise
     try:
-        succeeded, value = result_queue.get(timeout=timeout)
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise queue.Empty
+        succeeded, value = result_queue.get(timeout=remaining)
     except queue.Empty as exc:
         raise EgressRequestFailed("outbound DNS resolution exceeded total timeout") from exc
     if succeeded:

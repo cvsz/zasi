@@ -1,5 +1,6 @@
 import socket
 import ssl
+import threading
 import time
 import unittest
 from unittest.mock import Mock, patch
@@ -14,6 +15,7 @@ from src.control_plane.egress import (
     validate_destination,
     validate_redirect,
 )
+from src.control_plane import egress as egress_module
 
 
 class EgressSecurityTests(unittest.TestCase):
@@ -106,32 +108,95 @@ class EgressSecurityTests(unittest.TestCase):
         self.assertLessEqual(fake_socket.settimeout.call_args.args[0], 0.25)
 
     def test_dns_resolution_is_bounded_by_total_timeout(self):
+        resolver_done = threading.Event()
+
         def slow_resolver(host, port):
-            time.sleep(0.1)
-            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port))]
+            try:
+                time.sleep(0.1)
+                return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port))]
+            finally:
+                resolver_done.set()
 
         policy = EgressPolicy(
             allowed_hosts=frozenset({"public.example"}),
             total_timeout_sec=0.01,
         )
-        with patch("src.control_plane.egress._default_resolver", side_effect=slow_resolver):
-            with self.assertRaises(EgressRequestFailed):
-                validate_destination("https://public.example/hook", policy)
+        try:
+            with patch("src.control_plane.egress._default_resolver", side_effect=slow_resolver):
+                with self.assertRaises(EgressRequestFailed):
+                    validate_destination("https://public.example/hook", policy)
+        finally:
+            self.assertTrue(resolver_done.wait(1))
 
     def test_broker_does_not_connect_after_dns_deadline(self):
+        resolver_done = threading.Event()
+
         def slow_resolver(host, port):
-            time.sleep(0.1)
-            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port))]
+            try:
+                time.sleep(0.1)
+                return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port))]
+            finally:
+                resolver_done.set()
 
         policy = EgressPolicy(
             allowed_hosts=frozenset({"public.example"}),
             total_timeout_sec=0.01,
         )
         broker = EgressBroker(policy)
-        with patch("src.control_plane.egress._default_resolver", side_effect=slow_resolver):
-            with patch.object(broker, "_connect", side_effect=AssertionError("connect must not run")):
+        try:
+            with patch("src.control_plane.egress._default_resolver", side_effect=slow_resolver):
+                with patch.object(broker, "_connect", side_effect=AssertionError("connect must not run")):
+                    with self.assertRaises(EgressRequestFailed):
+                        broker.post_json("https://public.example/hook", {}, "idem-1")
+        finally:
+            self.assertTrue(resolver_done.wait(1))
+
+    def test_resolver_slot_contention_shares_one_absolute_deadline(self):
+        held_slots = 0
+        for _ in range(egress_module._MAX_CONCURRENT_RESOLVERS):
+            if egress_module._resolver_slots.acquire(blocking=False):
+                held_slots += 1
+        self.assertEqual(held_slots, egress_module._MAX_CONCURRENT_RESOLVERS)
+
+        slot_released = threading.Event()
+        resolver_started = threading.Event()
+        resolver_release = threading.Event()
+        resolver_done = threading.Event()
+
+        def release_one_slot():
+            egress_module._resolver_slots.release()
+            slot_released.set()
+
+        def slow_resolver(host, port):
+            resolver_started.set()
+            try:
+                resolver_release.wait(1)
+            finally:
+                resolver_done.set()
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port))]
+
+        release_timer = threading.Timer(0.04, release_one_slot)
+        release_timer.daemon = True
+        release_timer.start()
+        started_at = time.monotonic()
+        try:
+            policy = EgressPolicy(
+                allowed_hosts=frozenset({"public.example"}),
+                total_timeout_sec=0.08,
+            )
+            with patch("src.control_plane.egress._default_resolver", side_effect=slow_resolver):
                 with self.assertRaises(EgressRequestFailed):
-                    broker.post_json("https://public.example/hook", {}, "idem-1")
+                    validate_destination("https://public.example/hook", policy)
+            elapsed = time.monotonic() - started_at
+            self.assertTrue(slot_released.is_set())
+            self.assertTrue(resolver_started.is_set())
+            self.assertLess(elapsed, 0.105)
+        finally:
+            resolver_release.set()
+            self.assertTrue(resolver_done.wait(1))
+            release_timer.cancel()
+            for _ in range(held_slots - 1):
+                egress_module._resolver_slots.release()
 
 
 if __name__ == "__main__":
