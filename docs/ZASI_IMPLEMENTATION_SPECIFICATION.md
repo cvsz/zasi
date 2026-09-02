@@ -1868,8 +1868,14 @@ passed. Persisted session-scope validation is in signed commit
 `8980fc9655fcf0a043255863a89345f482266667`; PR [#41](https://github.com/cvsz/zasi/pull/41)
 merged that exact head into main at
 `8ffe398721b5cfb9b484f052b8ee24f94a27eac3` after the required hosted checks
-passed. The follow-up route-level scope enforcement is under review in PR
-[#42](https://github.com/cvsz/zasi/pull/42) and is not yet release evidence.
+passed. Route-level scope enforcement is in signed commit
+`7e4bb55a45ca99fcb827391f0b179accf1d6a6ef` with its evidence reconciliation in
+signed commit `a2f11175f78226b7513803c8c8c7c9bccbed4f67`; PR
+[#42](https://github.com/cvsz/zasi/pull/42) merged signed PR head
+`b95b8ae10a3b66cc3abce709b9ce8ab5094a11c5` into main at
+`a2e5d96db6665fa10f2618890b95347e5bfec3d9` after all required hosted checks
+passed. PR-only GHCR publication remained intentionally skipped. These checks
+are implementation evidence, not release approval.
 The release-publication and schema-preserving backup hardening was merged by
 PR [#31](https://github.com/cvsz/zasi/pull/31), in signed commits
 `e972295` and `84e4f99`; the protected RACER and J.A.R.V.I.S. reference files
@@ -1902,8 +1908,8 @@ implementation claim.
 
 | Command or inspection | Observed result | Evidence class |
 |---|---|---|
-| `python3 -m unittest discover -s tests -q` | 321 tests passed, 2 optional live-service checks skipped | Local functional regression |
-| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 321 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
+| `python3 -m unittest discover -s tests -q` | 323 tests passed, 2 optional live-service checks skipped | Local functional regression |
+| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 323 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
 | Focused control-plane/security suite (`tests.test_control_plane_core`, `tests.test_control_plane_broker`, `tests.test_control_plane_api`, `tests.test_security_hardening`, `tests.test_egress_security`) | Passed, including memory-hard API-key verification and TLS 1.2 floor tests | Local governed/security regression |
 | Focused outbox worker suite (`tests.test_outbox_worker tests.test_control_plane_core`) | 28 tests passed; bounded polling, interruptible shutdown, retry/dead-letter preservation, expired-lease reclaim, conditional-claim race handling, configuration fail-closed behavior, and worker identifier validation covered | Local outbox worker regression |
 | `PYTHONPATH=. python3 -m unittest tests.test_release_signing -v` | 5 tests passed; artifact selection/checksum determinism, signed-bundle publication, and protected release workflow requirements covered | Local release-signing regression |
@@ -1913,7 +1919,7 @@ implementation claim.
 | `python3 -m compileall -q backend src scripts tests main.py` | Passed | Local syntax check |
 | `python3 -m unittest tests.test_encrypted_backup -q` | 11 passed, including AES-256-GCM tamper and wrong-key rejection, atomic mode-600 files, missing-source rejection, no-clobber restore, older-schema preservation, and SQLite restore integrity | Local encrypted backup/restore regression |
 | `python3 -m unittest tests.test_control_plane_api.ControlPlaneAPITests.test_intent_plan_and_scoped_event_replay_are_read_only_until_run -q` | Passed; an approved plan records the resolved tool version and execution rejects registry-version drift with a bounded conflict | Local plan-integrity regression |
-| `PYTHONPATH=. python3 -m unittest tests.test_control_plane_api tests.test_control_plane_core tests.test_security_hardening -q` on the PR #42 branch | 47 tests passed, including malformed session-scope rejection, read/disabled-operation scope enforcement, and authentication on the method-not-allowed plan route; the new red tests reproduced the prior unauthorized `200` and unauthenticated `405` behavior before the repair | Local pre-merge RBAC regression; PR #42 hosted evidence is required |
+| `PYTHONPATH=. python3 -m unittest tests.test_control_plane_api tests.test_control_plane_core tests.test_security_hardening -q` | 47 tests passed, including malformed session-scope rejection, read/disabled-operation scope enforcement, and authentication on the method-not-allowed plan route; the new red tests reproduced the prior unauthorized `200` and unauthenticated `405` behavior before the repair | Local RBAC regression |
 | `PYTHONPATH=. python3 -m unittest tests.test_egress_security -v` | 10 tests passed; dual-stack SSRF rejection, redirect policy, TLS floor, connect deadline, bounded DNS resolution, resolver contention, absolute-deadline forwarding, and no-connect-after-resolution-timeout behavior were verified | Local egress security regression |
 | `python3 -m unittest tests.test_sbom tests.test_installer -v` | 5 tests passed; SBOM npm-coordinate deduplication, selected Python extras, deterministic output, and fresh installer build-output selection are covered | Local packaging regression |
 | `node tests/test_components.js` | Passed; verifies React 19/Router 7 pins, typed entrypoint ownership, local scripts, and governed route declarations | Local bundle/source safety assertions |
@@ -1950,6 +1956,7 @@ implementation claim.
 | PR #38 hosted checks for exact merged head `7613070cc5beb36103058fdad0b88e9600a2c995` | Actions/JavaScript-TypeScript/Python analysis, Python 3.11/3.12, syntax/type, distribution, Docker image/build, and CodeQL checks passed; PR #38 merged at `979bff476c6afa711d36856ad6200c162f0dba6b`; PR-only GHCR publication was skipped. | Current merged hosted CI evidence; not release approval |
 | PR #40 hosted checks for exact merged head `8f338043b8f58d7c7514ec2751826da7a98450bb` | Actions/JavaScript-TypeScript/Python analysis, Python 3.11/3.12, syntax/type, distribution, Docker image/build, and CodeQL checks passed; PR #40 merged at `63967db5b023dcb92252331ab86592c991e60d68`. | Current merged hosted CI evidence; not release approval |
 | PR #41 hosted checks for exact merged head `8980fc9655fcf0a043255863a89345f482266667` | Actions/JavaScript-TypeScript/Python analysis, Python 3.11/3.12, syntax/type, distribution, Docker image/build, and CodeQL checks passed; PR #41 merged at `8ffe398721b5cfb9b484f052b8ee24f94a27eac3`. | Current merged hosted CI evidence; not release approval |
+| PR #42 hosted checks for exact PR head `b95b8ae10a3b66cc3abce709b9ce8ab5094a11c5` | Actions/JavaScript-TypeScript/Python analysis, Python 3.11/3.12, syntax/type, distribution, Docker image/build, Docker Build Check, and CodeQL checks passed; PR #42 merged at `a2e5d96db6665fa10f2618890b95347e5bfec3d9`; PR-only GHCR publication was skipped. | Current merged hosted CI evidence; not release approval |
 | GitHub environment and managed-secret inventory on 2026-09-02 UTC | GitHub exposes publish/pages environments but no `staging` environment or staging secret/variable scope; no managed-secret client or provider credential is configured on the validation host | External release-gate inventory; missing infrastructure remains an open blocker |
 | GitHub Issue #18 | Remains `OPEN`; current status comments are maintained in the [roadmap thread](https://github.com/cvsz/zasi/issues/18) | External roadmap status, not release approval |
 
