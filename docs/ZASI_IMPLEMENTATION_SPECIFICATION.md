@@ -1689,8 +1689,8 @@ Every capability that cannot complete this path remains disabled, simulated, res
 
 Evidence capture date: **2026-09-02 UTC**. The results below distinguish local
 working-tree evidence, the signed implementation commits, hosted PR checks, and
-unverified deployment gates. The substantive PostgreSQL/Redis and CI
-implementation is recorded through `edcb357`; PR [#29](https://github.com/cvsz/zasi/pull/29)
+unverified deployment gates. The substantive PostgreSQL/Redis, CI, and cockpit
+modernization implementation is recorded through `4184747`; PR [#29](https://github.com/cvsz/zasi/pull/29)
 passed its hosted checks for that head. There is no staging deployment, production checkout, or
 production release authorization. The existing `.coverage` deletion is
 preserved and is not part of the implementation claim.
@@ -1717,7 +1717,7 @@ preserved and is not part of the implementation claim.
 | Hardened container smoke | `/health/ready` returned `ready`; UID `10001:10001`, read-only rootfs, all capabilities dropped, and no-new-privileges verified; external egress and physical actuation reported disabled | Local runtime/container evidence |
 | `python3 scripts/generate_sbom.py --output dist/zasi-sbom.cdx.json --resolve-installed` | CycloneDX 1.5 SBOM generated with 367 components and deterministic serial | Local supply-chain evidence |
 | `sha256sum --check dist/SHA256SUMS` and GPG verification of wheel, sdist, and SBOM signatures | Passed with the configured cvsz signing identity | Local artifact integrity evidence |
-| PR #29 hosted checks for commit `edcb357` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12, lint, distribution, and Docker checks passed; PR package publication skipped | Hosted CI evidence for the pushed runtime/CI implementation |
+| PR #29 hosted checks for commit `4184747` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12, React/TypeScript validation, distribution, and Docker checks passed; PR package publication skipped | Hosted CI evidence for the pushed runtime/CI/cockpit implementation |
 | GitHub Issue #18 | Remains `OPEN`; latest PR/evidence comment recorded at [#issuecomment-5504168389](https://github.com/cvsz/zasi/issues/18#issuecomment-5504168389) | External roadmap status, not release approval |
 
 The `ResourceWarning` regression test is intentionally retained. The original
