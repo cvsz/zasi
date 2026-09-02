@@ -1845,6 +1845,14 @@ and `898ddf360f61ea9434b533e65f13fbdda1759b46`; PR [#35](https://github.com/cvsz
 merged the exact head `898ddf360f61ea9434b533e65f13fbdda1759b46` into main at
 `2332ada8c30914f0051add591c15d3aba1cd1c81` after all required hosted checks
 passed.
+The egress DNS-deadline hardening is in signed commits
+`077fef10c0eff4651db6d8233c658492aa895125`,
+`4b13f6247bde87a4d052ef1baee2fc0b2be5f03c`,
+`1b9c11a9226d334996b0e386dcd69cbe2bb67bc0`, and
+`f45411dfbe4b3deec6d81e1b29c692dde90ead67`; PR [#37](https://github.com/cvsz/zasi/pull/37)
+merged the exact head `f45411dfbe4b3deec6d81e1b29c692dde90ead67` into main at
+`2d02b85e34061a1b64dceb6c469fc8b094c9c39d` after all required hosted checks
+passed.
 The release-publication and schema-preserving backup hardening was merged by
 PR [#31](https://github.com/cvsz/zasi/pull/31), in signed commits
 `e972295` and `84e4f99`; the protected RACER and J.A.R.V.I.S. reference files
@@ -1871,8 +1879,8 @@ implementation claim.
 
 | Command or inspection | Observed result | Evidence class |
 |---|---|---|
-| `python3 -m unittest discover -s tests -q` | 317 tests passed, 2 optional live-service checks skipped | Local functional regression |
-| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 317 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
+| `python3 -m unittest discover -s tests -q` | 321 tests passed, 2 optional live-service checks skipped | Local functional regression |
+| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 321 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
 | Focused control-plane/security suite (`tests.test_control_plane_core`, `tests.test_control_plane_broker`, `tests.test_control_plane_api`, `tests.test_security_hardening`, `tests.test_egress_security`) | Passed, including memory-hard API-key verification and TLS 1.2 floor tests | Local governed/security regression |
 | Focused outbox worker suite (`tests.test_outbox_worker tests.test_control_plane_core`) | 28 tests passed; bounded polling, interruptible shutdown, retry/dead-letter preservation, expired-lease reclaim, conditional-claim race handling, configuration fail-closed behavior, and worker identifier validation covered | Local outbox worker regression |
 | `PYTHONPATH=. python3 -m unittest tests.test_release_signing -v` | 5 tests passed; artifact selection/checksum determinism, signed-bundle publication, and protected release workflow requirements covered | Local release-signing regression |
@@ -1882,7 +1890,7 @@ implementation claim.
 | `python3 -m compileall -q backend src scripts tests main.py` | Passed | Local syntax check |
 | `python3 -m unittest tests.test_encrypted_backup -q` | 11 passed, including AES-256-GCM tamper and wrong-key rejection, atomic mode-600 files, missing-source rejection, no-clobber restore, older-schema preservation, and SQLite restore integrity | Local encrypted backup/restore regression |
 | `python3 -m unittest tests.test_control_plane_api.ControlPlaneAPITests.test_intent_plan_and_scoped_event_replay_are_read_only_until_run -q` | Passed; an approved plan records the resolved tool version and execution rejects registry-version drift with a bounded conflict | Local plan-integrity regression |
-| `PYTHONPATH=. python3 -m unittest tests.test_egress_security -v` | 8 tests passed; dual-stack SSRF rejection, redirect policy, TLS floor, connect deadline, DNS-resolution deadline, and no-connect-after-resolution-timeout behavior were verified | Local egress security regression |
+| `PYTHONPATH=. python3 -m unittest tests.test_egress_security -v` | 10 tests passed; dual-stack SSRF rejection, redirect policy, TLS floor, connect deadline, bounded DNS resolution, resolver contention, absolute-deadline forwarding, and no-connect-after-resolution-timeout behavior were verified | Local egress security regression |
 | `python3 -m unittest tests.test_sbom tests.test_installer -v` | 5 tests passed; SBOM npm-coordinate deduplication, selected Python extras, deterministic output, and fresh installer build-output selection are covered | Local packaging regression |
 | `node tests/test_components.js` | Passed; verifies React 19/Router 7 pins, typed entrypoint ownership, local scripts, and governed route declarations | Local bundle/source safety assertions |
 | `npm test` | Passed; frontend structural checks plus source-runtime, packaged-runtime, Windows runtime-layout, packaged-startup state-path, symlink-escape, and relocatability fail-closed tests | Local cockpit/Electron boundary regression |
@@ -1914,6 +1922,7 @@ implementation claim.
 | PR #32 hosted checks for exact merged head `7a47917fd865b1a1ce4816e75761d9e70cdf2715` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12, React/TypeScript validation, distribution, Docker image, and Docker build checks passed; the `actions: read` release-permission regression was included. | Current merged hosted CI evidence; not release approval |
 | PR #34 hosted checks for exact merged head `77a7dfaa5f141e7aa36ddc13e5cba38efa6655b3` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12, React/TypeScript validation, distribution, Docker image, and Docker build checks passed; PR #34 merged at `9431f9024863dec29c382a957cf9aecad029a9b8`. | Current merged hosted CI evidence; packaged artifact still requires real per-platform runtimes |
 | PR #35 hosted checks for exact merged head `898ddf360f61ea9434b533e65f13fbdda1759b46` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12, React/TypeScript validation, distribution, Docker image, and Docker build checks passed; the P1 packaged-state, canonical-home, symlink-containment, and Windows-separator repairs merged at `2332ada8c30914f0051add591c15d3aba1cd1c81`. | Current merged hosted CI evidence; packaged artifact still requires real per-platform runtimes |
+| PR #37 hosted checks for exact merged head `f45411dfbe4b3deec6d81e1b29c692dde90ead67` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12, React/TypeScript validation, distribution, Docker image, and Docker build checks passed; bounded DNS resolution and absolute-deadline repairs merged at `2d02b85e34061a1b64dceb6c469fc8b094c9c39d`. | Current merged hosted CI evidence; external egress remains disabled by default |
 | GitHub Issue #18 | Remains `OPEN`; current status comments are maintained in the [roadmap thread](https://github.com/cvsz/zasi/issues/18) | External roadmap status, not release approval |
 
 The `ResourceWarning` regression test is intentionally retained. The original
