@@ -20,8 +20,9 @@
 
 ZASI is a local-first, authenticated control-plane reference implementation
 with a React 19 cockpit. The typed `web/static/app.tsx` entrypoint owns the
-runtime mount and preserves the reviewed `app.jsx` module as a compatibility
-boundary. Its safe path is:
+runtime mount and `web/static/cockpit.tsx` owns the checked cockpit source;
+the historical `app.jsx` path remains only as a compatibility re-export.
+Its safe path is:
 
 ```text
 authenticated session -> scoped observation -> typed intent -> policy

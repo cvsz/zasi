@@ -7,9 +7,11 @@ const assert = require('assert');
 
 const appTsxPath = path.join(__dirname, '../web/static/app.tsx');
 const appJsxPath = path.join(__dirname, '../web/static/app.jsx');
+const cockpitTsxPath = path.join(__dirname, '../web/static/cockpit.tsx');
 const appTsx = fs.readFileSync(appTsxPath, 'utf8');
 const appJsx = fs.readFileSync(appJsxPath, 'utf8');
-const content = `${appTsx}\n${appJsx}`;
+const cockpitTsx = fs.readFileSync(cockpitTsxPath, 'utf8');
+const content = `${appTsx}\n${cockpitTsx}\n${appJsx}`;
 const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '../package.json'), 'utf8'));
 const makefile = fs.readFileSync(path.join(__dirname, '../Makefile'), 'utf8');
 
@@ -21,29 +23,33 @@ assert(packageJson.dependencies['react-router-dom'].startsWith('7.'), 'package m
 assert(packageJson.devDependencies.typescript, 'package must include TypeScript tooling');
 assert(makefile.includes('npm run typecheck'), 'Make targets must enforce the TypeScript check');
 assert(!/^\s*rm .*\.coverage/m.test(makefile), 'Make clean must preserve the tracked coverage artifact');
-assert(appTsx.includes("from './app.jsx?legacy'"), 'TypeScript entrypoint must preserve the reviewed cockpit implementation import');
+assert(appTsx.includes("from './cockpit'"), 'TypeScript entrypoint must import the typed cockpit implementation');
 assert(!appJsx.includes('createRoot('), 'compatibility module must not mount a second React root');
+assert(appJsx.includes("export { default } from './cockpit';"), 'compatibility module must re-export the typed cockpit implementation');
 assert(appTsx.includes('createRoot'), 'TypeScript entrypoint must own React root creation');
 const productionHtml = fs.readFileSync(path.join(__dirname, '../web/index.html'), 'utf8');
 assert(productionHtml.includes('./static/app.tsx'), 'production page must load the TypeScript entrypoint');
 
-assert(content.includes('BrowserRouter'), 'app.jsx must import and use BrowserRouter');
-assert(content.includes('Routes'), 'app.jsx must declare Routes');
-assert(content.includes('Route'), 'app.jsx must declare Route elements');
-assert(content.includes('NavLink'), 'app.jsx must use NavLink for tab switching');
-assert(content.includes('Outlet'), 'app.jsx must use Outlet for Shell nested routing');
+assert(cockpitTsx.includes('BrowserRouter'), 'typed cockpit must import and use BrowserRouter');
+assert(cockpitTsx.includes('Routes'), 'typed cockpit must declare Routes');
+assert(cockpitTsx.includes('Route'), 'typed cockpit must declare Route elements');
+assert(cockpitTsx.includes('NavLink'), 'typed cockpit must use NavLink for tab switching');
+assert(cockpitTsx.includes('Outlet'), 'typed cockpit must use Outlet for Shell nested routing');
 
-assert(content.includes('OverviewPage'), 'app.jsx must declare OverviewPage');
-assert(content.includes('JarvisPage'), 'app.jsx must declare JarvisPage');
-assert(content.includes('SubsystemsPage'), 'app.jsx must declare SubsystemsPage');
-assert(content.includes('CockpitPage'), 'app.jsx must declare CockpitPage');
-assert(content.includes('MCPPage'), 'app.jsx must declare MCPPage');
+assert(cockpitTsx.includes('OverviewPage'), 'typed cockpit must declare OverviewPage');
+assert(cockpitTsx.includes('JarvisPage'), 'typed cockpit must declare JarvisPage');
+assert(cockpitTsx.includes('SubsystemsPage'), 'typed cockpit must declare SubsystemsPage');
+assert(cockpitTsx.includes('CockpitPage'), 'typed cockpit must declare CockpitPage');
+assert(cockpitTsx.includes('MCPPage'), 'typed cockpit must declare MCPPage');
 
-assert(content.includes('HypergraphCanvas'), 'app.jsx must declare Three.js HypergraphCanvas');
-assert(content.includes('useTelemetry'), 'app.jsx must declare useTelemetry hook');
-assert(content.includes("from 'react'"), 'app.jsx must use bundled React imports');
-assert(content.includes("from 'react-router-dom'"), 'app.jsx must use bundled router imports');
-assert(content.includes("from 'three'"), 'app.jsx must use bundled Three.js import');
+assert(cockpitTsx.includes('HypergraphCanvas'), 'typed cockpit must declare Three.js HypergraphCanvas');
+assert(cockpitTsx.includes('useTelemetry'), 'typed cockpit must declare useTelemetry hook');
+assert(cockpitTsx.includes("from 'react'"), 'typed cockpit must use bundled React imports');
+assert(cockpitTsx.includes("from 'react-router-dom'"), 'typed cockpit must use bundled router imports');
+assert(cockpitTsx.includes("import('three')"), 'typed cockpit must lazy-load bundled Three.js');
+assert(cockpitTsx.includes('role="log"'), 'cockpit conversation must expose a log landmark');
+assert(cockpitTsx.includes('aria-label="Primary navigation"'), 'cockpit navigation must have an accessible label');
+assert(cockpitTsx.includes('aria-busy={!connectors}'), 'async connector status must expose loading state');
 assert(!content.includes('dangerouslySetInnerHTML'), 'app.jsx must not render untrusted HTML');
 assert(!content.includes("/api/tick"), 'cockpit must not expose legacy GET mutation controls');
 assert(!content.includes("/api/mutate"), 'cockpit must not expose legacy mutation controls');

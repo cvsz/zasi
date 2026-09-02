@@ -1,5 +1,5 @@
 import { createRoot } from 'react-dom/client';
-import App from './app.jsx?legacy';
+import App from './cockpit';
 
 const root = document.getElementById('root');
 if (!root) {

@@ -69,7 +69,7 @@ This is a source inspection snapshot, not a production-readiness claim. It preve
 |---|---|---|
 | `backend/app.py` | Authoritative FastAPI/ASGI owner with fail-closed session authentication, typed routes, policy/broker dispatch, schema-7 SQLite/PostgreSQL state, Redis-backed shared rate limits, durable SSE replay/resync, and bundled cockpit serving. | Current governed reference slice; staging/production remain blocked until managed operations and deployment evidence are supplied. |
 | `backend/server.py` | Legacy standard-library compatibility server remains isolated from the authoritative import path; its historical WebSocket, catalog, chat, and mutation surfaces are not the production owner. | Compatibility/research edge only; do not use it as production evidence. |
-| `web/static/app.tsx` + `web/static/app.jsx` | React 19 + React Router 7 cockpit entrypoint uses a strict TypeScript root mount and delegates to the preserved reviewed JSX module for the authenticated v2 session, snapshot, capability registry, and SSE event feed. The Vite output is the runtime bundle; no CDN runtime is required. | Current cockpit surface for Observe/Assist and governed command presentation; full source conversion, voice, humanoid, and engineering visuals remain disclosure-bound. |
+| `web/static/app.tsx` + `web/static/cockpit.tsx` + `web/static/app.jsx` | React 19 + React Router 7 cockpit uses a strict TypeScript root mount and fully checked TypeScript source for the authenticated v2 session, snapshot, capability registry, and SSE event feed. The historical JSX path is a compatibility re-export; the Vite output is the runtime bundle and no CDN runtime is required. | Current cockpit surface for Observe/Assist and governed command presentation; voice, humanoid, engineering visuals, accessibility, and performance evidence remain disclosure-bound. |
 | `src/javis_voice_multimodal.py` | Voice, CAD, visual, and briefing dataclasses remain adapter/fixture contracts. Server-owned verification is required; unavailable and unverified outputs are explicit. | Adapter contract and test fixture source, not evidence of real STT, anti-replay biometrics, CAD parsing, or visual analysis. |
 | SQLite/PostgreSQL state | `ControlPlaneStore` and `PostgresControlPlaneStore` persist tenants, principals, devices, sessions, capabilities, intents, plans, approvals, runs, actions, evidence, audit, events, outbox, rate limits, artifacts, memory, briefings, and sequences. Redis provides authenticated shared rate-limit coordination. | Local SQLite and shared PostgreSQL/Redis paths are implemented; managed backup, staging, and multi-process deployment evidence remain release gates. |
 | `/api/tick`, `/api/execute/{key}`, `/api/mutate`, `/api/rsi/upgrade` | Compatibility routes are retired with typed 410 responses; no privileged GET path is used by the authoritative app. | Preserve the safe migration response and use v2 typed plans/broker for future capability work. |
@@ -758,10 +758,10 @@ The command stream is authoritative for the current session and run. A client mu
 
 The web cockpit is the operational UI for ZASI. The current repository surface
 uses React 19 and React Router 7 with a strict TypeScript entrypoint
-(`web/static/app.tsx`). The reviewed application body remains in
-`web/static/app.jsx` behind an explicit compatibility import so the migration
-does not silently discard the existing governed behavior. Full application
-source conversion, accessibility/performance evidence, and the additional
+(`web/static/app.tsx`) and checked application source in
+`web/static/cockpit.tsx`. The historical `web/static/app.jsx` path is retained
+as an explicit compatibility re-export so the migration does not silently
+discard the existing governed behavior. Accessibility/performance evidence and the additional
 workspace surfaces remain v33 work.
 
 ### Views
