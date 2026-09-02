@@ -1833,8 +1833,11 @@ signed commit `6d0eaec`, with the documentation reconciliation in `15dd528`.
 release-gate head `e19d4de7e0d7d0e47745e0cf0982ab5b4806798a` and the prior
 implementation verification head `6d0eaec`, which includes the durable
 action-worker implementation, legacy-boundary hardening, and evidence updates.
-Those hosted results do not cover the current signed hardening heads above;
-hosted checks for the current branch head remain pending until it is pushed.
+The implementation hardening set above was hosted-validated in PR #29 at
+integration head `d1d620c3dc21a39c7e07a0f33ef4605b0eb54f55`: CodeQL,
+Actions/JavaScript-TypeScript/Python analysis, Python 3.11/3.12,
+React/TypeScript validation, distribution, Docker image, and Docker build all
+passed; PR-only GHCR publication remained skipped by policy.
 There is no
 staging deployment, production checkout, or production release authorization.
 The existing `.coverage` deletion is preserved and is not part of the
@@ -1876,7 +1879,7 @@ implementation claim.
 | `python3 scripts/generate_sbom.py --output dist/zasi-sbom.cdx.json --resolve-installed` in the isolated project environment | CycloneDX 1.5 SBOM generated with 376 components and a serial number | Local supply-chain evidence |
 | `(cd dist && sha256sum --check SHA256SUMS)` and GPG verification of wheel, sdist, and SBOM signatures | Passed with the configured cvsz signing identity | Local artifact integrity evidence |
 | PR #29 hosted checks for exact pushed head `d6e9df50f33939efdad75ebc615bb708a52c40d7` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12 with the isolated dependency audit, React/TypeScript validation, distribution, Docker image, and Docker build checks passed; PR package publication skipped. This head contains the signed implementation, legacy-boundary, rollback-rehearsal, and evidence-documentation commits. | Hosted CI evidence; not release approval |
-| Current signed implementation head `d169fa9b9e54ed0bf5263baa8e9bd36db5b05f59` | Control-plane, frontend, and container hardening commits are GPG-signed and locally verified; current local test, runtime, artifact, and SBOM evidence is recorded above. This head has not yet received hosted CI results. | Local commit/artifact provenance; hosted CI pending |
+| PR #29 hosted validation head `d1d620c3dc21a39c7e07a0f33ef4605b0eb54f55` | Control-plane, frontend, container, and evidence-documentation commits are GPG-signed and locally verified; local test, runtime, artifact, SBOM, and hosted checks are recorded above. PR-only GHCR publication was skipped by policy. | Hosted CI and local commit/artifact provenance; not release approval |
 | GitHub Issue #18 | Remains `OPEN`; current status comments are maintained in the [roadmap thread](https://github.com/cvsz/zasi/issues/18) | External roadmap status, not release approval |
 
 The `ResourceWarning` regression test is intentionally retained. The original
