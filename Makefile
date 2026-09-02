@@ -1,4 +1,4 @@
-.PHONY: all setup test test-api test-control-plane test-js test-all coverage clean build install server run docker-build docker-run ci help
+.PHONY: all setup test test-api test-control-plane test-js test-all coverage clean build sbom install server run docker-build docker-run ci help
 
 PYTHON ?= python3
 PIP ?= $(PYTHON) -m pip
@@ -35,6 +35,9 @@ clean:
 build:
 	$(PYTHON) -m build
 
+sbom:
+	$(PYTHON) scripts/generate_sbom.py --output dist/zasi-sbom.cdx.json --resolve-installed
+
 install: build
 	$(PIP) install $(PIP_FLAGS) --no-deps --force-reinstall dist/*.whl 2>/dev/null || $(PIP) install --no-deps --force-reinstall dist/*.whl
 
@@ -50,7 +53,7 @@ docker-build:
 docker-run:
 	docker run --rm -p 127.0.0.1:8080:8080 -e ZASI_API_KEY="$${ZASI_API_KEY:?ZASI_API_KEY must be set}" -e ZASI_CORS_ORIGINS="$${ZASI_CORS_ORIGINS:-http://localhost:8080}" zasi:32.0.0
 
-ci: test-all docker-build
+ci: test-all sbom docker-build
 
 help:
 	@echo "ZASI Full-Stack Automation Makefile"
@@ -61,6 +64,7 @@ help:
 	@echo "  make test-js     - Run React Router component structure tests"
 	@echo "  make test-all    - Run all unit, integration, and UI tests + coverage"
 	@echo "  make build       - Build wheel & sdist distributions"
+	@echo "  make sbom        - Generate a CycloneDX 1.5 dependency inventory"
 	@echo "  make install     - Build and install wheel"
 	@echo "  make server      - Start the authoritative authenticated ASGI control plane"
 	@echo "  make run         - Start the authoritative authenticated ASGI control plane"
