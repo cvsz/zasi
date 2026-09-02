@@ -6,7 +6,7 @@
 [![npm](https://img.shields.io/npm/v/zasi-cockpit.svg?logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/zasi-cockpit)
 [![Subsystems](https://img.shields.io/badge/subsystems-historical%20catalog-gray.svg)](docs/SUBSYSTEMS_REFERENCE.md)
 [![Tests](https://img.shields.io/badge/tests-299%20passing-brightgreen.svg)](tests/)
-[![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.14-blue.svg)](https://python.org)
+[![Python CI](https://img.shields.io/badge/CI%20Python-3.11%20%7C%203.12-blue.svg)](https://github.com/cvsz/zasi/actions/workflows/ci.yml)
 [![React](https://img.shields.io/badge/frontend-React%2019%20%2B%20TypeScript%20%2B%20React%20Router%20v7-61dafb.svg)](web/)
 [![Discussions](https://img.shields.io/badge/community-Discussions-orange.svg)](https://github.com/cvsz/zasi/discussions)
 [![License](https://img.shields.io/badge/license-MIT-purple.svg)](LICENSE)
@@ -14,7 +14,9 @@
 > The identity and release badges above are retained for repository continuity.
 > The subsystem badge describes the historical prototype snapshot; the test
 > badge reflects the latest full local suite. The governed reference profile
-> and current verification evidence are documented below.
+> and current verification evidence are documented below. The Python badge
+> reflects the versions exercised by CI; package metadata declares `>=3.9`, but
+> versions outside the CI matrix are not release-verified here.
 
 # ZASI — governed J.A.R.V.I.S. control-plane reference platform
 
