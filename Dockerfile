@@ -20,7 +20,7 @@ COPY --from=cockpit-build /frontend/web/dist /app/web/dist
 
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin zasi \
     && pip install --no-cache-dir . \
-    && mkdir -p /app/data \
+    && install -d -m 700 /app/data \
     && chown -R 10001:10001 /app
 
 EXPOSE 8080
