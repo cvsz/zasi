@@ -29,6 +29,13 @@ from src import (
 )
 
 def legacy_demo_main():
+    print(
+        "ZASI legacy demo is simulation-only and disabled. "
+        "Use the authenticated backend.app reference profile; no live "
+        "subsystem, hardware, RSI, or ASI capability is claimed."
+    )
+    return
+
     print("===================================================================")
     print("  ZASI v30.0.0-apex-prime       | 168-Subsystem Superintelligence ")
     print("===================================================================")

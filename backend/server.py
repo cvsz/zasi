@@ -63,6 +63,21 @@ ZASI_API_KEY = os.environ.get("ZASI_API_KEY", "")
 LEGACY_COMPAT_LOOPBACK = (
     os.environ.get("ZASI_ENABLE_LEGACY_COMPAT", "").strip().lower() == "yes"
 )
+# This module is retained for migration tests only.  The flag is deliberately
+# not environment-controlled: the authoritative runtime is backend.app, and
+# this compatibility process must never turn historical simulations into an
+# execution or capability surface.
+LEGACY_REFERENCE_ONLY = True
+LEGACY_REFERENCE_DISCLOSURE = (
+    "Legacy compatibility response from the governed reference profile; "
+    "live subsystem, hardware, external-write, RSI, and ASI capability "
+    "evidence is unavailable."
+)
+
+
+def _legacy_background_work_enabled() -> bool:
+    """Return whether a retired compatibility background worker may run."""
+    return not LEGACY_REFERENCE_ONLY
 
 # ---------------------------------------------------------------------------
 # Security: CORS origin + request body size cap
@@ -256,6 +271,8 @@ def _ws_client_thread(conn, addr):
 
 def _ws_telemetry_broadcaster():
     """Daemon thread: push telemetry+logs to all WS clients every 2 s."""
+    if not _legacy_background_work_enabled():
+        return
     while True:
         try:
             time.sleep(2)
@@ -323,6 +340,9 @@ def _is_safe_webhook_url(url: str) -> bool:
 
 def _fire_webhooks(event: str, payload: dict):
     """Asynchronously POST to all registered webhooks matching event."""
+    if not _legacy_background_work_enabled():
+        return
+
     def _send(url, data):
         allowed_hosts = frozenset(
             item.strip().lower()
@@ -659,7 +679,7 @@ OPENAPI_SPEC = {
     "info": {
         "title": "ZASI J.A.R.V.I.S. Superintelligence API",
         "version": "31.0.0",
-        "description": "REST API for the ZASI Omniversal Superintelligence platform.",
+        "description": "Legacy REST compatibility API for migration only.",
     },
     "servers": [{"url": "http://localhost:8080"}],
     "security": [{"ApiKeyAuth": []}],
@@ -674,7 +694,7 @@ OPENAPI_SPEC = {
                     "responses": {"200": {"description": "Operational status"}}}
         },
         "/api/telemetry": {
-            "get": {"summary": "Real-time hardware & subsystem telemetry",
+            "get": {"summary": "Local host telemetry with disabled capability fields",
                     "responses": {"200": {"description": "Telemetry snapshot"}}}
         },
         "/api/tick": {
@@ -682,7 +702,7 @@ OPENAPI_SPEC = {
                     "responses": {"200": {"description": "Tick result"}}}
         },
         "/api/subsystems": {
-            "get": {"summary": "Catalog of all 176 subsystems",
+            "get": {"summary": "Historical catalog of 176 prototype entries",
                     "responses": {"200": {"description": "Subsystem catalog"}}}
         },
         "/api/execute/{key}": {
@@ -784,7 +804,7 @@ OPENAPI_SPEC["info"] = {
     "title": "ZASI legacy compatibility API",
     "version": "32.0.0-compat",
     "description": (
-        "Non-authoritative migration surface. The historical action, chat, "
+        "Legacy, non-authoritative migration surface. The historical action, chat, "
         "MCP, RSI, and webhook routes are retired with HTTP 410. Use the "
         "authenticated /api/v2 control-plane API."
     ),
@@ -961,12 +981,14 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
         elif parsed.path == "/api/status":
             self.send_json_response({
                 "status": "READY",
-                "version": "32.0.0-apex-prime",
+                "version": "32.0.0-compat",
                 "subsystems_online": 0,
                 "subsystems_catalog_entries": 176,
                 "rsi_version": None,
+                "runtime_state": "disabled",
+                "capability_state": "unverified",
                 "evidence_state": "unavailable",
-                "disclosure": "This legacy compatibility status does not claim live subsystem or RSI availability.",
+                "disclosure": LEGACY_REFERENCE_DISCLOSURE,
                 "timestamp": time.time()
                 # NOTE: state.variables and invariants intentionally omitted
                 # (internal detail; access via authenticated /api/telemetry)
@@ -1291,6 +1313,25 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
     # ------------------------------------------------------------------ #
     def process_jarvis_command(self, query: str, persona: str = "JARVIS",
                                history: list = None) -> str:
+        if LEGACY_REFERENCE_ONLY:
+            lowered = (query or "").lower()
+            if any(word in lowered for word in ("cad", "step file", "mesh", "solidworks")):
+                subject = "CAD and STEP analysis"
+            elif any(word in lowered for word in ("vision", "screenshot", "competitor", "screen")):
+                subject = "vision analysis"
+            elif any(word in lowered for word in ("rsi", "upgrade", "self-improvement")):
+                subject = "runtime self-improvement"
+            elif any(word in lowered for word in ("tick", "pulse", "mutate", "hardware")):
+                subject = "state-changing or hardware operations"
+            else:
+                subject = "live capability reporting"
+            return (
+                f"{persona.upper()} legacy compatibility is retired; {subject} is "
+                "unavailable in the governed reference profile. "
+                "Use the authenticated /api/v2 control-plane contracts for "
+                "scoped, evidence-backed observations."
+            )
+
         # 1. Attempt cloud free-model routing (OpenRouter / OpenCode / Kilo / Gemini)
         if OPENROUTER_API_KEY or OPENCODE_API_KEY or KILO_API_KEY or GEMINI_API_KEY:
             try:
@@ -1375,6 +1416,16 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
             return f"Directive received: '{query}'. Processing across 176 subsystems with formal invariant guarantee, Sir."
 
     def execute_subsystem(self, key: str) -> dict:
+        if LEGACY_REFERENCE_ONLY:
+            return {
+                "subsystem": key,
+                "status": "disabled",
+                "active": False,
+                "runtime_state": "disabled",
+                "evidence_state": "unverified",
+                "disclosure": LEGACY_REFERENCE_DISCLOSURE,
+            }
+
         if key == "quantum_qec":
             rep = qec_engine.encode_logical_qubits(100, 1e-3)
             return {"subsystem": "QEC #85", "code": rep.code_type, "logical_error": rep.logical_error_rate}
@@ -1428,6 +1479,8 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
 # Feature 15: Scheduled daemon background ticks every 30 s
 # ---------------------------------------------------------------------------
 def _daemon_tick_loop():
+    if not _legacy_background_work_enabled():
+        return
     while True:
         time.sleep(30)
         try:
@@ -1466,20 +1519,20 @@ def run_backend(port=PORT):
     _init_db()
     _restore_state()
 
-    # WebSocket telemetry broadcaster thread
-    threading.Thread(
-        target=_ws_telemetry_broadcaster, daemon=True, name="ws-broadcaster"
-    ).start()
+    # The historical WebSocket broadcaster remains in source for migration
+    # reference, but is never started by this read-only compatibility server.
+    if _legacy_background_work_enabled():
+        threading.Thread(
+            target=_ws_telemetry_broadcaster, daemon=True, name="ws-broadcaster"
+        ).start()
 
-    # Scheduled daemon tick thread (Feature 15)
-    threading.Thread(
-        target=_daemon_tick_loop, daemon=True, name="daemon-tick"
-    ).start()
+    # The historical daemon tick remains in source for migration reference,
+    # but is never started by this read-only compatibility server.
 
     append_log(
         "SYSTEM",
-        "v32.0.0 online: WebSocket, auth, rate-limiting, SQLite, "
-        "webhooks, OpenAPI, SSE, Gemini integration ready.",
+        "Legacy compatibility server ready for read-only status, telemetry, "
+        "and catalog disclosures; side-effect routes remain retired.",
     )
 
     socketserver.TCPServer.allow_reuse_address = True

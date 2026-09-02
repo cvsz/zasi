@@ -1,16 +1,20 @@
 r"""
-ZASI Secure Holographic J.A.R.V.I.S. HUD & Authenticated REST API
-Includes Bearer Token Auth, RBAC (Admin/Operator/Auditor), Audit Logging, and Mutation Approval Gates.
+Retained J.A.R.V.I.S. reference HUD compatibility surface.
+
+The governed API is implemented by ``backend.app``. This module is not an
+RBAC or capability authority and is disabled unless a caller supplies an
+explicit bearer token.
 """
 import http.server
 import socketserver
 import json
 import threading
 import time
-from typing import Dict, Any, List
+from html import escape
+from typing import Dict, Any, List, Optional
 
 class ZASIWebServer:
-    def __init__(self, system_daemon, port: int = 8080, api_token: str = "zasi-apex-master-key-2026"):
+    def __init__(self, system_daemon, port: int = 8080, api_token: Optional[str] = None):
         self.daemon = system_daemon
         self.port = port
         self.api_token = api_token
@@ -30,17 +34,29 @@ class ZASIWebServer:
 
     def _get_system_snapshot(self) -> Dict[str, Any]:
         return {
-            "version": self.daemon.rsi_engine.current_version,
+            "version": "compat-reference",
             "variables": self.daemon.state.variables,
             "invariants": self.daemon.state.invariants,
             "telemetry_recent": self.daemon.telemetry_history[-5:] if self.daemon.telemetry_history else [],
-            "status": "OPERATIONAL",
+            "status": "reference",
+            "runtime_state": "disabled",
+            "evidence_state": "unverified",
+            "disclosure": (
+                "Retained HUD compatibility surface; daemon telemetry is "
+                "simulation/reference data and does not establish live capability."
+            ),
             "persona": "J.A.R.V.I.S.",
-            "auth_scheme": "BEARER_TOKEN_RBAC"
+            "auth_scheme": "EXPLICIT_BEARER_TOKEN_COMPAT"
         }
 
     def _generate_html_dashboard(self) -> str:
         snapshot = self._get_system_snapshot()
+        version = escape(str(snapshot["version"]))
+        status = escape(str(snapshot["status"]))
+        variables = escape(json.dumps(snapshot["variables"], ensure_ascii=False))
+        invariants = escape(json.dumps(snapshot["invariants"], ensure_ascii=False))
+        telemetry = escape(json.dumps(snapshot["telemetry_recent"], indent=2, ensure_ascii=False))
+        audit_log = escape(json.dumps(self.audit_log[-3:], indent=2, ensure_ascii=False))
         return f"""<!DOCTYPE html>
 <html>
 <head>
@@ -62,27 +78,27 @@ class ZASIWebServer:
     </style>
 </head>
 <body>
-    <h1>⚡ J.A.R.V.I.S. TACTICAL HUD <span class="badge">{snapshot['version']}</span></h1>
+    <h1>⚡ J.A.R.V.I.S. REFERENCE HUD <span class="badge">{version}</span></h1>
     <div class="grid">
         <div class="card">
-            <h3>Active Core Telemetry</h3>
-            <p><strong>Variables:</strong> {json.dumps(snapshot['variables'])}</p>
-            <p><strong>Formal Invariants:</strong> {json.dumps(snapshot['invariants'])}</p>
-            <p><strong>Status:</strong> <span style="color: #4ade80;">{snapshot['status']}</span></p>
+            <h3>Reference Telemetry (disabled runtime)</h3>
+            <p><strong>Variables:</strong> {variables}</p>
+            <p><strong>Formal Invariants:</strong> {invariants}</p>
+            <p><strong>Status:</strong> <span style="color: #4ade80;">{status}</span></p>
             <button class="btn" onclick="speakStatus()">🔊 Voice Status Report</button>
             <div id="canvas3d" style="margin-top: 15px;"></div>
         </div>
         <div class="card">
             <h3>Autonomous Cognitive Telemetry Stream</h3>
-            <pre>{json.dumps(snapshot['telemetry_recent'], indent=2)}</pre>
+            <pre>{telemetry}</pre>
             <h3>Security & Audit Log</h3>
-            <pre>{json.dumps(self.audit_log[-3:], indent=2)}</pre>
+            <pre>{audit_log}</pre>
         </div>
     </div>
     <script>
         function speakStatus() {{
             if ('speechSynthesis' in window) {{
-                const utterance = new SpeechSynthesisUtterance("All forty-four ZASI subsystems are operating nominally, Sir. Security and RBAC authorization active.");
+                const utterance = new SpeechSynthesisUtterance("ZASI reference HUD. Live subsystem and hardware capability evidence is unavailable.");
                 utterance.pitch = 0.9;
                 utterance.rate = 1.05;
                 window.speechSynthesis.speak(utterance);
@@ -114,6 +130,12 @@ class ZASIWebServer:
 </html>"""
 
     def start(self):
+        if not self.api_token:
+            print(
+                "  [J.A.R.V.I.S. Reference HUD] disabled: an explicit bearer "
+                "token is required; use backend.app for the authoritative API."
+            )
+            return
         parent = self
         class RequestHandler(http.server.BaseHTTPRequestHandler):
             def do_GET(self):
@@ -147,7 +169,7 @@ class ZASIWebServer:
 
         try:
             socketserver.TCPServer.allow_reuse_address = True
-            self.server = socketserver.TCPServer(("", self.port), RequestHandler)
+            self.server = socketserver.TCPServer(("127.0.0.1", self.port), RequestHandler)
             self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
             self.thread.start()
             print(f"  [J.A.R.V.I.S. Tactical HUD] Secure API Running at http://localhost:{self.port}")
