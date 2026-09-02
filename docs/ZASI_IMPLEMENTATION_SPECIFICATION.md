@@ -1853,6 +1853,13 @@ The egress DNS-deadline hardening is in signed commits
 merged the exact head `f45411dfbe4b3deec6d81e1b29c692dde90ead67` into main at
 `2d02b85e34061a1b64dceb6c469fc8b094c9c39d` after all required hosted checks
 passed.
+The current validation-evidence refresh is in signed commit
+`7613070cc5beb36103058fdad0b88e9600a2c995`; PR [#38](https://github.com/cvsz/zasi/pull/38)
+merged that exact head into main at
+`979bff476c6afa711d36856ad6200c162f0dba6b` after the required hosted
+Python 3.11/3.12, syntax/type, distribution, Docker, CodeQL, and
+Actions/JavaScript-TypeScript analysis checks passed. PR-only GHCR publication
+remained intentionally skipped.
 The release-publication and schema-preserving backup hardening was merged by
 PR [#31](https://github.com/cvsz/zasi/pull/31), in signed commits
 `e972295` and `84e4f99`; the protected RACER and J.A.R.V.I.S. reference files
@@ -1874,6 +1881,12 @@ documentation and publication-permission correction at exact head
 `1e0f8735263bbf7171a8a18edb855c27a88051bd`.
 There is no
 staging deployment, production checkout, or production release authorization.
+The fresh 2026-09-02 external-gate inventory found no GitHub `staging`
+environment, staging secrets, or staging variables, and no configured local
+managed-secret provider or client. The host-level PostgreSQL and Redis
+services are available for local/reference validation only; this absence of
+staging and managed-secret infrastructure is an open release blocker, not a
+successful staging check.
 The existing `.coverage` deletion is preserved and is not part of the
 implementation claim.
 
@@ -1915,7 +1928,7 @@ implementation claim.
 | ASGI smoke: session bootstrap, authenticated OpenAPI, header-based SSE resume, `/health/live`, `/health/ready`, `/`, and an unknown API route | Session `201`; authenticated OpenAPI `200`; SSE resume `200` with `stream.end`; liveness/readiness/root `200`; unknown API route returned JSON 404 | Local HTTP smoke |
 | `docker build --pull -t zasi:architecture-implementation .` | Passed for the implementation branch | Local container build |
 | `docker build --pull` plus isolated hardened container smoke | Current image returned HTTP `200` from `/health/ready` with `status=ready`, schema 11, and frontend bundle `ready`; UID `10001:10001`, `/app/main.py` present, read-only rootfs, all capabilities dropped, no-new-privileges, PID limit `128`, and memory limit `512 MiB` were verified; external egress, research execution, and physical actuation reported disabled; temporary container was removed | Local runtime/container evidence |
-| `python3 scripts/generate_sbom.py --output zasi-sbom.cdx.json --resolve-installed` in the isolated project environment | CycloneDX 1.5 SBOM generated with 364 components, zero duplicate coordinates or `bom-ref` values, and the selected `psycopg-binary` extra present | Local supply-chain evidence |
+| `python3 scripts/generate_sbom.py --output zasi-sbom.cdx.json --resolve-installed` in the isolated project environment | CycloneDX 1.5 SBOM generated with 362 components, zero duplicate coordinates or `bom-ref` values, and the selected `psycopg-binary` extra present | Local supply-chain evidence |
 | `(cd dist && sha256sum --check SHA256SUMS)` and GPG verification of wheel, sdist, and SBOM signatures | Passed with the configured cvsz signing identity | Local artifact integrity evidence |
 | PR #29 hosted checks for exact merged head `c713a19be0aee6b7ab4bc0719238c6cc6b9ad50f` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12 with the isolated dependency audit, React/TypeScript validation, distribution, Docker image, and Docker build checks passed; PR package publication skipped. | Historical hosted CI evidence; not release approval |
 | PR #31 hosted checks for exact merged head `7bc520ec3f01d8461ebd1a370a932bb2ca94267a` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12, React/TypeScript validation, distribution, Docker image, and Docker build checks passed; PR-only GHCR publication was skipped. | Current merged hosted CI evidence; not release approval |
@@ -1923,6 +1936,8 @@ implementation claim.
 | PR #34 hosted checks for exact merged head `77a7dfaa5f141e7aa36ddc13e5cba38efa6655b3` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12, React/TypeScript validation, distribution, Docker image, and Docker build checks passed; PR #34 merged at `9431f9024863dec29c382a957cf9aecad029a9b8`. | Current merged hosted CI evidence; packaged artifact still requires real per-platform runtimes |
 | PR #35 hosted checks for exact merged head `898ddf360f61ea9434b533e65f13fbdda1759b46` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12, React/TypeScript validation, distribution, Docker image, and Docker build checks passed; the P1 packaged-state, canonical-home, symlink-containment, and Windows-separator repairs merged at `2332ada8c30914f0051add591c15d3aba1cd1c81`. | Current merged hosted CI evidence; packaged artifact still requires real per-platform runtimes |
 | PR #37 hosted checks for exact merged head `f45411dfbe4b3deec6d81e1b29c692dde90ead67` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12, React/TypeScript validation, distribution, Docker image, and Docker build checks passed; bounded DNS resolution and absolute-deadline repairs merged at `2d02b85e34061a1b64dceb6c469fc8b094c9c39d`. | Current merged hosted CI evidence; external egress remains disabled by default |
+| PR #38 hosted checks for exact merged head `7613070cc5beb36103058fdad0b88e9600a2c995` | Actions/JavaScript-TypeScript/Python analysis, Python 3.11/3.12, syntax/type, distribution, Docker image/build, and CodeQL checks passed; PR #38 merged at `979bff476c6afa711d36856ad6200c162f0dba6b`; PR-only GHCR publication was skipped. | Current merged hosted CI evidence; not release approval |
+| GitHub environment and managed-secret inventory on 2026-09-02 UTC | GitHub exposes publish/pages environments but no `staging` environment or staging secret/variable scope; no managed-secret client or provider credential is configured on the validation host | External release-gate inventory; missing infrastructure remains an open blocker |
 | GitHub Issue #18 | Remains `OPEN`; current status comments are maintained in the [roadmap thread](https://github.com/cvsz/zasi/issues/18) | External roadmap status, not release approval |
 
 The `ResourceWarning` regression test is intentionally retained. The original
