@@ -30,6 +30,42 @@ Quarantined artifact files live outside the web bundle. PostgreSQL profiles use
 `ControlPlaneStore.backup_to()`. Restore into a clean validation environment
 before calling a backup usable.
 
+## Encrypted backup and restore gate
+
+The repository includes `scripts/backup_control_plane.py` and the installed
+`zasi-backup` console command, which wrap a SQLite database or PostgreSQL
+custom-format dump in an AES-256-GCM envelope.
+The package requires a cryptography release at or above `46.0.7` because older
+releases are not an acceptable production baseline.
+The key is supplied only through `ZASI_BACKUP_KEY_B64`; a staging or production
+secret provider must inject that variable at process start. The key is not
+stored in the archive, command output, repository, or deployment manifest.
+
+Generate a one-off local validation key and exercise the shared PostgreSQL
+backup path as follows:
+
+```bash
+export ZASI_BACKUP_KEY_B64="$(python3 -c 'import base64,secrets; print(base64.b64encode(secrets.token_bytes(32)).decode())')"
+backup_path="./data/backup/control-plane-$(date -u +%Y%m%dT%H%M%SZ).zasi"
+mkdir -p "$(dirname "$backup_path")"
+python3 scripts/backup_control_plane.py create \
+  --backend postgresql \
+  --database-url "$ZASI_DATABASE_URL" \
+  --destination "$backup_path"
+python3 scripts/backup_control_plane.py validate \
+  --backend postgresql \
+  --backup "$backup_path"
+```
+
+The timestamp is generated at runtime and stored in `backup_path`; there is no
+filename default. For SQLite, replace the backend and
+database URL with `--source ./data/zasi_control_plane.db`. A restore must name
+an explicit target; SQLite replacement requires `--replace`, and PostgreSQL
+replacement adds `--clean --if-exists`. Validate an archive before any restore.
+The local encrypted archive validation is evidence for cryptographic envelope,
+integrity, and restore mechanics only; it is not managed object storage,
+retention, key rotation, staging restore, or rollback evidence.
+
 ## Container reference profile
 
 ```bash

@@ -13,6 +13,7 @@ setup(
             "zasi=backend.app:run",
             "zasi-legacy=src.cli:main",
             "zasi-demo=main:legacy_demo_main",
+            "zasi-backup=scripts.backup_control_plane:main",
         ]
     }
 )

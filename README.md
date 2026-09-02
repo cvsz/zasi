@@ -5,7 +5,7 @@
 [![PyPI Downloads](https://img.shields.io/pypi/dm/zasi.svg?color=blue)](https://pypi.org/project/zasi/)
 [![npm](https://img.shields.io/npm/v/zasi-cockpit.svg?logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/zasi-cockpit)
 [![Subsystems](https://img.shields.io/badge/subsystems-historical%20catalog-gray.svg)](docs/SUBSYSTEMS_REFERENCE.md)
-[![Tests](https://img.shields.io/badge/tests-225%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-235%20passing-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.14-blue.svg)](https://python.org)
 [![React](https://img.shields.io/badge/frontend-React%2019%20%2B%20TypeScript%20%2B%20React%20Router%20v7-61dafb.svg)](web/)
 [![Discussions](https://img.shields.io/badge/community-Discussions-orange.svg)](https://github.com/cvsz/zasi/discussions)
@@ -90,9 +90,15 @@ PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q
 python3 -m unittest tests.test_control_plane_core tests.test_control_plane_broker tests.test_control_plane_api tests.test_security_hardening tests.test_egress_security -q
 node tests/test_components.js
 npm run typecheck
+npm audit --omit=dev
 npm run build
 python3 -m build
 ```
+
+Encrypted backup validation is available through
+`python3 scripts/backup_control_plane.py` (or the installed `zasi-backup`
+console command); it requires a 32-byte `ZASI_BACKUP_KEY_B64` injected at
+runtime and never uses a repository default.
 
 The checked-in example contains only a generated loopback-only API credential
 and uses SQLite for a portable local baseline; it contains no shared-service

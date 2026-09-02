@@ -25,9 +25,16 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: "20" }
       - name: Install and build bundled cockpit
-        run: npm ci --ignore-scripts && npm run typecheck && npm run build
+        run: npm ci --ignore-scripts && npm audit --omit=dev && npm run typecheck && npm run build
       - name: Install dependencies
         run: pip install '.[dev]' build coverage
+      - name: Audit project Python dependencies
+        run: |
+          audit_env="$RUNNER_TEMP/zasi-python-audit"
+          python3 -m venv "$audit_env"
+          "$audit_env/bin/python" -m pip install --upgrade pip
+          "$audit_env/bin/python" -m pip install '.[dev]' pip-audit
+          "$audit_env/bin/pip-audit" --local
       - name: Run unit tests
         run: python3 -m unittest discover -s tests -q
       - name: Run coverage
@@ -52,7 +59,7 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: "20" }
       - name: Build bundled cockpit before packaging
-        run: npm ci --ignore-scripts && npm run typecheck && npm run build
+        run: npm ci --ignore-scripts && npm audit --omit=dev && npm run typecheck && npm run build
       - run: pip install '.[dev]' build
       - name: Build wheel and sdist
         run: python3 -m build

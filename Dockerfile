@@ -15,6 +15,7 @@ ENV PYTHONUNBUFFERED=1 \
 COPY pyproject.toml README.md /app/
 COPY backend /app/backend
 COPY src /app/src
+COPY scripts /app/scripts
 COPY --from=cockpit-build /frontend/web/dist /app/web/dist
 
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin zasi \
