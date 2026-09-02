@@ -32,7 +32,7 @@ jobs:
         run: |
           audit_env="$RUNNER_TEMP/zasi-python-audit"
           python3 -m venv "$audit_env"
-          "$audit_env/bin/python" -m pip install --upgrade pip
+          "$audit_env/bin/python" -m pip install --upgrade pip setuptools wheel
           "$audit_env/bin/python" -m pip install '.[dev]' pip-audit
           "$audit_env/bin/pip-audit" --local
       - name: Run unit tests
