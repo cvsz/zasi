@@ -25,6 +25,24 @@ function isDirectory(directoryPath) {
   }
 }
 
+function isPathWithin(rootPath, candidatePath) {
+  const relativePath = path.relative(rootPath, candidatePath);
+  return relativePath === ''
+    || (relativePath !== '..'
+      && !relativePath.startsWith(`..${path.sep}`)
+      && !path.isAbsolute(relativePath));
+}
+
+function isContainedFile(filePath, rootPath) {
+  try {
+    const realRoot = fs.realpathSync(rootPath);
+    const realFile = fs.realpathSync(filePath);
+    return isPathWithin(realRoot, realFile) && realFile !== realRoot;
+  } catch {
+    return false;
+  }
+}
+
 function isRunnable(filePath, platform) {
   try {
     const stat = fs.statSync(filePath);
@@ -39,7 +57,58 @@ function runtimeExecutablePath(runtimeRoot, platform) {
   const candidates = platform === 'win32'
     ? [path.join(platformRoot, 'Scripts', 'python.exe'), path.join(platformRoot, 'python.exe')]
     : [path.join(platformRoot, 'bin', 'python3'), path.join(platformRoot, 'bin', 'python')];
-  return candidates.find((candidate) => isRunnable(candidate, platform)) || null;
+  return candidates.find((candidate) => (
+    isRunnable(candidate, platform) && isContainedFile(candidate, platformRoot)
+  )) || null;
+}
+
+function normalizeRuntimeHome(home) {
+  return home.replace(/[\\/]+/g, path.sep);
+}
+
+function isRelativeRuntimeHome(home) {
+  if (!home || path.isAbsolute(home) || path.win32.isAbsolute(home)) return false;
+  const normalized = normalizeRuntimeHome(home);
+  let depth = 0;
+  for (const segment of normalized.split('/')) {
+    if (!segment || segment === '.') continue;
+    if (segment === '..') {
+      depth -= 1;
+      if (depth < 0) return false;
+    } else {
+      depth += 1;
+    }
+  }
+  return true;
+}
+
+function hasRelocatablePythonHome(platformRoot) {
+  const configPath = path.join(platformRoot, 'pyvenv.cfg');
+  if (!isFile(configPath) || !isContainedFile(configPath, platformRoot)) return false;
+  let config;
+  try {
+    config = fs.readFileSync(configPath, 'utf8');
+  } catch {
+    return false;
+  }
+  const homeMatch = config.match(/^\s*home\s*=\s*(.+?)\s*$/im);
+  if (!homeMatch || !isRelativeRuntimeHome(homeMatch[1])) return false;
+  const rootPath = path.resolve(platformRoot);
+  const homePath = path.resolve(rootPath, normalizeRuntimeHome(homeMatch[1]));
+  try {
+    const realRoot = fs.realpathSync(rootPath);
+    const realHome = fs.realpathSync(homePath);
+    return isPathWithin(realRoot, realHome) && isDirectory(realHome);
+  } catch {
+    return false;
+  }
+}
+
+function isValidRuntimeBundle(runtimeRoot, platform) {
+  const platformRoot = path.join(runtimeRoot, platform);
+  return isDirectory(platformRoot)
+    && Boolean(runtimeExecutablePath(runtimeRoot, platform))
+    && hasRelocatablePythonHome(platformRoot);
 }
 
 function hasBundledApp(appRoot) {
@@ -58,8 +127,7 @@ function resolvePackagingConfig({ runtimeRoot, appRoot = path.resolve(__dirname,
   }
   const resolvedRuntimeRoot = path.resolve(String(runtimeRoot));
   for (const platform of TARGET_PLATFORMS) {
-    const executable = runtimeExecutablePath(resolvedRuntimeRoot, platform);
-    if (!executable || !isFile(path.join(resolvedRuntimeRoot, platform, 'pyvenv.cfg'))) {
+    if (!isValidRuntimeBundle(resolvedRuntimeRoot, platform)) {
       throw packagingError(
         'ELECTRON_RUNTIME_INCOMPLETE',
         `The Electron runtime bundle for ${platform} is missing a runnable Python environment.`,
@@ -92,4 +160,8 @@ function resolvePackagingConfig({ runtimeRoot, appRoot = path.resolve(__dirname,
   };
 }
 
-module.exports = { resolvePackagingConfig, runtimeExecutablePath };
+module.exports = {
+  isValidRuntimeBundle,
+  resolvePackagingConfig,
+  runtimeExecutablePath,
+};

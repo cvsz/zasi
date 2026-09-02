@@ -207,6 +207,15 @@ closed without these runtimes and places the backend, source, config, and
 frontend resources outside `asar`; no desktop artifact is usable until its
 packaged runtime has been launched and readiness-checked.
 
+Packaged startup defaults SQLite state to
+`app.getPath('userData')/data/zasi_control_plane.db` and artifact quarantine to
+`app.getPath('userData')/artifacts`. Explicit `ZASI_DATABASE_PATH` and
+`ZASI_ARTIFACT_DIRECTORY` values must be absolute in packaged mode. The runtime
+validator also requires a relative `pyvenv.cfg` `home` that resolves inside the
+platform bundle and rejects interpreter/configuration/home symlinks escaping
+it. Windows-style relative home separators are normalized while validating
+cross-platform runtime inputs.
+
 ## Environment contract
 
 | Variable | Local behavior |

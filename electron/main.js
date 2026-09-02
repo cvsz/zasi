@@ -2,7 +2,7 @@ const { app, BrowserWindow } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
-const { resolveBackendLaunch } = require('./runtime');
+const { applyPackagedStateDefaults, resolveBackendLaunch } = require('./runtime');
 
 const BACKEND_ORIGIN = 'http://127.0.0.1:8080';
 const READY_PATH = '/health/ready';
@@ -21,6 +21,7 @@ function startBackend(runtimeOptions = {}) {
   if (!process.env.ZASI_API_KEY || !process.env.ZASI_API_KEY.trim()) {
     throw new Error('ZASI_API_KEY is required before starting the Electron shell');
   }
+  const packaged = runtimeOptions.packaged ?? app.isPackaged === true;
   const launchEnv = {
     ...process.env,
     ZASI_PROFILE: process.env.ZASI_PROFILE || 'local',
@@ -30,9 +31,15 @@ function startBackend(runtimeOptions = {}) {
   };
   const launch = resolveBackendLaunch({
     ...runtimeOptions,
-    packaged: runtimeOptions.packaged ?? app.isPackaged === true,
+    packaged,
     env: launchEnv,
   });
+  if (packaged) {
+    launch.env = applyPackagedStateDefaults(
+      launch.env,
+      runtimeOptions.userDataPath ?? app.getPath('userData'),
+    );
+  }
   const child = spawn(launch.command, launch.args, {
     cwd: launch.cwd,
     env: launch.env,

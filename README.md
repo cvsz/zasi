@@ -111,6 +111,15 @@ The build copies those runtimes and the backend/frontend resources outside the
 Electron `asar` archive. A generated desktop artifact is not considered usable
 without a successful packaged-runtime build and launch check.
 
+Packaged startup stores SQLite state and quarantined artifacts under Electron's
+writable `app.getPath('userData')` directory when those paths are not supplied.
+Any explicit packaged `ZASI_DATABASE_PATH` or `ZASI_ARTIFACT_DIRECTORY` must be
+absolute; relative paths are rejected so installed resources cannot become the
+state directory. Each runtime's `pyvenv.cfg` must use a relative `home` inside
+the bundled platform root, and interpreter/configuration/home symlinks that
+resolve outside that root are rejected. Windows-style relative home separators
+are normalized during cross-platform packaging validation.
+
 ## Verification
 
 ```bash
