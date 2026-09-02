@@ -4893,8 +4893,8 @@ class ControlPlaneStore:
             connection.execute("BEGIN IMMEDIATE")
             try:
                 run, action = self._action_and_run_locked(connection, run_id, tenant_id)
-                if action["status"] == "running":
-                    if action["lease_until"] is not None and action["lease_until"] <= now_value:
+                if action["status"] in {"running", "cancel_requested"}:
+                    if action["lease_until"] is None or action["lease_until"] <= now_value:
                         self._mark_action_unknown_locked(
                             connection,
                             run,

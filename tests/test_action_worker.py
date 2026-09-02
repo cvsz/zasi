@@ -302,6 +302,35 @@ class ActionWorkerTests(unittest.TestCase):
         )
         self.assertEqual(completed["status"], "unknown")
 
+    def test_cancel_requested_lease_expiry_becomes_unknown(self):
+        submitted = self._submit("cancel-expired")
+        base = dt.datetime.now(dt.timezone.utc)
+        claimed = self.store.claim_action(
+            submitted.run_id,
+            "tenant-a",
+            "action-worker-a",
+            lease_seconds=1,
+            now=base,
+        )
+        self.assertIsNotNone(claimed)
+        requested = self.store.cancel_run(
+            submitted.run_id, "tenant-a", "principal-a"
+        )
+        self.assertEqual(requested["status"], "cancel_requested")
+
+        self.assertIsNone(
+            self.store.claim_action(
+                submitted.run_id,
+                "tenant-a",
+                "action-worker-b",
+                lease_seconds=1,
+                now=base + dt.timedelta(seconds=2),
+            )
+        )
+        expired = self.store.get_run(submitted.run_id, "tenant-a")
+        self.assertEqual(expired["status"], "unknown")
+        self.assertEqual(expired["unknown_reason"], "lease_expired")
+
     def test_inline_execute_uses_the_durable_worker_path(self):
         result = self.broker.execute(
             tenant_id="tenant-a",
