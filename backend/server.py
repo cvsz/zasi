@@ -77,7 +77,16 @@ LEGACY_REFERENCE_DISCLOSURE = (
 
 def _legacy_background_work_enabled() -> bool:
     """Return whether a retired compatibility background worker may run."""
-    return not LEGACY_REFERENCE_ONLY
+    # The compatibility process is permanently read-only.  This is a code
+    # invariant rather than an environment/configuration switch.
+    return False
+
+
+def _legacy_surface_is_retired() -> bool:
+    """Keep all direct legacy capability entry points fail-closed."""
+    # Do not use LEGACY_REFERENCE_ONLY here: in-process callers can mutate a
+    # module global, but they must never be able to re-enable retired code.
+    return True
 
 # ---------------------------------------------------------------------------
 # Security: CORS origin + request body size cap
@@ -1313,7 +1322,7 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
     # ------------------------------------------------------------------ #
     def process_jarvis_command(self, query: str, persona: str = "JARVIS",
                                history: list = None) -> str:
-        if LEGACY_REFERENCE_ONLY:
+        if _legacy_surface_is_retired():
             lowered = (query or "").lower()
             if any(word in lowered for word in ("cad", "step file", "mesh", "solidworks")):
                 subject = "CAD and STEP analysis"
@@ -1416,7 +1425,7 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
             return f"Directive received: '{query}'. Processing across 176 subsystems with formal invariant guarantee, Sir."
 
     def execute_subsystem(self, key: str) -> dict:
-        if LEGACY_REFERENCE_ONLY:
+        if _legacy_surface_is_retired():
             return {
                 "subsystem": key,
                 "status": "disabled",
