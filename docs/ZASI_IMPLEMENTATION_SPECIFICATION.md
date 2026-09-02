@@ -1756,13 +1756,16 @@ Every capability that cannot complete this path remains disabled, simulated, res
 
 Evidence capture date: **2026-09-02 UTC**. The results below distinguish local
 working-tree evidence, the signed implementation commits, hosted PR checks, and
-unverified deployment gates. The substantive PostgreSQL/Redis, CI, cockpit, and
-encrypted-backup hardening implementation is recorded through signed code
-commit `49bba1c`. PR [#29](https://github.com/cvsz/zasi/pull/29) passed hosted
-checks for exact pushed verification head `588da33`, which contains that code
-commit. There is no staging deployment, production checkout, or production
-release authorization. The existing `.coverage` deletion is preserved and is
-not part of the implementation claim.
+unverified deployment gates. The core PostgreSQL/Redis, CI, cockpit, and
+encrypted-backup hardening is recorded through signed code commit `49bba1c`,
+with the scheduler fixture and bounded outbox worker follow-up in signed
+commits `25ad5f3` and `1c1dd62`. PR [#29](https://github.com/cvsz/zasi/pull/29) passed hosted
+checks for exact pushed verification head `f7f313932696c953300bda6ca3c7676f5a8cf29f`,
+which includes the bounded outbox worker and evidence updates; the hosted
+verification row below records that application-code head. There is no
+staging deployment, production checkout, or production release authorization.
+The existing `.coverage` deletion is preserved and is not part of the
+implementation claim.
 
 | Command or inspection | Observed result | Evidence class |
 |---|---|---|
@@ -1793,7 +1796,7 @@ not part of the implementation claim.
 | `docker build --pull` plus isolated hardened container smoke | Current image returned HTTP `200` from `/health/ready` with `status=ready` and schema 9; UID `10001:10001`, read-only rootfs, all capabilities dropped, no-new-privileges, PID limit, memory limit, and CPU limit were verified; external egress, research execution, and physical actuation reported disabled; temporary container was removed | Local runtime/container evidence |
 | `python3 scripts/generate_sbom.py --output dist/zasi-sbom.cdx.json --resolve-installed` in the isolated project environment | CycloneDX 1.5 SBOM generated with 370 components and deterministic serial; the environment resolved cryptography 50.0.1 | Local supply-chain evidence |
 | `sha256sum --check dist/SHA256SUMS` and GPG verification of wheel, sdist, and SBOM signatures | Passed with the configured cvsz signing identity | Local artifact integrity evidence |
-| PR #29 hosted checks for exact pushed verification head `588da33` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12 with the isolated dependency audit, React/TypeScript validation, distribution, and Docker checks passed; PR package publication skipped. This head contains signed implementation commit `49bba1c`. | Hosted CI evidence; not release approval |
+| PR #29 hosted checks for exact pushed verification head `f7f3139` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12 with the isolated dependency audit, React/TypeScript validation, distribution, Docker image, and Docker build checks passed; PR package publication skipped. This head contains signed worker commit `1c1dd62` and signed evidence commit `f7f3139`. | Hosted CI evidence; not release approval |
 | GitHub Issue #18 | Remains `OPEN`; current status comments are maintained in the [roadmap thread](https://github.com/cvsz/zasi/issues/18) | External roadmap status, not release approval |
 
 The `ResourceWarning` regression test is intentionally retained. The original
