@@ -5,10 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "zasi"
 version = "32.0.0"
-description = "Omniscient Sovereign Artificial Superintelligence (ASI) Architecture"
+description = "Governed J.A.R.V.I.S. control-plane reference platform"
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     { name = "ZASI Core Team" }
 ]
@@ -17,7 +18,11 @@ classifiers = [
     "Operating System :: POSIX :: Linux",
     "Topic :: Scientific/Engineering :: Artificial Intelligence"
 ]
-dependencies = []
+dependencies = [
+    "fastapi>=0.115.0,<1.0.0",
+    "pydantic>=2.8.0,<3.0.0",
+    "uvicorn>=0.34.0,<1.0.0",
+]
 
 [project.optional-dependencies]
 formal = [
@@ -25,13 +30,15 @@ formal = [
 ]
 dev = [
     "pytest>=7.0.0",
-    "black>=23.0.0"
+    "black>=23.0.0",
+    "httpx>=0.28.0,<1.0.0"
 ]
 
 [project.scripts]
-zasi = "src.cli:main"
-zasi-core = "main:main"
+zasi = "backend.app:run"
+zasi-legacy = "src.cli:main"
+zasi-demo = "main:legacy_demo_main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["src*"]
+include = ["src*", "backend*"]

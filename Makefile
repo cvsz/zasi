@@ -1,4 +1,4 @@
-.PHONY: all setup test test-api test-js test-all coverage clean build install server run docker-build docker-run ci help
+.PHONY: all setup test test-api test-control-plane test-js test-all coverage clean build install server run docker-build docker-run ci help
 
 PYTHON ?= python3
 PIP ?= $(PYTHON) -m pip
@@ -17,6 +17,9 @@ test:
 test-api:
 	$(PYTHON) -m unittest tests.test_api
 
+test-control-plane:
+	$(PYTHON) -m unittest tests.test_control_plane_core tests.test_control_plane_broker tests.test_control_plane_api tests.test_security_hardening tests.test_egress_security
+
 test-js:
 	node tests/test_components.js
 
@@ -29,35 +32,36 @@ coverage:
 clean:
 	rm -rf build/ dist/ *.egg-info .coverage htmlcov/ data/*.db
 
-build: clean
+build:
 	$(PYTHON) -m build
 
 install: build
 	$(PIP) install $(PIP_FLAGS) --no-deps --force-reinstall dist/*.whl 2>/dev/null || $(PIP) install --no-deps --force-reinstall dist/*.whl
 
 server:
-	ZASI_PORT=$(PORT) $(PYTHON) backend/server.py
+	ZASI_API_KEY="$${ZASI_API_KEY:?ZASI_API_KEY must be set}" ZASI_PORT=$(PORT) $(PYTHON) -m backend.app
 
 run:
-	$(PYTHON) main.py
+	ZASI_API_KEY="$${ZASI_API_KEY:?ZASI_API_KEY must be set}" $(PYTHON) -m backend.app
 
 docker-build:
 	docker build -t zasi:32.0.0 .
 
 docker-run:
-	docker run -p 8080:8080 zasi:32.0.0
+	docker run --rm -p 127.0.0.1:8080:8080 -e ZASI_API_KEY="$${ZASI_API_KEY:?ZASI_API_KEY must be set}" -e ZASI_CORS_ORIGINS="$${ZASI_CORS_ORIGINS:-http://localhost:8080}" zasi:32.0.0
 
 ci: test-all docker-build
 
 help:
 	@echo "ZASI Full-Stack Automation Makefile"
 	@echo "  make setup       - Install build dependencies"
-	@echo "  make test        - Run 165 unit tests"
-	@echo "  make test-api    - Run backend REST/WebSocket integration tests"
+	@echo "  make test        - Run the Python test suite"
+	@echo "  make test-api    - Run legacy compatibility tests"
+	@echo "  make test-control-plane - Run governed API, broker, persistence, and security tests"
 	@echo "  make test-js     - Run React Router component structure tests"
 	@echo "  make test-all    - Run all unit, integration, and UI tests + coverage"
 	@echo "  make build       - Build wheel & sdist distributions"
 	@echo "  make install     - Build and install wheel"
-	@echo "  make server      - Start J.A.R.V.I.S. React Router & REST/MCP server"
-	@echo "  make run         - Run dialectical pipeline"
-	@echo "  make docker-build- Build Docker image"
+	@echo "  make server      - Start the authoritative authenticated ASGI control plane"
+	@echo "  make run         - Start the authoritative authenticated ASGI control plane"
+	@echo "  make docker-build - Build the non-root control-plane image"

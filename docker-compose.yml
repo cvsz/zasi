@@ -1,19 +1,43 @@
-version: "3.9"
-
 services:
   zasi:
     build:
       context: .
       dockerfile: Dockerfile
-    image: zasi-jarvis:31.0.0
+    image: zasi-jarvis:32.0.0-control-plane
     container_name: zasi-jarvis
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     volumes:
       - ./data:/app/data
     environment:
-      - ZASI_PORT=8080
-      # Set these in your shell or a .env file:
-      # - ZASI_API_KEY=your-secret-key
-      # - GEMINI_API_KEY=your-gemini-key
+      # The bundled image is the local/reference profile until a PostgreSQL,
+      # managed-secret, backup, and deployment evidence bundle is supplied.
+      ZASI_PROFILE: ${ZASI_PROFILE:-local}
+      ZASI_HOST: 0.0.0.0
+      ZASI_PORT: "8080"
+      ZASI_ALLOW_PUBLIC_BIND: "yes"
+      ZASI_API_KEY: ${ZASI_API_KEY:?ZASI_API_KEY must be set}
+      ZASI_CORS_ORIGINS: ${ZASI_CORS_ORIGINS:?ZASI_CORS_ORIGINS must be set}
+      ZASI_DATABASE_PATH: /app/data/zasi_control_plane.db
+      ZASI_ARTIFACT_DIRECTORY: /app/data/artifacts
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
+    mem_limit: 512m
+    cpus: 1.0
     restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python3
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready', timeout=3)
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

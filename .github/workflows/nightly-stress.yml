@@ -1,4 +1,4 @@
-name: Nightly Superintelligence Stress Benchmark
+name: Nightly Governed Regression
 
 on:
   schedule:
@@ -19,8 +19,8 @@ jobs:
       - uses: actions/setup-python@v7
         with: { python-version: "3.11" }
       - name: Install dependencies
-        run: pip install build coverage
-      - name: Run Full Stress Tests & SMT Benchmark
+        run: pip install '.[dev]' build coverage
+      - name: Run governed regression and safety tests
         run: python3 -m unittest discover -s tests -v
-      - name: Run Dialectical Pipeline 148-Stage Step
-        run: python3 main.py
+      - name: Run governed control-plane security smoke tests
+        run: python3 -m unittest tests.test_security_hardening tests.test_egress_security tests.test_control_plane_api -v

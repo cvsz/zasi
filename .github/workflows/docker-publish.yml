@@ -9,12 +9,25 @@ on:
 
 permissions:
   contents: read
-  packages: write
 
 jobs:
-  docker:
-    name: Build & Publish GHCR Docker Image
+  docker-build:
+    name: Build Docker Image
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Build Docker image
+        run: docker build --pull -t zasi:ci .
+
+  docker-publish:
+    name: Publish GHCR Docker Image
+    if: github.event_name != 'pull_request'
+    needs: docker-build
+    runs-on: ubuntu-latest
+    environment: container-publish
     permissions:
       contents: read
       packages: write
@@ -32,7 +45,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v6
@@ -42,12 +54,11 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=semver,pattern={{version}}
             type=sha,format=short
-
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
