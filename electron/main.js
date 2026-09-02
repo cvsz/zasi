@@ -2,6 +2,7 @@ const { app, BrowserWindow } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
+const { resolveBackendLaunch } = require('./runtime');
 
 const BACKEND_ORIGIN = 'http://127.0.0.1:8080';
 const READY_PATH = '/health/ready';
@@ -16,20 +17,25 @@ function redactedLine(value) {
     .slice(0, 1000);
 }
 
-function startBackend() {
+function startBackend(runtimeOptions = {}) {
   if (!process.env.ZASI_API_KEY || !process.env.ZASI_API_KEY.trim()) {
     throw new Error('ZASI_API_KEY is required before starting the Electron shell');
   }
-  const repoRoot = path.join(__dirname, '..');
-  const child = spawn('python3', ['-m', 'backend.app'], {
-    cwd: repoRoot,
-    env: {
-      ...process.env,
-      ZASI_PROFILE: process.env.ZASI_PROFILE || 'local',
-      ZASI_HOST: '127.0.0.1',
-      ZASI_PORT: '8080',
-      ZASI_CORS_ORIGINS: process.env.ZASI_CORS_ORIGINS || 'http://127.0.0.1:8080',
-    },
+  const launchEnv = {
+    ...process.env,
+    ZASI_PROFILE: process.env.ZASI_PROFILE || 'local',
+    ZASI_HOST: '127.0.0.1',
+    ZASI_PORT: '8080',
+    ZASI_CORS_ORIGINS: process.env.ZASI_CORS_ORIGINS || 'http://127.0.0.1:8080',
+  };
+  const launch = resolveBackendLaunch({
+    ...runtimeOptions,
+    packaged: runtimeOptions.packaged ?? app.isPackaged === true,
+    env: launchEnv,
+  });
+  const child = spawn(launch.command, launch.args, {
+    cwd: launch.cwd,
+    env: launch.env,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   pythonProcess = child;
@@ -123,20 +129,27 @@ function stopBackend() {
   lifecycle.killTimer.unref();
 }
 
-app.whenReady().then(async () => {
-  try {
-    startBackend();
-    await waitForReady();
-    await createWindow();
-  } catch (error) {
-    console.error(`[ZASI] startup failed: ${redactedLine(error.message)}`);
-    stopBackend();
-    app.quit();
-  }
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0 && pythonProcess) createWindow();
+function startElectron() {
+  app.whenReady().then(async () => {
+    try {
+      startBackend();
+      await waitForReady();
+      await createWindow();
+    } catch (error) {
+      console.error(`[ZASI] startup failed: ${redactedLine(error.message)}`);
+      stopBackend();
+      app.quit();
+    }
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0 && pythonProcess) createWindow();
+    });
   });
-});
+}
 
-app.on('before-quit', () => { app.isQuitting = true; stopBackend(); });
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+if (require.main === module) {
+  startElectron();
+  app.on('before-quit', () => { app.isQuitting = true; stopBackend(); });
+  app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+}
+
+module.exports = { startBackend, startElectron };
