@@ -1,5 +1,15 @@
 # Artificial Superintelligence (ASI): Full Technical System Blueprint
 
+> **Status — 2026-09-02:** This document is a historical research/design
+> blueprint. It is not an implementation certificate and does not establish
+> ASI/AGI capability, formal proof, hyperscale infrastructure, physical
+> hardware, recursive self-improvement, or safe deployment. The current
+> reference profile is an authenticated, local SQLite or PostgreSQL/Redis,
+> read-only/assistive control plane; dynamic code execution, runtime hot swap, physical actuation,
+> and unverified proof claims remain disabled or unavailable. See
+> [ZASI_IMPLEMENTATION_SPECIFICATION.md](ZASI_IMPLEMENTATION_SPECIFICATION.md)
+> for the authoritative runtime contract.
+
 This document specifies the technical architecture for an Artificial Superintelligence (ASI) system across three foundational pillars:
 1. **Recursive Self-Improvement (RSI) Engine** (Safe meta-optimization loop)
 2. **Neural-Symbolic Hybrid Reasoning Core** (Zero-hallucination formal proof & generative search)
@@ -41,7 +51,7 @@ flowchart TD
     AtomicSwap -->|Deploys v_N+1| LiveSystem
 ```
 
-### Key Components:
+### Key Components (target design, not current runtime):
 - **Profile-Guided Architecture Synthesis**: Continuous low-level profiling detects latency bottlenecks, memory bandwidth saturation, and algorithmic inefficiencies across reasoning trees.
 - **Formal Invariant Preservation**: Modifications to policy code or core neural execution paths must emit machine-checkable proofs (e.g., in Lean/Coq) demonstrating that safety boundaries, objective invariants, and mathematical correctness are maintained.
 - **Atomic Hot Swapping**: Model components, tensor layouts, and Triton/CUDA/custom ASIC microkernels are updated live without stalling active inference streams.
@@ -115,13 +125,17 @@ flowchart TB
 
 ---
 
-## 4. Verification & Prototype Execution Summary
+## 4. Historical verification and prototype notes
 
-All three phases have been designed, specified, and prototyped with executable verification:
+The original prototype notes below describe intended or historical experiments.
+They are retained for traceability but are not current release evidence. A
+passing local fixture, hash, arithmetic check, or model output does not prove a
+formal theorem, safe RSI upgrade, atomic hot swap, or post-upgrade production
+runtime:
 
 1. **Architecture Blueprint**: Detailed in [asi_complete_architecture.md](asi_complete_architecture.md).
-2. **Prototype Implementation**: Implemented and verified in `asi_prototype.py` and across the `src/` modules.
+2. **Prototype Implementation**: Historical implementation references include `asi_prototype.py` and the `src/` modules; current production authority is `backend.app`.
 3. **Execution Results**:
-   - **Neural Proposal + Verification**: Handled candidate generation, successfully rejected unsafe branches ($x + y > 100$), and accepted valid proposals.
-   - **Safe RSI Upgrade**: Tested candidate `v1.1.0-jit-heuristic` against formal state invariants, verified Pareto speedup ($2.4\times$), and performed an atomic hot-swap.
-   - **Post-Upgrade Execution**: Executed subsequent cognitive reasoning cycles natively on the self-improved engine.
+   - **Historical neural proposal + verification claim**: Candidate generation and rejection of an unsafe branch were exercised in a prototype fixture; this is not a current control-plane authorization or formal-proof result.
+   - **Historical RSI claim**: Candidate `v1.1.0-jit-heuristic`, the $2.4\times$ Pareto result, and atomic hot-swap are retained as prototype notes only; the current reference profile rejects dynamic self-compilation and runtime hot swap.
+   - **Historical post-upgrade claim**: Subsequent cognitive cycles were described for the prototype; no self-improved production engine is enabled by the current runtime.

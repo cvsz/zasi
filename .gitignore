@@ -26,6 +26,7 @@ MANIFEST
 *.sqlite3
 
 # Environments
+node_modules/
 .env
 .venv
 env/

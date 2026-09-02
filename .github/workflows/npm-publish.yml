@@ -8,6 +8,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   publish:
     name: Publish zasi-cockpit to npm Registry
@@ -30,6 +33,9 @@ jobs:
 
       - name: Run Component Structural Tests
         run: node tests/test_components.js
+
+      - name: Build bundled cockpit
+        run: npm ci --ignore-scripts && npm run typecheck && npm run build
 
       - name: Publish to npm
         run: npm publish --access public

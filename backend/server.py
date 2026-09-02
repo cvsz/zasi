@@ -1,22 +1,10 @@
-"""
-ZASI Ultra-Advanced J.A.R.V.I.S. Command & Superintelligence Backend Server v32.0.0
-Features:
-- Dual J.A.R.V.I.S. & F.R.I.D.A.Y. & E.D.I.T.H. Persona Dialogue & TTS Engines
-- Full 176-Subsystem REST API Catalog, Diagnostics & Execution Matrix
-- Real-Time Hardware & Quantum Telemetry (NVML, Procfs, Arc Reactor Plasma, Quantum QPU)
-- Interactive MCP JSON-RPC 2.0 Terminal & Tool Runner
-- First-Order SMT Invariant Verification & Dynamic State Hot-Mutation
-- Zero-Downtime Safe RSI 320x Runtime Hot-Swapper
-- WebSocket Server (RFC 6455) for Real-Time Push (Feature 11)
-- API Key Authentication Middleware (Feature 12)
-- In-Memory Sliding-Window Rate Limiter (Feature 13)
-- SQLite Persistent State (Feature 14)
-- Scheduled Daemon Background Ticks every 30s (Feature 15)
-- Webhook Support (Feature 16)
-- OpenAPI 3.0 Spec Endpoint (Feature 17)
-- SSE Streaming Chat (Feature 28)
-- Gemini API Integration (Feature 29)
-- Per-Persona Conversation Memory - last 20 messages (Feature 32)
+"""Retired pre-v2 standard-library compatibility server.
+
+The authoritative runtime is ``backend.app``.  This module is retained only
+for migration tests and explicitly opted-in loopback compatibility checks.  It
+must not be used as a production owner: legacy action, chat, MCP, RSI, and
+webhook routes return 410, while the remaining responses are inventory or
+disclosure-only observations.
 """
 import http.server
 import socketserver
@@ -29,6 +17,8 @@ import hashlib
 import base64
 import struct
 import socket
+import ipaddress
+import hmac
 import collections
 import urllib.request
 import urllib.error
@@ -56,6 +46,11 @@ from src import (
     TransfiniteConstructiveTypeTheoryOracle, AbsoluteTranscendentOmniversalSuperintelligenceApexPrime,
     NeuralAudioVoiceEngine, MultiPersonaTacticalSwarm
 )
+from src.control_plane.egress import (
+    EgressBroker,
+    EgressPolicy,
+    validate_destination,
+)
 
 HOST = os.environ.get("ZASI_HOST", "127.0.0.1")  # default loopback; set ZASI_HOST=0.0.0.0 for container/public
 PORT = int(os.environ.get("ZASI_PORT", 8080))
@@ -64,13 +59,31 @@ STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web")
 # ---------------------------------------------------------------------------
 # Feature 12: API Key Auth
 # ---------------------------------------------------------------------------
-ZASI_API_KEY = os.environ.get("ZASI_API_KEY", "")  # empty = auth disabled (dev only)
+ZASI_API_KEY = os.environ.get("ZASI_API_KEY", "")
+LEGACY_COMPAT_LOOPBACK = (
+    os.environ.get("ZASI_ENABLE_LEGACY_COMPAT", "").strip().lower() == "yes"
+)
+# This module is retained for migration tests only.  The flag is deliberately
+# not environment-controlled: the authoritative runtime is backend.app, and
+# this compatibility process must never turn historical simulations into an
+# execution or capability surface.
+LEGACY_REFERENCE_ONLY = True
+LEGACY_REFERENCE_DISCLOSURE = (
+    "Legacy compatibility response from the governed reference profile; "
+    "live subsystem, hardware, external-write, RSI, and ASI capability "
+    "evidence is unavailable."
+)
+
+
+def _legacy_background_work_enabled() -> bool:
+    """Return whether a retired compatibility background worker may run."""
+    return not LEGACY_REFERENCE_ONLY
 
 # ---------------------------------------------------------------------------
 # Security: CORS origin + request body size cap
 # ---------------------------------------------------------------------------
 # Set ZASI_CORS_ORIGIN to a specific origin in production (e.g. https://your-domain.com)
-CORS_ORIGIN = os.environ.get("ZASI_CORS_ORIGIN", "*")
+CORS_ORIGIN = os.environ.get("ZASI_CORS_ORIGIN", "http://localhost:5173")
 MAX_REQUEST_BODY = int(os.environ.get("ZASI_MAX_BODY", 1 * 1024 * 1024))  # default 1 MB
 
 # ---------------------------------------------------------------------------
@@ -258,6 +271,8 @@ def _ws_client_thread(conn, addr):
 
 def _ws_telemetry_broadcaster():
     """Daemon thread: push telemetry+logs to all WS clients every 2 s."""
+    if not _legacy_background_work_enabled():
+        return
     while True:
         try:
             time.sleep(2)
@@ -303,24 +318,21 @@ _PRIVATE_RANGES = [
 
 def _is_safe_webhook_url(url: str) -> bool:
     """Return True only for http(s) URLs pointing to non-private hosts."""
+    allowed_hosts = frozenset(
+        item.strip().lower()
+        for item in os.environ.get("ZASI_WEBHOOK_ALLOWED_HOSTS", "").split(",")
+        if item.strip()
+    )
+    if not allowed_hosts:
+        return False
     try:
-        parsed = urlparse(url)
-        if parsed.scheme not in _ALLOWED_WEBHOOK_SCHEMES:
-            return False
-        hostname = parsed.hostname or ""
-        if not hostname:
-            return False
-        # Block localhost variants
-        if hostname in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
-            return False
-        # Resolve and check IP
-        import socket as _socket
-        addr = _socket.gethostbyname(hostname)
-        octets = [int(x) for x in addr.split(".")]
-        ip_int = (octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3]
-        for base, mask in _PRIVATE_RANGES:
-            if (ip_int & mask) == base:
-                return False
+        validate_destination(
+            url,
+            EgressPolicy(
+                allowed_hosts=allowed_hosts,
+                allowed_schemes=frozenset({"https"}),
+            ),
+        )
         return True
     except Exception:
         return False
@@ -328,20 +340,29 @@ def _is_safe_webhook_url(url: str) -> bool:
 
 def _fire_webhooks(event: str, payload: dict):
     """Asynchronously POST to all registered webhooks matching event."""
+    if not _legacy_background_work_enabled():
+        return
+
     def _send(url, data):
-        if not _is_safe_webhook_url(url):
-            append_log("WEBHOOK", f"Blocked unsafe URL: {url}")
+        allowed_hosts = frozenset(
+            item.strip().lower()
+            for item in os.environ.get("ZASI_WEBHOOK_ALLOWED_HOSTS", "").split(",")
+            if item.strip()
+        )
+        policy = EgressPolicy(
+            allowed_hosts=allowed_hosts,
+            allowed_schemes=frozenset({"https"}),
+        )
+        if not allowed_hosts or not _is_safe_webhook_url(url):
+            append_log("WEBHOOK", "Blocked destination by egress policy")
             return
         try:
-            req = urllib.request.Request(
-                url,
-                data=json.dumps(data).encode(),
-                headers={"Content-Type": "application/json"},
-                method="POST",
-            )
-            urllib.request.urlopen(req, timeout=5)
-        except Exception as e:
-            append_log("WEBHOOK", f"Delivery failed to {url}: {e}")
+            delivery_key = hashlib.sha256(
+                json.dumps(data, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+            EgressBroker(policy).post_json(url, data, delivery_key)
+        except Exception:
+            append_log("WEBHOOK", "Delivery failed under egress policy")
 
     with _webhooks_lock:
         targets = [w for w in _webhooks if w["event"] == event]
@@ -413,9 +434,16 @@ type_oracle = TransfiniteConstructiveTypeTheoryOracle()
 apex_prime_core = AbsoluteTranscendentOmniversalSuperintelligenceApexPrime(176)
 
 logs_history = [
-    {"timestamp": time.strftime("%H:%M:%S"), "level": "JARVIS", "message": "Good day, Sir. J.A.R.V.I.S. Core online. All 176 subsystems calibrated."},
-    {"timestamp": time.strftime("%H:%M:%S"), "level": "SYSTEM", "message": "First-Order SMT Invariant Solver holding mathematical equilibrium."},
-    {"timestamp": time.strftime("%H:%M:%S"), "level": "ENERGY", "message": "Arc Reactor Mark LXXXV stable at 178.2 GW. Thermodynamic containment 94%."}
+    {
+        "timestamp": time.strftime("%H:%M:%S"),
+        "level": "CONTROL_PLANE",
+        "message": "Legacy compatibility server loaded; no production capability claim is active.",
+    },
+    {
+        "timestamp": time.strftime("%H:%M:%S"),
+        "level": "EVIDENCE",
+        "message": "Live subsystem, hardware, and formal-proof evidence is unavailable on this path.",
+    },
 ]
 
 
@@ -450,11 +478,18 @@ def _get_history(persona: str):
 # ---------------------------------------------------------------------------
 # Feature 29: Free Model Multi-Provider Router (OpenRouter, OpenCode, Kilo, Gemini)
 # ---------------------------------------------------------------------------
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "") or os.environ.get("OPENROUTER_ZBOT_API_KEY", "")
+ENABLE_EXTERNAL_MODEL_ROUTING = (
+    os.environ.get("ZASI_ENABLE_EXTERNAL_MODEL_ROUTING", "").strip().lower() == "yes"
+)
+OPENROUTER_API_KEY = (
+    (os.environ.get("OPENROUTER_API_KEY", "") or os.environ.get("OPENROUTER_ZBOT_API_KEY", ""))
+    if ENABLE_EXTERNAL_MODEL_ROUTING
+    else ""
+)
 OPENROUTER_FREE_MODEL = os.environ.get("OPENROUTER_FREE_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
-OPENCODE_API_KEY = os.environ.get("OPENCODE_API_KEY", "")
-KILO_API_KEY = os.environ.get("KILO_API_KEY", "")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+OPENCODE_API_KEY = os.environ.get("OPENCODE_API_KEY", "") if ENABLE_EXTERNAL_MODEL_ROUTING else ""
+KILO_API_KEY = os.environ.get("KILO_API_KEY", "") if ENABLE_EXTERNAL_MODEL_ROUTING else ""
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "") if ENABLE_EXTERNAL_MODEL_ROUTING else ""
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 
 _PERSONA_SYSTEM_PROMPTS = {
@@ -644,7 +679,7 @@ OPENAPI_SPEC = {
     "info": {
         "title": "ZASI J.A.R.V.I.S. Superintelligence API",
         "version": "31.0.0",
-        "description": "REST API for the ZASI Omniversal Superintelligence platform.",
+        "description": "Legacy REST compatibility API for migration only.",
     },
     "servers": [{"url": "http://localhost:8080"}],
     "security": [{"ApiKeyAuth": []}],
@@ -655,11 +690,11 @@ OPENAPI_SPEC = {
     },
     "paths": {
         "/api/status": {
-            "get": {"summary": "System status (public)", "security": [],
-                    "responses": {"200": {"description": "Operational status"}}}
+            "get": {"summary": "Legacy reference process status (public)", "security": [],
+                    "responses": {"200": {"description": "Reference process status"}}}
         },
         "/api/telemetry": {
-            "get": {"summary": "Real-time hardware & subsystem telemetry",
+            "get": {"summary": "Local host telemetry with disabled capability fields",
                     "responses": {"200": {"description": "Telemetry snapshot"}}}
         },
         "/api/tick": {
@@ -667,7 +702,7 @@ OPENAPI_SPEC = {
                     "responses": {"200": {"description": "Tick result"}}}
         },
         "/api/subsystems": {
-            "get": {"summary": "Catalog of all 176 subsystems",
+            "get": {"summary": "Historical catalog of 176 prototype entries",
                     "responses": {"200": {"description": "Subsystem catalog"}}}
         },
         "/api/execute/{key}": {
@@ -763,6 +798,40 @@ OPENAPI_SPEC = {
     },
 }
 
+# Keep the legacy schema useful for migration clients without advertising the
+# historical side-effect behavior that has been retired by the handler.
+OPENAPI_SPEC["info"] = {
+    "title": "ZASI legacy compatibility API",
+    "version": "32.0.0-compat",
+    "description": (
+        "Legacy, non-authoritative migration surface. The historical action, chat, "
+        "MCP, RSI, and webhook routes are retired with HTTP 410. Use the "
+        "authenticated /api/v2 control-plane API."
+    ),
+}
+_LEGACY_RETIRED_OPERATIONS = {
+    "/api/tick": {"get"},
+    "/api/execute/{key}": {"get"},
+    "/api/jarvis/chat": {"post"},
+    "/api/jarvis/stream": {"post"},
+    "/api/mcp": {"post"},
+    "/api/mutate": {"post"},
+    "/api/rsi/upgrade": {"post"},
+    "/api/webhooks": {"get", "post"},
+}
+for _path, _methods in _LEGACY_RETIRED_OPERATIONS.items():
+    for _method in _methods:
+        _operation = OPENAPI_SPEC["paths"].get(_path, {}).get(_method)
+        if _operation is not None:
+            _operation["summary"] = "Retired legacy compatibility route"
+            _operation["description"] = (
+                "Retired. Submit a typed, authenticated request through the "
+                "governed /api/v2 control-plane API."
+            )
+            _operation["responses"] = {
+                "410": {"description": "Legacy route retired"}
+            }
+
 
 # ---------------------------------------------------------------------------
 # HTTP Request Handler
@@ -799,6 +868,10 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
                 return
             upgrade = self.headers.get("Upgrade", "").lower()
             if upgrade == "websocket" and self.path == "/ws":
+                if not self._check_api_auth():
+                    return
+                if not self._check_rate_limit_mw():
+                    return
                 self._handle_websocket_upgrade()
                 return
             mname = "do_" + self.command
@@ -830,17 +903,29 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
         path = urlparse(self.path).path
         if path in ("/api/status", "/api/openapi.json"):
             return True
-        if not path.startswith("/api/"):
+        if not path.startswith("/api/") and path != "/ws":
             return True
-        if ZASI_API_KEY:
-            provided = self.headers.get("X-API-Key", "")
-            if provided != ZASI_API_KEY:
-                self.send_json_response(
-                    {"error": "Unauthorized",
-                     "message": "Invalid or missing X-API-Key header"},
-                    status=401,
-                )
-                return False
+        if not ZASI_API_KEY:
+            if path != "/ws":
+                try:
+                    loopback = ipaddress.ip_address(self.client_address[0]).is_loopback
+                except ValueError:
+                    loopback = False
+                if LEGACY_COMPAT_LOOPBACK and loopback:
+                    return True
+            self.send_json_response(
+                {"error": "Legacy server authentication is unavailable"},
+                status=503,
+            )
+            return False
+        provided = self.headers.get("X-API-Key", "")
+        if not provided or not hmac.compare_digest(provided, ZASI_API_KEY):
+            self.send_json_response(
+                {"error": "Unauthorized",
+                 "message": "Invalid or missing X-API-Key header"},
+                status=401,
+            )
+            return False
         return True
 
     def _check_rate_limit_mw(self) -> bool:
@@ -867,7 +952,10 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", CORS_ORIGIN)
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-API-Key")
+        self.send_header(
+            "Access-Control-Allow-Headers",
+            "Content-Type, X-API-Key, Authorization, X-ZASI-Event-Cursor",
+        )
         self.end_headers()
 
     # ------------------------------------------------------------------ #
@@ -881,12 +969,26 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
 
         parsed = urlparse(self.path)
 
-        if parsed.path == "/api/status":
+        if parsed.path == "/api/webhooks":
+            self.send_json_response(
+                {
+                    "error": "ROUTE_RETIRED",
+                    "message": "Use the governed /api/v2 control-plane contracts.",
+                },
+                status=410,
+            )
+
+        elif parsed.path == "/api/status":
             self.send_json_response({
-                "status": "OPERATIONAL",
-                "version": "32.0.0-apex-prime",
-                "subsystems_online": 176,
-                "rsi_version": rsi_engine.current_version,
+                "status": "READY",
+                "version": "32.0.0-compat",
+                "subsystems_online": 0,
+                "subsystems_catalog_entries": 176,
+                "rsi_version": None,
+                "runtime_state": "disabled",
+                "capability_state": "unverified",
+                "evidence_state": "unavailable",
+                "disclosure": LEGACY_REFERENCE_DISCLOSURE,
                 "timestamp": time.time()
                 # NOTE: state.variables and invariants intentionally omitted
                 # (internal detail; access via authenticated /api/telemetry)
@@ -906,33 +1008,27 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
                 }
                 for g in gpu_supervisor.probe_all_gpus()
             ]
-            arc_status = arc_reactor.balance_energy_budget(3500.0)
-            c_snap = consciousness_grid.synthesize_global_consciousness(176)
-
             self.send_json_response({
                 "cpu_load": host_m.cpu_load_pct,
                 "memory_used_mb": host_m.memory_used_mb,
                 "memory_total_mb": host_m.memory_total_mb,
                 "active_pids": host_m.active_process_count,
                 "gpus": gpus,
-                "arc_reactor_gw": arc_status.core_output_gigawatts,
-                "arc_efficiency_pct": arc_status.thermodynamic_efficiency_pct,
-                "global_phi": c_snap.integrated_information_phi,
-                "active_subsystems": 176,
-                "logs": logs_history[-15:]
+                "arc_reactor_gw": None,
+                "arc_efficiency_pct": None,
+                "global_phi": None,
+                "active_subsystems": 0,
+                "catalog_entries": 176,
+                "evidence_state": "partial",
+                "disclosure": "Host metrics are observed locally; hardware, energy, and consciousness values are unavailable.",
+                "logs": logs_history[-15:],
             })
 
         elif parsed.path == "/api/tick":
-            tick_res = daemon.step_cycle()
-            append_log("TICK", f"Daemon step: {tick_res.get('status')} | Action: {tick_res.get('action_committed')}")
-            _persist_state()
-            _fire_webhooks("tick", {"state": state.variables, "action": tick_res.get("action_committed")})
-            self.send_json_response({
-                "status": tick_res.get("status", "TICK_COMPLETED"),
-                "state": state.variables,
-                "action": tick_res.get("action_committed"),
-                "version": rsi_engine.current_version
-            })
+            self.send_json_response(
+                {"error": "State changes through GET are retired."},
+                status=410,
+            )
 
         elif parsed.path == "/api/subsystems":
             # Return complete catalog of all 176 subsystems
@@ -981,16 +1077,31 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
                     name, mod, cat = named_samples[i]
                 else:
                     name, mod, cat = f"Omniversal Subsystem #{i}", f"subsystem_{i}.py", "Superintelligence Core"
-                catalog.append({"id": i, "name": name, "module": mod, "category": cat})
-            self.send_json_response({"total_subsystems": 176, "catalog": catalog})
+                catalog.append({
+                    "id": i,
+                    "name": name,
+                    "module": mod,
+                    "category": cat,
+                    "implementation_state": "unverified",
+                    "runtime_state": "disabled",
+                    "evidence_state": "unverified",
+                    "allowed_risk_tiers": [],
+                })
+            self.send_json_response({
+                "total_subsystems": 176,
+                "catalog": catalog,
+                "active_subsystems": 0,
+                "disclosure": "This is an inventory of prototype entries, not an execution grant or live-status report.",
+            })
 
         elif parsed.path == "/api/openapi.json":
             self.send_json_response(OPENAPI_SPEC)
 
         elif parsed.path.startswith("/api/execute/"):
-            subsystem_key = parsed.path.replace("/api/execute/", "")
-            result = self.execute_subsystem(subsystem_key)
-            self.send_json_response(result)
+            self.send_json_response(
+                {"error": "Direct execution routes are retired."},
+                status=410,
+            )
 
         elif parsed.path.startswith("/static/") or parsed.path.startswith("/favicon"):
             super().do_GET()
@@ -1038,7 +1149,28 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
         try:
             body = json.loads(post_data)
         except Exception:
-            body = {}
+            self.send_json_response(
+                {"error": "Malformed JSON request body"},
+                status=400,
+            )
+            return
+
+        if parsed.path in {
+            "/api/jarvis/chat",
+            "/api/jarvis/stream",
+            "/api/mcp",
+            "/api/mutate",
+            "/api/rsi/upgrade",
+            "/api/webhooks",
+        }:
+            self.send_json_response(
+                {
+                    "error": "ROUTE_RETIRED",
+                    "message": "Use the governed /api/v2 control-plane contracts.",
+                },
+                status=410,
+            )
+            return
 
         # 1. J.A.R.V.I.S. Persona Conversational Dispatcher
         if parsed.path == "/api/jarvis/chat":
@@ -1181,6 +1313,25 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
     # ------------------------------------------------------------------ #
     def process_jarvis_command(self, query: str, persona: str = "JARVIS",
                                history: list = None) -> str:
+        if LEGACY_REFERENCE_ONLY:
+            lowered = (query or "").lower()
+            if any(word in lowered for word in ("cad", "step file", "mesh", "solidworks")):
+                subject = "CAD and STEP analysis"
+            elif any(word in lowered for word in ("vision", "screenshot", "competitor", "screen")):
+                subject = "vision analysis"
+            elif any(word in lowered for word in ("rsi", "upgrade", "self-improvement")):
+                subject = "runtime self-improvement"
+            elif any(word in lowered for word in ("tick", "pulse", "mutate", "hardware")):
+                subject = "state-changing or hardware operations"
+            else:
+                subject = "live capability reporting"
+            return (
+                f"{persona.upper()} legacy compatibility is retired; {subject} is "
+                "unavailable in the governed reference profile. "
+                "Use the authenticated /api/v2 control-plane contracts for "
+                "scoped, evidence-backed observations."
+            )
+
         # 1. Attempt cloud free-model routing (OpenRouter / OpenCode / Kilo / Gemini)
         if OPENROUTER_API_KEY or OPENCODE_API_KEY or KILO_API_KEY or GEMINI_API_KEY:
             try:
@@ -1265,6 +1416,16 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
             return f"Directive received: '{query}'. Processing across 176 subsystems with formal invariant guarantee, Sir."
 
     def execute_subsystem(self, key: str) -> dict:
+        if LEGACY_REFERENCE_ONLY:
+            return {
+                "subsystem": key,
+                "status": "disabled",
+                "active": False,
+                "runtime_state": "disabled",
+                "evidence_state": "unverified",
+                "disclosure": LEGACY_REFERENCE_DISCLOSURE,
+            }
+
         if key == "quantum_qec":
             rep = qec_engine.encode_logical_qubits(100, 1e-3)
             return {"subsystem": "QEC #85", "code": rep.code_type, "logical_error": rep.logical_error_rate}
@@ -1318,6 +1479,8 @@ class ZASIUnifiedHandler(http.server.SimpleHTTPRequestHandler):
 # Feature 15: Scheduled daemon background ticks every 30 s
 # ---------------------------------------------------------------------------
 def _daemon_tick_loop():
+    if not _legacy_background_work_enabled():
+        return
     while True:
         time.sleep(30)
         try:
@@ -1341,24 +1504,35 @@ def _daemon_tick_loop():
 # Server entry-point
 # ---------------------------------------------------------------------------
 def run_backend(port=PORT):
+    if not LEGACY_COMPAT_LOOPBACK:
+        raise RuntimeError(
+            "backend.server is retired; set ZASI_ENABLE_LEGACY_COMPAT=yes "
+            "for loopback migration tests, or run backend.app"
+        )
+    try:
+        if not ipaddress.ip_address(HOST).is_loopback:
+            raise RuntimeError("legacy compatibility server must bind to loopback")
+    except ValueError as exc:
+        raise RuntimeError("legacy compatibility server requires a loopback IP") from exc
+
     # Init SQLite & restore persisted state
     _init_db()
     _restore_state()
 
-    # WebSocket telemetry broadcaster thread
-    threading.Thread(
-        target=_ws_telemetry_broadcaster, daemon=True, name="ws-broadcaster"
-    ).start()
+    # The historical WebSocket broadcaster remains in source for migration
+    # reference, but is never started by this read-only compatibility server.
+    if _legacy_background_work_enabled():
+        threading.Thread(
+            target=_ws_telemetry_broadcaster, daemon=True, name="ws-broadcaster"
+        ).start()
 
-    # Scheduled daemon tick thread (Feature 15)
-    threading.Thread(
-        target=_daemon_tick_loop, daemon=True, name="daemon-tick"
-    ).start()
+    # The historical daemon tick remains in source for migration reference,
+    # but is never started by this read-only compatibility server.
 
     append_log(
         "SYSTEM",
-        "v32.0.0 online: WebSocket, auth, rate-limiting, SQLite, "
-        "webhooks, OpenAPI, SSE, Gemini integration ready.",
+        "Legacy compatibility server ready for read-only status, telemetry, "
+        "and catalog disclosures; side-effect routes remain retired.",
     )
 
     socketserver.TCPServer.allow_reuse_address = True

@@ -6,7 +6,7 @@ labels: ["welcome", "community"]
 Welcome to the **ZASI (Zero-Entropy Autonomous Superintelligence Infrastructure)** discussions forum!
 
 ### 💡 What is ZASI?
-ZASI is a formal, physical, and cognitive omniversal superintelligence architecture spanning **176 subsystems**, a **React 18 + React Router v6** command cockpit, **RFC 6455 WebSocket** telemetry, and SMT invariant verification.
+ZASI is a formal, physical, and cognitive omniversal superintelligence architecture spanning a historical **176-entry catalog**, a **React 19 + TypeScript + React Router v7** command cockpit, **RFC 6455 WebSocket** compatibility telemetry, and SMT invariant verification. The catalog and research surfaces are not execution or capability proof.
 
 ### 🧭 Discussion Categories
 - 📢 **Announcements**: Release notes, architectural breakthroughs, and roadmap updates.

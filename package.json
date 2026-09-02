@@ -1,30 +1,61 @@
 {
   "name": "zasi-cockpit",
   "version": "32.0.0",
-  "description": "ZASI J.A.R.V.I.S. Omniversal Superintelligence Web Cockpit — React 18 + React Router v6",
+  "description": "ZASI J.A.R.V.I.S. governed control-plane cockpit — React 19 + React Router v7 + TypeScript entrypoint",
   "main": "electron/main.js",
   "scripts": {
-    "dev": "vite web/",
-    "build": "vite build web/",
+    "dev": "vite",
+    "build": "vite build --config vite.config.js",
     "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
     "electron": "electron electron/main.js",
     "electron-build": "electron-builder --linux --mac --win",
     "test": "node tests/test_components.js"
   },
   "devDependencies": {
-    "vite": "^8.2.2",
-    "electron": "^44.1.0",
-    "electron-builder": "^26.15.3"
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "@types/three": "^0.179.0",
+    "electron": "44.1.0",
+    "electron-builder": "26.15.3",
+    "typescript": "7.0.2",
+    "vite": "8.2.2"
+  },
+  "dependencies": {
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-router-dom": "7.18.3",
+    "three": "0.179.1"
   },
   "build": {
     "appId": "com.zasi.cockpit",
     "productName": "ZASI J.A.R.V.I.S.",
-    "directories": { "output": "dist-electron" },
-    "files": ["electron/**/*", "web/**/*", "backend/**/*", "src/**/*"],
-    "linux": { "target": "AppImage" },
-    "mac": { "target": "dmg" },
-    "win": { "target": "nsis" }
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "electron/**/*",
+      "web/**/*",
+      "backend/**/*",
+      "src/**/*"
+    ],
+    "linux": {
+      "target": "AppImage"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "win": {
+      "target": "nsis"
+    }
   },
-  "keywords": ["ai","superintelligence","jarvis","zasi","react","react-router"],
+  "keywords": [
+    "ai",
+    "superintelligence",
+    "jarvis",
+    "zasi",
+    "react",
+    "react-router"
+  ],
   "license": "MIT"
 }

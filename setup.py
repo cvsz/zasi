@@ -2,14 +2,21 @@ from setuptools import setup, find_packages
 
 setup(
     name="zasi",
-    version="30.0.0",
-    description="Omniscient Sovereign Artificial Superintelligence (ASI) Architecture",
+    version="32.0.0",
+    description="Governed J.A.R.V.I.S. control-plane reference platform",
     packages=find_packages(),
+    py_modules=["main"],
+    include_package_data=True,
     python_requires=">=3.9",
     entry_points={
         "console_scripts": [
-            "zasi=src.cli:main",
-            "zasi-core=main:main"
+            "zasi=backend.app:run",
+            "zasi-legacy=src.cli:main",
+            "zasi-demo=main:legacy_demo_main",
+            "zasi-backup=scripts.backup_control_plane:main",
+            "zasi-rollback-drill=scripts.rollback_drill:main",
+            "zasi-outbox-worker=scripts.run_outbox_worker:main",
+            "zasi-action-worker=scripts.run_action_worker:main",
         ]
     }
 )

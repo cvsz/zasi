@@ -7,8 +7,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: "pages"
@@ -16,10 +14,18 @@ concurrency:
 
 jobs:
   deploy:
+    if: vars.ZASI_COCKPIT_API_ORIGIN != ''
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    env:
+      VITE_API_ROOT: ${{ vars.ZASI_COCKPIT_API_ORIGIN }}
+      VITE_BASE_PATH: /${{ github.event.repository.name }}/
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -27,10 +33,19 @@ jobs:
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v6
 
+      - uses: actions/setup-node@v7
+        with: { node-version: "20" }
+
+      - name: Build bundled cockpit
+        run: |
+          npm ci --ignore-scripts
+          npm run typecheck
+          npm run build
+
       - name: Upload static cockpit artifact
         uses: actions/upload-pages-artifact@v5
         with:
-          path: 'web/'
+          path: 'web/dist/'
 
       - name: Deploy to GitHub Pages
         id: deployment

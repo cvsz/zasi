@@ -22,8 +22,19 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with: { python-version: "${{ matrix.python-version }}" }
+      - uses: actions/setup-node@v7
+        with: { node-version: "20" }
+      - name: Install and build bundled cockpit
+        run: npm ci --ignore-scripts && npm audit --omit=dev && npm run typecheck && npm run build
       - name: Install dependencies
-        run: pip install build coverage
+        run: pip install '.[dev]' build coverage
+      - name: Audit project Python dependencies
+        run: |
+          audit_env="$RUNNER_TEMP/zasi-python-audit"
+          python3 -m venv "$audit_env"
+          "$audit_env/bin/python" -m pip install --upgrade pip setuptools wheel
+          "$audit_env/bin/python" -m pip install '.[dev]' pip-audit
+          "$audit_env/bin/pip-audit" --local
       - name: Run unit tests
         run: python3 -m unittest discover -s tests -q
       - name: Run coverage
@@ -45,7 +56,11 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with: { python-version: "3.11" }
-      - run: pip install build
+      - uses: actions/setup-node@v7
+        with: { node-version: "20" }
+      - name: Build bundled cockpit before packaging
+        run: npm ci --ignore-scripts && npm audit --omit=dev && npm run typecheck && npm run build
+      - run: pip install '.[dev]' build
       - name: Build wheel and sdist
         run: python3 -m build
       - name: Upload dist artifacts

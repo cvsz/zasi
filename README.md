@@ -4,110 +4,142 @@
 [![PyPI](https://img.shields.io/pypi/v/zasi.svg?logo=pypi&logoColor=white&color=3775A9)](https://pypi.org/project/zasi/)
 [![PyPI Downloads](https://img.shields.io/pypi/dm/zasi.svg?color=blue)](https://pypi.org/project/zasi/)
 [![npm](https://img.shields.io/npm/v/zasi-cockpit.svg?logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/zasi-cockpit)
-[![Subsystems](https://img.shields.io/badge/subsystems-176%20Online-green.svg)](docs/SUBSYSTEMS_REFERENCE.md)
-[![Tests](https://img.shields.io/badge/tests-172%20passing-brightgreen.svg)](tests/)
-[![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.14-blue.svg)](https://python.org)
-[![React](https://img.shields.io/badge/frontend-React%2018%20%2B%20React%20Router%20v6-61dafb.svg)](web/)
+[![Subsystems](https://img.shields.io/badge/subsystems-historical%20catalog-gray.svg)](docs/SUBSYSTEMS_REFERENCE.md)
+[![Tests](https://img.shields.io/badge/tests-315%20passing-brightgreen.svg)](tests/)
+[![Python CI](https://img.shields.io/badge/CI%20Python-3.11%20%7C%203.12-blue.svg)](https://github.com/cvsz/zasi/actions/workflows/ci.yml)
+[![React](https://img.shields.io/badge/frontend-React%2019%20%2B%20TypeScript%20%2B%20React%20Router%20v7-61dafb.svg)](web/)
 [![Discussions](https://img.shields.io/badge/community-Discussions-orange.svg)](https://github.com/cvsz/zasi/discussions)
 [![License](https://img.shields.io/badge/license-MIT-purple.svg)](LICENSE)
 
-ZASI is an omniversal superintelligence operating system and cybernetic command architecture integrating **176 formal, physical, and cognitive subsystems** with a real-time **React 18 + React Router v6 J.A.R.V.I.S. Command Cockpit**, WebSocket streaming, First-Order SMT invariant verification, and safe Recursive Self-Improvement (RSI).
+> The identity and release badges above are retained for repository continuity.
+> The subsystem badge describes the historical prototype snapshot; the test
+> badge reflects the latest full local suite. The governed reference profile
+> and current verification evidence are documented below. The Python badge
+> reflects the versions exercised by CI; package metadata declares `>=3.9`, but
+> versions outside the CI matrix are not release-verified here.
 
----
+# ZASI — governed J.A.R.V.I.S. control-plane reference platform
 
-## 🌌 System Architecture & Navigation
+ZASI is a local-first, authenticated control-plane reference implementation
+with a React 19 cockpit. The typed `web/static/app.tsx` entrypoint owns the
+runtime mount and `web/static/cockpit.tsx` owns the checked cockpit source;
+the historical `app.jsx` path remains only as a compatibility re-export.
+Its safe path is:
 
 ```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                 Browser / Electron Desktop Client Shell                     │
-│               React 18 + React Router v6 Command Cockpit                    │
-├──────────────┬──────────────┬────────────────┬──────────────┬───────────────┤
-│ Overview (/) │ JARVIS (/.. )│ Subsystems (/.)│ Cockpit (/..)│  MCP (/mcp)   │
-│ 3D Hypergraph│ Voice TTS/STT│ 176 Matrix & ID│ Quantum FPGA │ JSON-RPC 2.0  │
-└───────┬──────┴──────┬───────┴────────┬───────┴──────┬───────┴───────┬───────┘
-        │             │                │              │               │
-        └─────────────┴────────────────┼──────────────┴───────────────┘
-                                       ▼
-    ◄═══════════════════ REST /api/* & WebSocket /ws ══════════════════►
-                                       │
-┌──────────────────────────────────────┴──────────────────────────────────────┐
-│       Python Unified Backend (HTTP Server + RFC 6455 Real-Time Push)        │
-├──────────────────────────────┬──────────────────────────────┬───────────────┤
-│ 176 Subsystem Pipeline Core  │ SQLite State Persistence     │ Gemini 2.0    │
-│ First-Order SMT Verifier     │ data/zasi_state.db           │ AI Bridge     │
-└──────────────────────────────┴──────────────────────────────┴───────────────┘
+authenticated session -> scoped observation -> typed intent -> policy
+-> immutable plan -> provenance-backed evidence -> durable event
+-> explicit approval -> brokered action
 ```
 
----
+Brokered actions are durably queued before dispatch. The reference application
+may drain bounded R0/R1 observations through the leased `ActionWorker`; timeout,
+lease expiry, cancellation during execution, and uncertain outcomes become
+explicit `unknown` states that require authenticated reconciliation. R2-R5
+actions remain queued and external writes are disabled in the reference profile.
 
-## 🚀 Quick Start
+The repository also contains a historical 176-entry prototype catalog. A
+catalog entry is not an execution grant, and the catalog is not evidence that
+those systems, hardware interfaces, formal proofs, external connectors, or
+superintelligence capabilities exist. The reference profile keeps external
+writes, research execution, runtime self-modification, and physical actuation
+disabled.
 
-### 1. Automated Zero-Touch Installation
+## Run the authoritative application
+
 ```bash
-# Clone the repository
-git clone https://github.com/cvsz/zasi.git
-cd zasi
-
-# Run automated builder, verification test runner, and installer
-./install.sh
+set -a
+. .env
+set +a
+npm ci --ignore-scripts
+npm run build
+python3 -m backend.app
 ```
 
-### 2. Launch the J.A.R.V.I.S. Command Cockpit
+Open `http://127.0.0.1:8080/`. The API fails closed when `ZASI_API_KEY` is
+missing. Use `make server` or the `zasi` console script as equivalent launch
+commands. `backend.server` and `zasi-legacy` are compatibility/research paths,
+not production owners. The `zasi-demo` entrypoint is retained for source
+continuity but exits with an explicit simulation-only/disabled disclosure; it
+does not run the historical capability-shaped demo.
+
+Create a session and call the read-only status tool:
+
 ```bash
-# Start the full-stack server on http://localhost:8080
-make server
-
-# Or via Docker
-make docker-build && make docker-run
+python3 -c 'import json, os; print(json.dumps({"api_key": os.environ["ZASI_API_KEY"]}))' |
+curl -sS http://127.0.0.1:8080/api/v2/sessions \
+  -H 'Content-Type: application/json' \
+  --data-binary @-
 ```
 
-### 3. Run the 172-Test Suite
+All authenticated v2 resources require the returned bearer session; the session
+bootstrap endpoint is the exception. Mutating or risk-bearing work must use a
+typed plan, policy decision, idempotency key, and (where required) an
+exact-digest approval.
+
+## Authoritative surfaces
+
+| Surface | Contract |
+|---|---|
+| `backend.app` | Single ASGI application and lifecycle owner |
+| `/health/live` | Process liveness only |
+| `/health/ready` | Database/schema/frontend dependency readiness |
+| `/api/v2/openapi.json` | Authenticated generated API schema |
+| `/api/v2/events` | Authenticated durable SSE replay/resync stream |
+| `web/dist` | Vite-built cockpit bundle; no production CDN runtime |
+| `electron/main.js` | Supervised loopback shell with readiness polling |
+
+Legacy side-effect routes such as `/api/tick`, `/api/mutate`, and
+`/api/rsi/upgrade` return a typed retirement response. `/api/status` and
+`/api/telemetry` are compatibility disclosures, not live subsystem claims.
+
+## Verification
+
 ```bash
-make test-all
+python3 -m unittest discover -s tests -q
+PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q
+python3 -m unittest tests.test_control_plane_core tests.test_control_plane_broker tests.test_control_plane_api tests.test_security_hardening tests.test_egress_security -q
+python3 scripts/run_action_worker.py --once
+node tests/test_components.js
+npm run typecheck
+npm audit --omit=dev
+npm run build
+python3 -m build
+python3 scripts/sign_release_artifacts.py --help
 ```
 
----
+Encrypted backup validation is available through
+`python3 scripts/backup_control_plane.py` (or the installed `zasi-backup`
+console command); it requires a 32-byte `ZASI_BACKUP_KEY_B64` injected at
+runtime and never uses a repository default.
 
-## 📡 REST, WebSocket & MCP API Endpoints
+`python3 scripts/rollback_drill.py --allow-local-rehearsal` (or the installed
+`zasi-rollback-drill` command) can rehearse PostgreSQL restore into a random,
+temporary database. It is explicitly local/rehearsal evidence and is not
+staging or production rollback approval.
 
-| Endpoint | Method | Protocol | Description |
-|---|---|---|---|
-| `/` | `GET` | HTTP | React Router v6 SPA Web Cockpit |
-| `/ws` | `GET` | WebSocket | Real-time 2s telemetry & log stream (RFC 6455) |
-| `/api/status` | `GET` | JSON | System operational state, SMT invariants, active version |
-| `/api/telemetry` | `GET` | JSON | Host CPU, RAM, NVML GPU load, Arc Reactor power |
-| `/api/tick` | `GET` | JSON | Execute one autonomous cognitive cycle |
-| `/api/subsystems` | `GET` | JSON | Complete catalog of all 176 subsystems |
-| `/api/jarvis/chat` | `POST` | JSON | Multi-turn persona chat (J.A.R.V.I.S. / F.R.I.D.A.Y. / E.D.I.T.H.) |
-| `/api/jarvis/stream` | `POST` | SSE | Word-by-word streaming dialogue response |
-| `/api/mcp` | `POST` | JSON-RPC 2.0 | MCP protocol tool execution & resource inspection |
-| `/api/mutate` | `POST` | JSON | Hot-mutate cognitive state variables |
-| `/api/rsi/upgrade` | `POST` | JSON | Deploy verified recursive self-improvement runtime |
-| `/api/webhooks` | `POST` | JSON | Register external event webhook dispatchers |
-| `/api/openapi.json` | `GET` | OpenAPI 3.0 | Full interactive OpenAPI 3.0 specification |
+Tag releases require a protected signing environment; the release workflow
+fails closed without the configured GPG private key and fingerprint, and
+publishes verified signatures for the package artifacts, SBOM, and checksum
+manifest.
 
----
+The checked-in example contains only a generated loopback-only API credential
+and uses SQLite for a portable local baseline; it contains no shared-service
+passwords. This checkout's private `.env` is machine-generated and uses the
+shared authenticated PostgreSQL and Redis services; those credentials are
+never committed. Local green tests do not prove staging deployment, managed
+operations, external egress, hardware control, formal/cryptographic proof, or
+ASI/AGI capability. Those remain explicit release gates.
 
-## ⚙️ Environment Variables
+## Documentation
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `ZASI_PORT` | `8080` | Server listening port |
-| `ZASI_API_KEY` | *(empty)* | Optional API key authentication header (`X-API-Key`) |
-| `GEMINI_API_KEY` | *(empty)* | Optional Google Gemini 2.0 Flash API key for neural grounding |
+- [Full architecture](docs/ZASI_FULL_ARCHITECTURE.md)
+- [Implementation specification](docs/ZASI_IMPLEMENTATION_SPECIFICATION.md)
+- [System architecture and ownership](docs/ARCHITECTURE.md)
+- [API reference](docs/API_REFERENCE.md)
+- [Deployment and operations](docs/DEPLOYMENT_GUIDE.md)
+- [Alignment and safety boundaries](docs/ALIGNMENT_AND_SAFETY.md)
+- [Historical catalog with state disclaimers](docs/SUBSYSTEMS_REFERENCE.md)
+- [Release evidence policy](RELEASES.md)
 
----
-
-## 📜 Documentation Reference
-- [Full Subsystems Reference (176 Subsystems)](docs/SUBSYSTEMS_REFERENCE.md)
-- [System Architecture](docs/ARCHITECTURE.md)
-- [RACER AI Governance Architecture](docs/RACER_Governance_Architecture.md)
-- [Deployment & Operations Guide](docs/DEPLOYMENT_GUIDE.md)
-- [Alignment, Safety & SMT Guarantees](docs/ALIGNMENT_AND_SAFETY.md)
-- [Changelog](CHANGELOG.md)
-- [Release Notes](RELEASES.md)
-
----
-
-## 🛡️ License
 MIT License. Copyright © 2026 ZASI Contributors.

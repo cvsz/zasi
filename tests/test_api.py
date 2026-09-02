@@ -8,6 +8,8 @@ import json
 import urllib.request
 import urllib.error
 import socket
+import os
+os.environ.setdefault("ZASI_ENABLE_LEGACY_COMPAT", "yes")
 from backend.server import run_backend, HOST
 
 class TestZASIBackendIntegration(unittest.TestCase):
@@ -32,13 +34,25 @@ class TestZASIBackendIntegration(unittest.TestCase):
     def _url(self, path):
         return f"http://127.0.0.1:{self.port}{path}"
 
+    def _assert_retired(self, req):
+        try:
+            urllib.request.urlopen(req, timeout=3)
+        except urllib.error.HTTPError as exc:
+            try:
+                self.assertEqual(exc.code, 410)
+            finally:
+                exc.close()
+        else:
+            self.fail("retired route unexpectedly returned success")
+
     def test_status_endpoint(self):
         req = urllib.request.Request(self._url("/api/status"))
         with urllib.request.urlopen(req, timeout=3) as resp:
             self.assertEqual(resp.status, 200)
             data = json.loads(resp.read().decode())
-            self.assertEqual(data.get("status"), "OPERATIONAL")
-            self.assertEqual(data.get("subsystems_online"), 176)
+            self.assertEqual(data.get("status"), "READY")
+            self.assertEqual(data.get("subsystems_online"), 0)
+            self.assertEqual(data.get("subsystems_catalog_entries"), 176)
 
     def test_telemetry_endpoint(self):
         req = urllib.request.Request(self._url("/api/telemetry"))
@@ -63,31 +77,33 @@ class TestZASIBackendIntegration(unittest.TestCase):
             data = json.loads(resp.read().decode())
             self.assertEqual(data.get("openapi"), "3.0.3")
             self.assertIn("/api/status", data.get("paths", {}))
+            self.assertIn("410", data["paths"]["/api/jarvis/chat"]["post"]["responses"])
 
-    def test_jarvis_chat(self):
+    def test_legacy_jarvis_chat_is_retired(self):
         payload = json.dumps({"message": "status report", "persona": "JARVIS"}).encode()
         req = urllib.request.Request(self._url("/api/jarvis/chat"), data=payload, headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=3) as resp:
-            self.assertEqual(resp.status, 200)
-            data = json.loads(resp.read().decode())
-            self.assertEqual(data.get("speaker"), "JARVIS")
-            self.assertIn("176 subsystems", data.get("response"))
+        self._assert_retired(req)
 
-    def test_mutate_state(self):
+    def test_legacy_mutation_is_retired(self):
         payload = json.dumps({"variable": "x", "delta": 5}).encode()
         req = urllib.request.Request(self._url("/api/mutate"), data=payload, headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=3) as resp:
-            self.assertEqual(resp.status, 200)
-            data = json.loads(resp.read().decode())
-            self.assertTrue(data.get("success"))
+        self._assert_retired(req)
 
-    def test_mcp_jsonrpc(self):
+    def test_legacy_mcp_route_is_retired(self):
         payload = json.dumps({"jsonrpc": "2.0", "method": "tools/list", "params": {}, "id": 1}).encode()
         req = urllib.request.Request(self._url("/api/mcp"), data=payload, headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=3) as resp:
-            self.assertEqual(resp.status, 200)
-            data = json.loads(resp.read().decode())
-            self.assertEqual(data.get("jsonrpc"), "2.0")
+        self._assert_retired(req)
+
+    def test_legacy_webhook_routes_are_retired(self):
+        get_req = urllib.request.Request(self._url("/api/webhooks"))
+        self._assert_retired(get_req)
+        payload = json.dumps({"url": "https://example.com/hook", "event": "tick"}).encode()
+        post_req = urllib.request.Request(
+            self._url("/api/webhooks"),
+            data=payload,
+            headers={"Content-Type": "application/json"},
+        )
+        self._assert_retired(post_req)
 
 if __name__ == "__main__":
     unittest.main()

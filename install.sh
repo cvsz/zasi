@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# ==============================================================================
-#                 ZASI Advanced Full-Stack Automated Installer v32.0.0
-# ==============================================================================
-set -e
+# ZASI governed control-plane installer.
+# This installer is deliberately non-destructive: configuration is backed up
+# before migration and build output is never removed unless explicitly asked.
+set -Eeuo pipefail
 
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -10,60 +10,88 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${BLUE}===================================================================${NC}"
-echo -e "${GREEN}      ZASI Universal Superintelligence Automated Installer v32.0.0     ${NC}"
-echo -e "${BLUE}===================================================================${NC}"
+REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+PYTHON_CMD="${PYTHON_CMD:-python3}"
+PROFILE="${ZASI_PROFILE:-local}"
+CONFIG_PATH="${REPO_ROOT}/config/zasi_config.json"
 
-PYTHON_CMD="python3"
-if ! command -v $PYTHON_CMD &> /dev/null; then
-    echo -e "${RED}[ERROR] python3 not found. Please install Python 3.10+${NC}"
+die() {
+    echo -e "${RED}[ERROR] $*${NC}" >&2
     exit 1
-fi
-
-PY_VERSION=$($PYTHON_CMD -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-echo -e "${GREEN}[✓] Python version ${PY_VERSION} detected.${NC}"
-
-echo -e "${BLUE}[*] Initializing system configurations & directories...${NC}"
-mkdir -p config docs/generated web/static backend data electron
-cat << 'JSONEOF' > config/zasi_config.json
-{
-  "version": "32.0.0",
-  "subsystems": 176,
-  "environment": "production",
-  "formal_verification": true,
-  "quantum_backend": "QISKIT_OPENQASM_3",
-  "telemetry_prober": "NVIDIA_NVML",
-  "plan_a_compliance": true,
-  "omniversal_equilibrium": 1.0,
-  "server_port": 8080
 }
-JSONEOF
-echo -e "${GREEN}[✓] Configuration written: config/zasi_config.json${NC}"
 
-echo -e "${BLUE}[*] Running React UI and backend verification test suites...${NC}"
-if command -v node &> /dev/null; then
-    node tests/test_components.js
-fi
-$PYTHON_CMD -m unittest discover -s tests -q
-echo -e "${GREEN}[✓] 172/172 verification tests passed successfully.${NC}"
+command -v "${PYTHON_CMD}" >/dev/null 2>&1 || die "python3 is required"
+command -v npm >/dev/null 2>&1 || die "npm is required to build the bundled cockpit"
+"${PYTHON_CMD}" -m pip --version >/dev/null 2>&1 || die "python3 pip is required"
+"${PYTHON_CMD}" -c 'import build' >/dev/null 2>&1 || die "python-build is required; run: python3 -m pip install build"
 
-echo -e "${BLUE}[*] Building wheel and source distribution packages...${NC}"
-rm -rf dist/ build/ *.egg-info
-$PYTHON_CMD -m build -q
-echo -e "${GREEN}[✓] Distribution packages built in dist/${NC}"
-ls -lh dist/
+echo -e "${BLUE}ZASI governed control-plane installer${NC}"
+echo -e "${GREEN}[OK] Python $(${PYTHON_CMD} -c 'import sys; print(".".join(map(str, sys.version_info[:3])))') detected${NC}"
 
-echo -e "${BLUE}[*] Installing latest ZASI package...${NC}"
-WHEEL_FILE=$(ls dist/zasi-*.whl | head -n 1)
-$PYTHON_CMD -m pip install --break-system-packages --no-deps --force-reinstall "$WHEEL_FILE"
+mkdir -p "${REPO_ROOT}/config" "${REPO_ROOT}/data" "${REPO_ROOT}/electron"
 
-if command -v zasi &> /dev/null; then
-    echo -e "${GREEN}[✓] CLI executable verified: $(which zasi)${NC}"
+if [[ -e "${CONFIG_PATH}" ]]; then
+    backup_path="${CONFIG_PATH}.bak.$(date -u +%Y%m%dT%H%M%SZ)"
+    cp -p -- "${CONFIG_PATH}" "${backup_path}"
+    echo -e "${GREEN}[OK] Existing configuration backed up to ${backup_path}${NC}"
+    if [[ "${ZASI_OVERWRITE_CONFIG:-no}" != "yes" ]]; then
+        echo -e "${YELLOW}[INFO] Existing configuration preserved; set ZASI_OVERWRITE_CONFIG=yes to migrate it.${NC}"
+    fi
 fi
 
-echo -e "${BLUE}===================================================================${NC}"
-echo -e "${GREEN}[SUCCESS] ZASI v32.0.0 Full-Stack Installation Complete!           ${NC}"
-echo -e "${YELLOW}Launch React 18 Web Cockpit : make server  (http://localhost:8080)   ${NC}"
-echo -e "${YELLOW}Run Dialectical Pipeline    : make run                               ${NC}"
-echo -e "${YELLOW}Interactive Terminal Shell  : zasi                                   ${NC}"
-echo -e "${BLUE}===================================================================${NC}"
+if [[ ! -e "${CONFIG_PATH}" || "${ZASI_OVERWRITE_CONFIG:-no}" == "yes" ]]; then
+    temp_config="$(mktemp "${REPO_ROOT}/config/.zasi_config.XXXXXX")"
+    trap 'rm -f -- "${temp_config:-}"' EXIT
+    umask 077
+    {
+        printf '{\n'
+        printf '  "schema_version": 7,\n'
+        printf '  "profile": %s,\n' "$(printf '%s' "${PROFILE}" | "${PYTHON_CMD}" -c 'import json,sys; print(json.dumps(sys.stdin.read()))')"
+        printf '  "server_port": 8080,\n'
+        printf '  "capability_claims": false,\n'
+        printf '  "external_writes": "disabled",\n'
+        printf '  "research_execution": "disabled",\n'
+        printf '  "physical_actuation": "disabled"\n'
+        printf '}\n'
+    } >"${temp_config}"
+    chmod 600 "${temp_config}"
+    mv -f -- "${temp_config}" "${CONFIG_PATH}"
+    trap - EXIT
+    echo -e "${GREEN}[OK] Truthful profile configuration written${NC}"
+fi
+
+echo -e "${BLUE}[*] Installing locked frontend dependencies and building cockpit${NC}"
+cd -- "${REPO_ROOT}"
+npm ci --ignore-scripts
+npm run build
+
+echo -e "${BLUE}[*] Running structural and Python contract checks${NC}"
+node tests/test_components.js
+"${PYTHON_CMD}" -m unittest discover -s tests -q
+"${PYTHON_CMD}" -m compileall -q backend src main.py
+
+echo -e "${BLUE}[*] Building Python distribution${NC}"
+build_output="$(mktemp -d)"
+trap 'rm -rf -- "${build_output}"' EXIT
+"${PYTHON_CMD}" -m build --outdir "${build_output}"
+
+wheel_file="$(find "${build_output}" -maxdepth 1 -type f -name 'zasi-*.whl' -print | sort | head -n 1)"
+[[ -n "${wheel_file}" ]] || die "no wheel was produced"
+"${PYTHON_CMD}" -m pip install --upgrade "${wheel_file}"
+
+"${PYTHON_CMD}" - <<'PY'
+from backend.app import create_app
+from src.control_plane.config import Settings
+
+settings = Settings.from_mapping({
+    "ZASI_PROFILE": "local",
+    "ZASI_API_KEY": "installer-validation-only",
+    "ZASI_CORS_ORIGINS": "http://127.0.0.1:8080",
+})
+app = create_app(settings=settings)
+assert app.title == "ZASI Governed Control Plane"
+print("[OK] authoritative application import and profile validation passed")
+PY
+
+echo -e "${GREEN}[SUCCESS] ZASI installed without deleting user configuration, databases, keys, backups, dist, or build output.${NC}"
+echo -e "${YELLOW}Launch with: ZASI_API_KEY='<operator-secret>' ZASI_PROFILE=${PROFILE} zasi${NC}"

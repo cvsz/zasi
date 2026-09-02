@@ -27,14 +27,18 @@ Thank you for your interest in contributing to **ZASI (Zero-Entropy Autonomous S
 
 ## 🧪 Testing Guidelines
 
-Before opening a PR, ensure all 172 tests pass:
+Before opening a PR, ensure the full Python suite and frontend checks pass:
 ```bash
 make test-all
+npm ci --ignore-scripts
+npm run typecheck
+npm run build
+node tests/test_components.js
 ```
 This runs:
-- 165 subsystem unit tests
-- 7 REST/WebSocket API integration tests
-- 11 React 18 / React Router v6 component structural assertions
+- the repository's current Python unit and integration suite
+- React 19 / React Router v7 component structural assertions
+- the TypeScript entrypoint typecheck and Vite production build
 - Code coverage analysis (minimum threshold: 60%, current: 81.31%)
 
 ---

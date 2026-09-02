@@ -5,10 +5,15 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: read
+
 jobs:
   release:
     name: Build & Release Binary Packages
     runs-on: ubuntu-latest
+    environment:
+      name: release
     permissions:
       contents: write
     steps:
@@ -20,11 +25,42 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install build tooling
-        run: pip install build
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+
+      - name: Install build and SBOM tooling
+        run: pip install '.[dev]' build
+
+      - name: Build bundled cockpit before packaging
+        run: npm ci --ignore-scripts && npm run typecheck && npm run build
 
       - name: Build Wheel & Tarball
         run: python3 -m build
+
+      - name: Generate SBOM and checksums
+        run: |
+          python3 scripts/generate_sbom.py --output dist/zasi-sbom.cdx.json --resolve-installed
+
+      - name: Import protected release signing key
+        env:
+          ZASI_RELEASE_GPG_PRIVATE_KEY: ${{ secrets.ZASI_RELEASE_GPG_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$ZASI_RELEASE_GPG_PRIVATE_KEY"
+          printf '%s' "$ZASI_RELEASE_GPG_PRIVATE_KEY" | gpg --batch --import
+
+      - name: Sign and verify release artifacts
+        env:
+          ZASI_RELEASE_GPG_FINGERPRINT: ${{ secrets.ZASI_RELEASE_GPG_FINGERPRINT }}
+          ZASI_RELEASE_GPG_PASSPHRASE: ${{ secrets.ZASI_RELEASE_GPG_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          test -n "$ZASI_RELEASE_GPG_FINGERPRINT"
+          python3 scripts/sign_release_artifacts.py \
+            --output-dir dist \
+            --fingerprint "$ZASI_RELEASE_GPG_FINGERPRINT"
 
       - name: Create GitHub Release & Upload Assets
         uses: softprops/action-gh-release@v2
@@ -32,6 +68,10 @@ jobs:
           files: |
             dist/*.whl
             dist/*.tar.gz
+            dist/zasi-sbom.cdx.json
+            dist/SHA256SUMS
+            dist/*.asc
+            dist/ZASI_RELEASE_SIGNING_KEY.asc
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

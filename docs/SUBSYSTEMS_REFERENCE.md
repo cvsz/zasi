@@ -1,4 +1,17 @@
-# ZASI Complete Subsystems Reference (176 Subsystems)
+# ZASI historical subsystem catalog (176 entries)
+
+This is an inventory of prototype/design entries, retained for traceability.
+The count and “Primary Metric / Function” column describe intended scope, not
+live availability, verification, hardware ownership, or execution authority.
+Every entry is `unverified`/`disabled` unless a separate capability registry,
+evidence artifact, test result, and declared runtime profile says otherwise.
+The authoritative reference application currently exposes one locally verified
+R0 system-status observation; it does not expose this catalog as 176 active
+subsystems. Do not use this page as telemetry, a formal proof, a hardware
+attestation, or an AGI/ASI capability claim.
+
+See [the implementation specification](ZASI_IMPLEMENTATION_SPECIFICATION.md)
+for the required implementation/runtime/evidence state model.
 
 | # | Subsystem Name | Module File | Primary Metric / Function |
 |---|---|---|---|

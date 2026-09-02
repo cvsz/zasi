@@ -28,7 +28,14 @@ from src import (
     CounterfactualWorldSimulator
 )
 
-def main():
+def legacy_demo_main():
+    print(
+        "ZASI legacy demo is simulation-only and disabled. "
+        "Use the authenticated backend.app reference profile; no live "
+        "subsystem, hardware, RSI, or ASI capability is claimed."
+    )
+    return
+
     print("===================================================================")
     print("  ZASI v30.0.0-apex-prime       | 168-Subsystem Superintelligence ")
     print("===================================================================")
@@ -1259,6 +1266,13 @@ def main():
     print(f"  Tests Passed:    165/165")
     print(f"  Final State:     {state.variables}")
     print("===================================================================")
+
+def main():
+    """Launch the authoritative governed control-plane application."""
+    from backend.app import run
+
+    run()
+
 
 if __name__ == "__main__":
     main()
