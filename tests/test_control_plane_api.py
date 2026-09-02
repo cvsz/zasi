@@ -108,6 +108,49 @@ class ControlPlaneAPITests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(response.status_code, 401)
             self.assertEqual(response.json()["error"]["code"], "AUTH_REQUIRED")
 
+    async def test_read_and_disabled_operation_routes_require_declared_scopes(self):
+        async with self.client() as client:
+            session = await client.post(
+                "/api/v2/sessions", json={"api_key": "test-bootstrap-secret"}
+            )
+            self.assertEqual(session.status_code, 201)
+            session_body = session.json()
+            self.store._conn().execute(
+                "UPDATE sessions SET scope_json = ? WHERE id = ?",
+                (json.dumps(["run:reconcile"]), session_body["session_id"]),
+            )
+            headers = {"Authorization": f"Bearer {session_body['access_token']}"}
+
+            for path in (
+                "/api/v2/capabilities",
+                "/api/v2/snapshot",
+                "/api/v2/events",
+                "/api/status",
+                "/api/telemetry",
+                "/api/v2/sequences/seq_missing",
+                "/api/v2/sequences/seq_missing/events",
+                "/api/v2/plans/pln_missing",
+                "/api/v2/runs/run_missing",
+                "/api/v2/task-runs/run_missing",
+            ):
+                response = await client.get(path, headers=headers)
+                self.assertEqual(response.status_code, 403, path)
+                self.assertEqual(response.json()["error"]["code"], "POLICY_DENIED")
+
+            for path in (
+                "/api/v2/connectors/not-enabled/authorize",
+                "/api/v2/webhooks",
+            ):
+                response = await client.post(path, headers=headers)
+                self.assertEqual(response.status_code, 403, path)
+                self.assertEqual(response.json()["error"]["code"], "POLICY_DENIED")
+
+    async def test_method_not_allowed_v2_route_still_requires_authentication(self):
+        async with self.client() as client:
+            response = await client.get("/api/v2/intents/intent_missing/plan")
+            self.assertEqual(response.status_code, 401)
+            self.assertEqual(response.json()["error"]["code"], "AUTH_REQUIRED")
+
     async def test_chunked_request_body_is_bounded_before_json_parsing(self):
         settings = Settings.from_mapping(
             {

@@ -1965,6 +1965,7 @@ def create_app(
         connector_id: str,
         context: AuthContext = Depends(_context_from_request),
     ):
+        require_scope(context, "workspace:write", "Connector authorization is not permitted.")
         raise HTTPException(
             status_code=503,
             detail={
@@ -1979,6 +1980,7 @@ def create_app(
     async def register_webhook(
         context: AuthContext = Depends(_context_from_request),
     ):
+        require_scope(context, "workspace:write", "Webhook registration is not permitted.")
         raise HTTPException(
             status_code=503,
             detail={
@@ -2214,6 +2216,7 @@ def create_app(
         request: Request,
         context: AuthContext = Depends(_context_from_request),
     ):
+        require_scope(context, "workspace:read", "Sequence visibility is not permitted.")
         try:
             return request.app.state.store.get_sequence(sequence_id, context.tenant_id)
         except NotFoundError:
@@ -2429,6 +2432,7 @@ def create_app(
         after: Optional[int] = Query(default=None, ge=0),
         limit: int = Query(default=100, ge=1, le=1000),
     ):
+        require_scope(context, "workspace:read", "Sequence event visibility is not permitted.")
         after = 0 if after is None else after
         try:
             app.state.store.get_sequence(sequence_id, context.tenant_id)
@@ -2529,7 +2533,10 @@ def create_app(
         )
 
     @app.get("/api/v2/intents/{intent_id}/plan")
-    async def get_intent_plan_not_allowed():
+    async def get_intent_plan_not_allowed(
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "workspace:read", "Plan visibility is not permitted.")
         response = _error(
             405,
             "METHOD_NOT_ALLOWED",
@@ -2544,6 +2551,7 @@ def create_app(
         request: Request,
         context: AuthContext = Depends(_context_from_request),
     ):
+        require_scope(context, "workspace:read", "Plan visibility is not permitted.")
         try:
             return request.app.state.store.get_plan(plan_id, context.tenant_id)
         except (NotFoundError, ScopeViolation):
@@ -2777,6 +2785,7 @@ def create_app(
 
     @app.get("/api/v2/capabilities")
     async def capabilities(context: AuthContext = Depends(_context_from_request)):
+        require_scope(context, "workspace:read", "Capability visibility is not permitted.")
         registered = []
         for definition in app.state.registry.definitions():
             manifest = definition.manifest()
@@ -2892,6 +2901,7 @@ def create_app(
         request: Request,
         context: AuthContext = Depends(_context_from_request),
     ):
+        require_scope(context, "workspace:read", "Run visibility is not permitted.")
         try:
             return request.app.state.store.get_run(run_id, context.tenant_id)
         except (NotFoundError, ScopeViolation):
@@ -2971,6 +2981,7 @@ def create_app(
         request: Request,
         context: AuthContext = Depends(_context_from_request),
     ):
+        require_scope(context, "workspace:read", "Snapshot visibility is not permitted.")
         return {
             "tenant_id": context.tenant_id,
             "schema_version": CURRENT_SCHEMA_VERSION,
@@ -2994,6 +3005,7 @@ def create_app(
         last_event_id: Optional[str] = Header(default=None),
         context: AuthContext = Depends(_context_from_request),
     ):
+        require_scope(context, "workspace:read", "Event visibility is not permitted.")
         query_after = after
         after = 0 if after is None else after
         last_after: Optional[int] = None
@@ -3148,6 +3160,7 @@ def create_app(
 
     @app.get("/api/status")
     async def compatibility_status(context: AuthContext = Depends(_context_from_request)):
+        require_scope(context, "workspace:read", "Compatibility status visibility is not permitted.")
         definitions = app.state.registry.definitions()
         implemented = sum(1 for item in definitions if item.availability == "enabled")
         simulated = sum(1 for item in definitions if item.availability == "simulation")
@@ -3169,6 +3182,7 @@ def create_app(
 
     @app.get("/api/telemetry")
     async def compatibility_telemetry(context: AuthContext = Depends(_context_from_request)):
+        require_scope(context, "workspace:read", "Compatibility telemetry visibility is not permitted.")
         return {
             "status": "unavailable",
             "evidence_state": "unavailable",
