@@ -1,3 +1,4 @@
+import datetime as dt
 import tempfile
 import unittest
 from contextlib import asynccontextmanager
@@ -592,6 +593,50 @@ class ControlPlaneAPITests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(replacement.status_code, 201)
             self.assertEqual(replacement.json()["supersedes"], evidence_id)
+
+    async def test_unknown_action_requires_authenticated_reconciliation_before_retry(self):
+        async with self.client() as client:
+            session_response = await client.post(
+                "/api/v2/sessions", json={"api_key": "test-bootstrap-secret"}
+            )
+            headers = {"Authorization": f"Bearer {session_response.json()['access_token']}"}
+            submitted = self.app.state.broker.submit(
+                tenant_id="local",
+                principal_id="local-operator",
+                tool_id="registry.system.status",
+                payload={},
+                requested_risk_tier="R0",
+                principal_scopes=frozenset({"workspace:read"}),
+                idempotency_key="api-reconcile-1",
+            )
+            base = dt.datetime.now(dt.timezone.utc)
+            claimed = self.store.claim_action(
+                submitted.run_id,
+                "local",
+                "api-worker",
+                lease_seconds=1,
+                now=base,
+            )
+            self.assertIsNotNone(claimed)
+            self.assertIsNone(
+                self.store.claim_action(
+                    submitted.run_id,
+                    "local",
+                    "api-worker-2",
+                    lease_seconds=1,
+                    now=base + dt.timedelta(seconds=2),
+                )
+            )
+            reconciled = await client.post(
+                f"/api/v2/runs/{submitted.run_id}/reconcile",
+                json={
+                    "outcome": "retry",
+                    "reason": "Verified that the first worker did not invoke the observation handler.",
+                },
+                headers=headers,
+            )
+            self.assertEqual(reconciled.status_code, 200)
+            self.assertEqual(reconciled.json()["status"], "queued")
 
 
 if __name__ == "__main__":

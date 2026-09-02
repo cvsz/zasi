@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from .identity import hash_token
 
 
-CURRENT_SCHEMA_VERSION = 9
+CURRENT_SCHEMA_VERSION = 10
 
 
 class NotFoundError(LookupError):
@@ -196,10 +196,13 @@ class ControlPlaneStore:
                 CREATE TABLE IF NOT EXISTS runs (
                     id TEXT PRIMARY KEY,
                     tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    principal_id TEXT NOT NULL DEFAULT '',
                     plan_id TEXT,
                     idempotency_key TEXT NOT NULL,
                     request_digest TEXT NOT NULL DEFAULT '',
                     status TEXT NOT NULL,
+                    cancel_requested INTEGER NOT NULL DEFAULT 0,
+                    unknown_reason TEXT,
                     created_at TEXT NOT NULL,
                     finished_at TEXT,
                     UNIQUE (tenant_id, idempotency_key)
@@ -212,6 +215,17 @@ class ControlPlaneStore:
                     tool_id TEXT NOT NULL,
                     status TEXT NOT NULL,
                     attempt_count INTEGER NOT NULL DEFAULT 0,
+                    payload_json TEXT NOT NULL DEFAULT '{}',
+                    timeout_ms INTEGER NOT NULL DEFAULT 2000,
+                    max_attempts INTEGER NOT NULL DEFAULT 1,
+                    retry_policy TEXT NOT NULL DEFAULT 'none',
+                    next_attempt_at TEXT,
+                    worker_id TEXT,
+                    lease_token TEXT,
+                    lease_until TEXT,
+                    last_error TEXT,
+                    cancel_requested INTEGER NOT NULL DEFAULT 0,
+                    unknown_reason TEXT,
                     created_at TEXT NOT NULL,
                     finished_at TEXT
                 );
@@ -429,6 +443,8 @@ class ControlPlaneStore:
                     ON events(tenant_id, sequence);
                 CREATE INDEX IF NOT EXISTS idx_runs_tenant_idempotency
                     ON runs(tenant_id, idempotency_key);
+                CREATE INDEX IF NOT EXISTS idx_actions_claimable
+                    ON actions(status, next_attempt_at, lease_until);
                 CREATE INDEX IF NOT EXISTS idx_approvals_tenant_plan
                     ON approvals(tenant_id, plan_id, decision, expires_at);
                 CREATE INDEX IF NOT EXISTS idx_outbox_pending
@@ -592,10 +608,44 @@ class ControlPlaneStore:
                 row["name"]
                 for row in connection.execute("PRAGMA table_info(runs)").fetchall()
             }
+            if "principal_id" not in run_columns:
+                connection.execute(
+                    "ALTER TABLE runs ADD COLUMN principal_id TEXT NOT NULL DEFAULT ''"
+                )
             if "request_digest" not in run_columns:
                 connection.execute(
                     "ALTER TABLE runs ADD COLUMN request_digest TEXT NOT NULL DEFAULT ''"
                 )
+            if "cancel_requested" not in run_columns:
+                connection.execute(
+                    "ALTER TABLE runs ADD COLUMN cancel_requested INTEGER NOT NULL DEFAULT 0"
+                )
+            if "unknown_reason" not in run_columns:
+                connection.execute("ALTER TABLE runs ADD COLUMN unknown_reason TEXT")
+            action_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(actions)").fetchall()
+            }
+            action_migrations = (
+                ("payload_json", "ALTER TABLE actions ADD COLUMN payload_json TEXT NOT NULL DEFAULT '{}'"),
+                ("timeout_ms", "ALTER TABLE actions ADD COLUMN timeout_ms INTEGER NOT NULL DEFAULT 2000"),
+                ("max_attempts", "ALTER TABLE actions ADD COLUMN max_attempts INTEGER NOT NULL DEFAULT 1"),
+                ("retry_policy", "ALTER TABLE actions ADD COLUMN retry_policy TEXT NOT NULL DEFAULT 'none'"),
+                ("next_attempt_at", "ALTER TABLE actions ADD COLUMN next_attempt_at TEXT"),
+                ("worker_id", "ALTER TABLE actions ADD COLUMN worker_id TEXT"),
+                ("lease_token", "ALTER TABLE actions ADD COLUMN lease_token TEXT"),
+                ("lease_until", "ALTER TABLE actions ADD COLUMN lease_until TEXT"),
+                ("last_error", "ALTER TABLE actions ADD COLUMN last_error TEXT"),
+                ("cancel_requested", "ALTER TABLE actions ADD COLUMN cancel_requested INTEGER NOT NULL DEFAULT 0"),
+                ("unknown_reason", "ALTER TABLE actions ADD COLUMN unknown_reason TEXT"),
+            )
+            for column_name, statement in action_migrations:
+                if column_name not in action_columns:
+                    connection.execute(statement)
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_actions_claimable "
+                "ON actions(status, next_attempt_at, lease_until)"
+            )
             task_columns = {
                 row["name"]
                 for row in connection.execute("PRAGMA table_info(tasks)").fetchall()
@@ -4486,6 +4536,743 @@ class ControlPlaneStore:
             ).fetchone()
         return int(row["latest"])
 
+    @staticmethod
+    def _action_record(
+        row: Any,
+        include_payload: bool = False,
+        include_lease_token: bool = False,
+    ) -> Dict[str, Any]:
+        record = {
+            "action_id": row["id"],
+            "tenant_id": row["tenant_id"],
+            "run_id": row["run_id"],
+            "step_id": row["step_id"],
+            "tool_id": row["tool_id"],
+            "status": row["status"],
+            "attempt_count": int(row["attempt_count"]),
+            "timeout_ms": int(row["timeout_ms"]),
+            "max_attempts": int(row["max_attempts"]),
+            "retry_policy": row["retry_policy"],
+            "next_attempt_at": row["next_attempt_at"],
+            "worker_id": row["worker_id"],
+            "lease_until": row["lease_until"],
+            "last_error": row["last_error"],
+            "cancel_requested": bool(row["cancel_requested"]),
+            "unknown_reason": row["unknown_reason"],
+            "created_at": row["created_at"],
+            "finished_at": row["finished_at"],
+        }
+        if include_payload:
+            record["payload"] = json.loads(row["payload_json"])
+        if include_lease_token:
+            record["lease_token"] = row["lease_token"]
+        return record
+
+    @staticmethod
+    def _bounded_json_object(
+        value: Dict[str, Any], field_name: str, max_bytes: int
+    ) -> str:
+        if not isinstance(value, dict):
+            raise ValueError(f"{field_name} must be an object")
+        try:
+            encoded = json.dumps(
+                value,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+                allow_nan=False,
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{field_name} must be JSON serializable") from exc
+        if len(encoded.encode("utf-8")) > max_bytes:
+            raise ValueError(f"{field_name} exceeds the configured limit")
+        return encoded
+
+    def _action_and_run_locked(
+        self, connection: Any, run_id: str, tenant_id: str
+    ) -> Tuple[Any, Any]:
+        run = connection.execute(
+            "SELECT * FROM runs WHERE id = ?", (run_id,)
+        ).fetchone()
+        if run is None:
+            raise NotFoundError("run not found")
+        if run["tenant_id"] != tenant_id:
+            raise ScopeViolation("run is outside tenant scope")
+        action = connection.execute(
+            "SELECT * FROM actions WHERE run_id = ? AND tenant_id = ? "
+            "ORDER BY created_at, id LIMIT 1",
+            (run_id, tenant_id),
+        ).fetchone()
+        if action is None:
+            raise ScopeViolation("run action is not available in tenant scope")
+        return run, action
+
+    @staticmethod
+    def _action_error_code(error: Optional[Dict[str, Any]]) -> str:
+        if not isinstance(error, dict):
+            return "ACTION_FAILED"
+        candidate = error.get("error_code", error.get("code"))
+        if (
+            isinstance(candidate, str)
+            and 1 <= len(candidate) <= 128
+            and candidate.isascii()
+            and all(char.isalnum() or char in {"_", "-", "."} for char in candidate)
+        ):
+            return candidate
+        return "ACTION_FAILED"
+
+    def _prepare_action_evidence(
+        self,
+        run_id: str,
+        result: Dict[str, Any],
+        evidence_status: str,
+        provenance: Dict[str, Any],
+        disclosure: str,
+        now: str,
+    ) -> Tuple[str, str]:
+        allowed_statuses = {
+            "verified",
+            "rejected",
+            "unknown",
+            "unavailable",
+            "simulated",
+            "research_only",
+        }
+        if evidence_status not in allowed_statuses:
+            raise ValueError("invalid evidence status")
+        result_json = self._bounded_json_object(result, "action result", 1_048_576)
+        if not isinstance(provenance, dict):
+            raise ValueError("action provenance must be an object")
+        provenance_payload = dict(provenance)
+        observed_at = provenance_payload.setdefault("observed_at", now)
+        observed_datetime = _parse_utc_timestamp(observed_at, "observed_at")
+        try:
+            freshness_seconds = int(provenance_payload.get("freshness_seconds", 60))
+        except (TypeError, ValueError):
+            freshness_seconds = 60
+        freshness_seconds = max(0, min(freshness_seconds, 86_400))
+        provenance_payload.setdefault(
+            "fresh_until",
+            _timestamp(observed_datetime + timedelta(seconds=freshness_seconds)),
+        )
+        provenance_payload.setdefault("output_digest", "sha256:" + hash_token(result_json))
+        provenance_payload.setdefault(
+            "input_digest", "sha256:" + hash_token(f"run:{run_id}")
+        )
+        provenance_payload.setdefault(
+            "method_ref",
+            f"procedure.{provenance_payload.get('adapter_id', 'unknown')}.v1",
+        )
+        provenance_payload.setdefault("artifact_ref", None)
+        provenance_payload.setdefault(
+            "source",
+            {
+                "adapter_id": provenance_payload.get("adapter_id", "unknown"),
+                "adapter_version": provenance_payload.get("adapter_version", "unknown"),
+                "origin": provenance_payload.get("origin", "unknown"),
+                "input_digest": provenance_payload.get("input_digest"),
+            },
+        )
+        provenance_payload["disclosure"] = disclosure
+        provenance_json = self._bounded_json_object(
+            provenance_payload, "action provenance", 65_536
+        )
+        return result_json, provenance_json
+
+    def _finalize_action_locked(
+        self,
+        connection: Any,
+        run: Any,
+        action: Any,
+        tenant_id: str,
+        final_status: str,
+        evidence_status: str,
+        result: Dict[str, Any],
+        provenance: Dict[str, Any],
+        disclosure: str,
+        actor_kind: str,
+        actor_id: str,
+        now: str,
+        unknown_reason: Optional[str] = None,
+    ) -> str:
+        if final_status not in {"succeeded", "failed", "unknown", "cancelled"}:
+            raise ValueError("invalid terminal action status")
+        previous_evidence = connection.execute(
+            "SELECT evidence_id FROM action_evidence WHERE action_id = ?",
+            (action["id"],),
+        ).fetchone()
+        supersedes = previous_evidence["evidence_id"] if previous_evidence is not None else None
+        result_json, provenance_json = self._prepare_action_evidence(
+            run["id"], result, evidence_status, provenance, disclosure, now
+        )
+        evidence_id = "ev_" + hash_token(
+            f"{tenant_id}:{run['id']}:{action['id']}:{os.urandom(16).hex()}"
+        )[:26]
+        connection.execute(
+            "INSERT INTO evidence("
+            "id, tenant_id, kind, status, provenance_json, result_json, artifact_ref, supersedes, created_at"
+            ") VALUES(?, ?, 'action_result', ?, ?, ?, ?, ?, ?)",
+            (
+                evidence_id,
+                tenant_id,
+                evidence_status,
+                provenance_json,
+                result_json,
+                json.loads(provenance_json).get("artifact_ref"),
+                supersedes,
+                now,
+            ),
+        )
+        if previous_evidence is None:
+            connection.execute(
+                "INSERT INTO action_evidence(action_id, evidence_id) VALUES(?, ?)",
+                (action["id"], evidence_id),
+            )
+        else:
+            connection.execute(
+                "UPDATE action_evidence SET evidence_id = ? WHERE action_id = ?",
+                (evidence_id, action["id"]),
+            )
+        updated_action = connection.execute(
+            "UPDATE actions SET status = ?, finished_at = ?, next_attempt_at = NULL, "
+            "worker_id = NULL, lease_token = NULL, lease_until = NULL, "
+            "cancel_requested = 0, unknown_reason = ?, last_error = ? "
+            "WHERE id = ? AND tenant_id = ? AND status IN ('queued', 'retry', 'running', 'cancel_requested', 'unknown')",
+            (
+                final_status,
+                now,
+                unknown_reason,
+                unknown_reason,
+                action["id"],
+                tenant_id,
+            ),
+        )
+        if getattr(updated_action, "rowcount", 1) != 1:
+            raise ConflictError("action is no longer in a finalizable state")
+        updated_run = connection.execute(
+            "UPDATE runs SET status = ?, finished_at = ?, cancel_requested = 0, "
+            "unknown_reason = ? WHERE id = ? AND tenant_id = ? "
+            "AND status IN ('queued', 'retry', 'running', 'cancel_requested', 'unknown')",
+            (final_status, now, unknown_reason, run["id"], tenant_id),
+        )
+        if getattr(updated_run, "rowcount", 1) != 1:
+            raise ConflictError("run is no longer in a finalizable state")
+        evidence_payload = {
+            "evidence_id": evidence_id,
+            "run_id": run["id"],
+            "action_id": action["id"],
+            "status": evidence_status,
+        }
+        evidence_event_id = "evt_" + hash_token(
+            f"{tenant_id}:{evidence_id}:{os.urandom(16).hex()}"
+        )[:26]
+        self._append_audited_event_locked(
+            connection=connection,
+            tenant_id=tenant_id,
+            actor_kind=actor_kind,
+            actor_id=actor_id,
+            action="evidence.created",
+            target=evidence_id,
+            outcome="success",
+            event_type="evidence.created",
+            aggregate_kind="evidence",
+            aggregate_id=evidence_id,
+            payload_json=json.dumps(evidence_payload, sort_keys=True, separators=(",", ":")),
+            payload=evidence_payload,
+            now=now,
+            event_id=evidence_event_id,
+        )
+        run_payload = {
+            "run_id": run["id"],
+            "action_id": action["id"],
+            "status": final_status,
+            "evidence_id": evidence_id,
+            "attempt_count": int(action["attempt_count"]),
+        }
+        if unknown_reason is not None:
+            run_payload["unknown_reason"] = unknown_reason
+        run_event_id = "evt_" + hash_token(
+            f"{tenant_id}:{run['id']}:{final_status}:{os.urandom(16).hex()}"
+        )[:26]
+        self._append_audited_event_locked(
+            connection=connection,
+            tenant_id=tenant_id,
+            actor_kind=actor_kind,
+            actor_id=actor_id,
+            action=f"run.{final_status}",
+            target=run["id"],
+            outcome="success" if final_status in {"succeeded", "cancelled"} else final_status,
+            event_type=f"run.{final_status}",
+            aggregate_kind="run",
+            aggregate_id=run["id"],
+            payload_json=json.dumps(run_payload, sort_keys=True, separators=(",", ":")),
+            payload=run_payload,
+            now=now,
+            event_id=run_event_id,
+        )
+        return evidence_id
+
+    def _mark_action_unknown_locked(
+        self,
+        connection: Any,
+        run: Any,
+        action: Any,
+        tenant_id: str,
+        actor_id: str,
+        reason: str,
+        now: str,
+    ) -> None:
+        safe_reason = reason if reason in {
+            "lease_expired",
+            "action_timeout",
+            "side_effect_uncertain",
+            "cancel_requested_during_execution",
+            "tool_unavailable",
+        } else "action_unknown"
+        self._finalize_action_locked(
+            connection=connection,
+            run=run,
+            action=action,
+            tenant_id=tenant_id,
+            final_status="unknown",
+            evidence_status="unknown",
+            result={"error_code": safe_reason.upper()},
+            provenance={
+                "adapter_id": "zasi-action-worker",
+                "adapter_version": "1.0.0",
+                "origin": "control-plane",
+                "method_ref": "procedure.action.uncertain-result.v1",
+            },
+            disclosure="The control plane lost certainty about the action outcome; reconciliation is required before retry.",
+            actor_kind="worker",
+            actor_id=actor_id,
+            now=now,
+            unknown_reason=safe_reason,
+        )
+
+    def list_claimable_actions(
+        self, tenant_id: str, limit: int = 100, now: Optional[datetime] = None
+    ) -> List[Dict[str, Any]]:
+        if not 1 <= limit <= 1000:
+            raise ValueError("invalid action limit")
+        now_value = _timestamp(_utcnow() if now is None else now)
+        with self._lock:
+            rows = self._conn().execute(
+                "SELECT * FROM actions WHERE tenant_id = ? AND status IN ('queued', 'retry') "
+                "AND (next_attempt_at IS NULL OR next_attempt_at <= ?) "
+                "ORDER BY next_attempt_at, created_at, id LIMIT ?",
+                (tenant_id, now_value, limit),
+            ).fetchall()
+        return [self._action_record(row) for row in rows]
+
+    def claim_action(
+        self,
+        run_id: str,
+        tenant_id: str,
+        worker_id: str,
+        lease_seconds: int = 60,
+        now: Optional[datetime] = None,
+    ) -> Optional[Dict[str, Any]]:
+        self._validate_worker_id(worker_id)
+        if (
+            isinstance(lease_seconds, bool)
+            or not isinstance(lease_seconds, int)
+            or not 1 <= lease_seconds <= 3600
+        ):
+            raise ValueError("lease_seconds must be between 1 and 3600")
+        now_dt = _utcnow() if now is None else now
+        if not isinstance(now_dt, datetime) or now_dt.tzinfo is None:
+            raise ValueError("now must include a timezone")
+        now_value = _timestamp(now_dt)
+        lease_until = _timestamp(now_dt + timedelta(seconds=lease_seconds))
+        lease_token = hash_token(
+            f"{tenant_id}:{run_id}:{worker_id}:{now_value}:{os.urandom(32).hex()}"
+        )
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                run, action = self._action_and_run_locked(connection, run_id, tenant_id)
+                if action["status"] == "running":
+                    if action["lease_until"] is not None and action["lease_until"] <= now_value:
+                        self._mark_action_unknown_locked(
+                            connection,
+                            run,
+                            action,
+                            tenant_id,
+                            worker_id,
+                            "lease_expired",
+                            now_value,
+                        )
+                        connection.execute("COMMIT")
+                    else:
+                        connection.execute("ROLLBACK")
+                    return None
+                if action["status"] not in {"queued", "retry"}:
+                    connection.execute("ROLLBACK")
+                    return None
+                if run["cancel_requested"] or run["status"] == "cancel_requested" or action["cancel_requested"]:
+                    connection.execute(
+                        "UPDATE actions SET status = 'cancelled', finished_at = ?, "
+                        "next_attempt_at = NULL, worker_id = NULL, lease_token = NULL, "
+                        "lease_until = NULL, cancel_requested = 0 WHERE id = ? AND tenant_id = ?",
+                        (now_value, action["id"], tenant_id),
+                    )
+                    connection.execute(
+                        "UPDATE runs SET status = 'cancelled', finished_at = ?, cancel_requested = 0 "
+                        "WHERE id = ? AND tenant_id = ?",
+                        (now_value, run_id, tenant_id),
+                    )
+                    payload = {"run_id": run_id, "action_id": action["id"], "status": "cancelled"}
+                    event_id = "evt_" + hash_token(
+                        f"{tenant_id}:{run_id}:cancelled:{os.urandom(16).hex()}"
+                    )[:26]
+                    self._append_audited_event_locked(
+                        connection=connection,
+                        tenant_id=tenant_id,
+                        actor_kind="worker",
+                        actor_id=worker_id,
+                        action="run.cancelled",
+                        target=run_id,
+                        outcome="success",
+                        event_type="run.cancelled",
+                        aggregate_kind="run",
+                        aggregate_id=run_id,
+                        payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                        payload=payload,
+                        now=now_value,
+                        event_id=event_id,
+                    )
+                    connection.execute("COMMIT")
+                    return None
+                if action["next_attempt_at"] is not None and action["next_attempt_at"] > now_value:
+                    connection.execute("ROLLBACK")
+                    return None
+                if int(action["attempt_count"]) >= int(action["max_attempts"]):
+                    self._finalize_action_locked(
+                        connection=connection,
+                        run=run,
+                        action=action,
+                        tenant_id=tenant_id,
+                        final_status="failed",
+                        evidence_status="unknown",
+                        result={"error_code": "ACTION_ATTEMPTS_EXHAUSTED"},
+                        provenance={
+                            "adapter_id": "zasi-action-worker",
+                            "adapter_version": "1.0.0",
+                            "origin": "control-plane",
+                            "method_ref": "procedure.action.retry-limit.v1",
+                        },
+                        disclosure="The bounded action retry policy was exhausted.",
+                        actor_kind="worker",
+                        actor_id=worker_id,
+                        now=now_value,
+                    )
+                    connection.execute("COMMIT")
+                    return None
+                next_attempt = int(action["attempt_count"]) + 1
+                updated = connection.execute(
+                    "UPDATE actions SET status = 'running', attempt_count = ?, worker_id = ?, "
+                    "lease_token = ?, lease_until = ?, next_attempt_at = NULL, "
+                    "last_error = NULL, unknown_reason = NULL WHERE id = ? AND tenant_id = ? "
+                    "AND status IN ('queued', 'retry')",
+                    (
+                        next_attempt,
+                        worker_id,
+                        lease_token,
+                        lease_until,
+                        action["id"],
+                        tenant_id,
+                    ),
+                )
+                if getattr(updated, "rowcount", 1) != 1:
+                    connection.execute("ROLLBACK")
+                    return None
+                connection.execute(
+                    "UPDATE runs SET status = 'running', finished_at = NULL, "
+                    "cancel_requested = 0, unknown_reason = NULL WHERE id = ? AND tenant_id = ? "
+                    "AND status IN ('queued', 'retry', 'created')",
+                    (run_id, tenant_id),
+                )
+                payload = {
+                    "run_id": run_id,
+                    "action_id": action["id"],
+                    "tool_id": action["tool_id"],
+                    "status": "running",
+                    "attempt_count": next_attempt,
+                    "lease_until": lease_until,
+                }
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{run_id}:claimed:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="worker",
+                    actor_id=worker_id,
+                    action="run.claimed",
+                    target=run_id,
+                    outcome="success",
+                    event_type="run.claimed",
+                    aggregate_kind="run",
+                    aggregate_id=run_id,
+                    payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    payload=payload,
+                    now=now_value,
+                    event_id=event_id,
+                )
+                current = connection.execute(
+                    "SELECT * FROM actions WHERE id = ? AND tenant_id = ?",
+                    (action["id"], tenant_id),
+                ).fetchone()
+                connection.execute("COMMIT")
+                record = self._action_record(
+                    current, include_payload=True, include_lease_token=True
+                )
+                record["principal_id"] = run["principal_id"]
+                record["plan_id"] = run["plan_id"]
+                return record
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+
+    def finish_action(
+        self,
+        run_id: str,
+        tenant_id: str,
+        worker_id: str,
+        lease_token: str,
+        status: str,
+        result: Optional[Dict[str, Any]] = None,
+        error: Optional[Dict[str, Any]] = None,
+        evidence_status: str = "unknown",
+        provenance: Optional[Dict[str, Any]] = None,
+        disclosure: str = "Action result was produced by a governed worker.",
+        now: Optional[datetime] = None,
+        unknown_reason: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        self._validate_worker_id(worker_id)
+        if not isinstance(lease_token, str) or not lease_token or len(lease_token) > 512:
+            raise ValueError("lease_token is invalid")
+        if status not in {"succeeded", "failed", "unknown", "cancelled"}:
+            raise ValueError("invalid action status")
+        allowed_unknown_reasons = {
+            None,
+            "lease_expired",
+            "action_timeout",
+            "side_effect_uncertain",
+            "cancel_requested_during_execution",
+            "tool_unavailable",
+        }
+        if unknown_reason not in allowed_unknown_reasons:
+            raise ValueError("invalid unknown reason")
+        result = {} if result is None else result
+        error = {} if error is None else error
+        provenance = {} if provenance is None else provenance
+        if not isinstance(result, dict) or not isinstance(error, dict) or not isinstance(provenance, dict):
+            raise ValueError("action result, error, and provenance must be objects")
+        now_dt = _utcnow() if now is None else now
+        if not isinstance(now_dt, datetime) or now_dt.tzinfo is None:
+            raise ValueError("now must include a timezone")
+        now_value = _timestamp(now_dt)
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                run, action = self._action_and_run_locked(connection, run_id, tenant_id)
+                if action["status"] not in {"running", "cancel_requested"}:
+                    raise ConflictError("action is not running")
+                if not hmac.compare_digest(str(action["worker_id"] or ""), worker_id):
+                    raise ConflictError("action lease belongs to another worker")
+                if not hmac.compare_digest(str(action["lease_token"] or ""), lease_token):
+                    raise ConflictError("action lease token is invalid")
+                if action["lease_until"] is None or action["lease_until"] <= now_value:
+                    self._mark_action_unknown_locked(
+                        connection,
+                        run,
+                        action,
+                        tenant_id,
+                        worker_id,
+                        "lease_expired",
+                        now_value,
+                    )
+                    connection.execute("COMMIT")
+                    raise ConflictError("action lease has expired")
+                effective_status = status
+                effective_unknown_reason = unknown_reason
+                if action["cancel_requested"] or run["cancel_requested"] or run["status"] == "cancel_requested":
+                    if status != "cancelled":
+                        effective_status = "unknown"
+                        effective_unknown_reason = "cancel_requested_during_execution"
+                if effective_status == "failed" and action["retry_policy"] == "bounded" and int(action["attempt_count"]) < int(action["max_attempts"]):
+                    error_code = self._action_error_code(error)
+                    next_attempt_at = _timestamp(
+                        now_dt + timedelta(seconds=min(60, 2 ** max(0, int(action["attempt_count"]) - 1)))
+                    )
+                    connection.execute(
+                        "UPDATE actions SET status = 'retry', next_attempt_at = ?, worker_id = NULL, "
+                        "lease_token = NULL, lease_until = NULL, last_error = ?, "
+                        "cancel_requested = 0, unknown_reason = NULL WHERE id = ? AND tenant_id = ? "
+                        "AND status IN ('running', 'cancel_requested')",
+                        (next_attempt_at, error_code, action["id"], tenant_id),
+                    )
+                    connection.execute(
+                        "UPDATE runs SET status = 'queued', finished_at = NULL, cancel_requested = 0, "
+                        "unknown_reason = NULL WHERE id = ? AND tenant_id = ? "
+                        "AND status IN ('running', 'cancel_requested')",
+                        (run_id, tenant_id),
+                    )
+                    payload = {
+                        "run_id": run_id,
+                        "action_id": action["id"],
+                        "status": "retry",
+                        "attempt_count": int(action["attempt_count"]),
+                        "next_attempt_at": next_attempt_at,
+                        "error_code": error_code,
+                    }
+                    event_id = "evt_" + hash_token(
+                        f"{tenant_id}:{run_id}:retry:{os.urandom(16).hex()}"
+                    )[:26]
+                    self._append_audited_event_locked(
+                        connection=connection,
+                        tenant_id=tenant_id,
+                        actor_kind="worker",
+                        actor_id=worker_id,
+                        action="run.retry_scheduled",
+                        target=run_id,
+                        outcome="retry",
+                        event_type="run.retry_scheduled",
+                        aggregate_kind="run",
+                        aggregate_id=run_id,
+                        payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                        payload=payload,
+                        now=now_value,
+                        event_id=event_id,
+                    )
+                    connection.execute("COMMIT")
+                    return self.get_run(run_id, tenant_id)
+                if effective_status == "unknown" and effective_unknown_reason is None:
+                    effective_unknown_reason = "side_effect_uncertain"
+                self._finalize_action_locked(
+                    connection=connection,
+                    run=run,
+                    action=action,
+                    tenant_id=tenant_id,
+                    final_status=effective_status,
+                    evidence_status="unknown" if effective_status == "unknown" else evidence_status,
+                    result=result if effective_status != "unknown" else {"error_code": effective_unknown_reason.upper()},
+                    provenance=provenance,
+                    disclosure=disclosure if effective_status != "unknown" else "Action outcome is uncertain; reconciliation is required before retry.",
+                    actor_kind="worker",
+                    actor_id=worker_id,
+                    now=now_value,
+                    unknown_reason=effective_unknown_reason,
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                try:
+                    connection.execute("ROLLBACK")
+                except Exception:
+                    pass
+                raise
+        return self.get_run(run_id, tenant_id)
+
+    def reconcile_action(
+        self,
+        run_id: str,
+        tenant_id: str,
+        principal_id: str,
+        outcome: str,
+        reason: str,
+        result: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        if outcome not in {"retry", "succeeded", "failed", "cancelled"}:
+            raise ValueError("invalid reconciliation outcome")
+        if (
+            not isinstance(reason, str)
+            or not 1 <= len(reason) <= 2000
+            or any(ord(char) < 0x20 or ord(char) == 0x7F for char in reason)
+        ):
+            raise ValueError("reconciliation reason is invalid")
+        result = {} if result is None else result
+        if not isinstance(result, dict):
+            raise ValueError("reconciliation result must be an object")
+        now = _timestamp(_utcnow())
+        reason_digest = "sha256:" + hash_token(reason)
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._validate_principal_locked(connection, tenant_id, principal_id)
+                run, action = self._action_and_run_locked(connection, run_id, tenant_id)
+                if action["status"] != "unknown" or run["status"] != "unknown":
+                    raise ConflictError("only an unknown action can be reconciled")
+                if outcome == "retry":
+                    connection.execute(
+                        "UPDATE actions SET status = 'queued', next_attempt_at = ?, finished_at = NULL, "
+                        "worker_id = NULL, lease_token = NULL, lease_until = NULL, last_error = NULL, "
+                        "cancel_requested = 0, unknown_reason = NULL WHERE id = ? AND tenant_id = ? "
+                        "AND status = 'unknown'",
+                        (now, action["id"], tenant_id),
+                    )
+                    connection.execute(
+                        "UPDATE runs SET status = 'queued', finished_at = NULL, cancel_requested = 0, "
+                        "unknown_reason = NULL WHERE id = ? AND tenant_id = ? AND status = 'unknown'",
+                        (run_id, tenant_id),
+                    )
+                    payload = {
+                        "run_id": run_id,
+                        "action_id": action["id"],
+                        "status": "queued",
+                        "reconciliation_reason_digest": reason_digest,
+                    }
+                    event_type = "run.reconciled"
+                    event_id = "evt_" + hash_token(
+                        f"{tenant_id}:{run_id}:reconcile:retry:{os.urandom(16).hex()}"
+                    )[:26]
+                    self._append_audited_event_locked(
+                        connection=connection,
+                        tenant_id=tenant_id,
+                        actor_kind="principal",
+                        actor_id=principal_id,
+                        action="run.reconciled",
+                        target=run_id,
+                        outcome="retry",
+                        event_type=event_type,
+                        aggregate_kind="run",
+                        aggregate_id=run_id,
+                        payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                        payload=payload,
+                        now=now,
+                        event_id=event_id,
+                    )
+                else:
+                    self._finalize_action_locked(
+                        connection=connection,
+                        run=run,
+                        action=action,
+                        tenant_id=tenant_id,
+                        final_status=outcome,
+                        evidence_status="unknown",
+                        result=result,
+                        provenance={
+                            "adapter_id": "operator-reconciliation",
+                            "adapter_version": "1.0.0",
+                            "origin": "control-plane",
+                            "method_ref": "procedure.action.operator-reconciliation.v1",
+                            "reconciliation_reason_digest": reason_digest,
+                        },
+                        disclosure="The operator reconciled an uncertain outcome; independent side-effect proof is not implied.",
+                        actor_kind="principal",
+                        actor_id=principal_id,
+                        now=now,
+                    )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        return self.get_run(run_id, tenant_id)
+
     def start_run(
         self,
         run_id: str,
@@ -4497,9 +5284,44 @@ class ControlPlaneStore:
         status: str,
         plan_id: Optional[str] = None,
         request_digest: str = "",
+        payload: Optional[Dict[str, Any]] = None,
+        timeout_ms: int = 2000,
+        max_attempts: int = 1,
+        retry_policy: str = "none",
     ) -> Dict[str, Any]:
-        if not idempotency_key or len(idempotency_key) > 256:
-            raise ValueError("invalid idempotency key")
+        self._validate_idempotency_key(idempotency_key)
+        if status not in {"queued", "waiting_approval"}:
+            raise ValueError("action runs must start queued or waiting for approval")
+        if (
+            isinstance(timeout_ms, bool)
+            or not isinstance(timeout_ms, int)
+            or not 1 <= timeout_ms <= 86_400_000
+        ):
+            raise ValueError("timeout_ms must be between 1 and 86400000")
+        if (
+            isinstance(max_attempts, bool)
+            or not isinstance(max_attempts, int)
+            or not 1 <= max_attempts <= 10
+        ):
+            raise ValueError("max_attempts must be between 1 and 10")
+        if retry_policy not in {"none", "bounded"}:
+            raise ValueError("invalid retry policy")
+        if payload is None:
+            payload = {}
+        if not isinstance(payload, dict):
+            raise ValueError("action payload must be an object")
+        try:
+            action_payload_json = json.dumps(
+                payload,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+                allow_nan=False,
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValueError("action payload must be JSON serializable") from exc
+        if len(action_payload_json.encode("utf-8")) > 262_144:
+            raise ValueError("action payload exceeds the configured limit")
         with self._lock:
             connection = self._conn()
             existing = connection.execute(
@@ -4520,13 +5342,14 @@ class ControlPlaneStore:
                     "action_id": existing_run["action_id"],
                 }
             now = _timestamp(_utcnow())
-            payload = {
+            self._validate_principal_locked(connection, tenant_id, principal_id)
+            event_payload = {
                 "run_id": run_id,
                 "tool_id": tool_id,
                 "status": status,
                 "idempotency_key": idempotency_key,
             }
-            payload_json = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+            event_payload_json = json.dumps(event_payload, sort_keys=True, separators=(",", ":"))
             event_id = "evt_" + hash_token(
                 f"{tenant_id}:{run_id}:{os.urandom(16).hex()}"
             )[:26]
@@ -4534,20 +5357,36 @@ class ControlPlaneStore:
             try:
                 connection.execute(
                     "INSERT INTO runs("
-                    "id, tenant_id, plan_id, idempotency_key, request_digest, status, created_at"
-                    ") VALUES(?, ?, ?, ?, ?, ?, ?)",
-                    (run_id, tenant_id, plan_id, idempotency_key, request_digest, status, now),
+                    "id, tenant_id, principal_id, plan_id, idempotency_key, request_digest, status, "
+                    "cancel_requested, unknown_reason, created_at"
+                    ") VALUES(?, ?, ?, ?, ?, ?, ?, 0, NULL, ?)",
+                    (
+                        run_id,
+                        tenant_id,
+                        principal_id,
+                        plan_id,
+                        idempotency_key,
+                        request_digest,
+                        status,
+                        now,
+                    ),
                 )
                 connection.execute(
                     "INSERT INTO actions("
-                    "id, tenant_id, run_id, step_id, tool_id, status, attempt_count, created_at"
-                    ") VALUES(?, ?, ?, NULL, ?, ?, 1, ?)",
+                    "id, tenant_id, run_id, step_id, tool_id, status, attempt_count, payload_json, "
+                    "timeout_ms, max_attempts, retry_policy, next_attempt_at, created_at"
+                    ") VALUES(?, ?, ?, NULL, ?, ?, 0, ?, ?, ?, ?, ?, ?)",
                     (
                         action_id,
                         tenant_id,
                         run_id,
                         tool_id,
-                        status if status == "waiting_approval" else "running",
+                        status,
+                        action_payload_json,
+                        timeout_ms,
+                        max_attempts,
+                        retry_policy,
+                        now if status == "queued" else None,
                         now,
                     ),
                 )
@@ -4562,8 +5401,8 @@ class ControlPlaneStore:
                     event_type="run.created",
                     aggregate_kind="run",
                     aggregate_id=run_id,
-                    payload_json=payload_json,
-                    payload=payload,
+                    payload_json=event_payload_json,
+                    payload=event_payload,
                     now=now,
                     event_id=event_id,
                 )
@@ -4835,60 +5674,90 @@ class ControlPlaneStore:
         return {
             "run_id": run["id"],
             "tenant_id": run["tenant_id"],
+            "principal_id": run["principal_id"],
             "plan_id": run["plan_id"],
             "status": run["status"],
             "idempotency_key": run["idempotency_key"],
             "request_digest": run["request_digest"],
+            "cancel_requested": bool(run["cancel_requested"]),
+            "unknown_reason": run["unknown_reason"],
             "created_at": run["created_at"],
             "finished_at": run["finished_at"],
             "action_id": action["id"] if action is not None else None,
             "tool_id": action["tool_id"] if action is not None else None,
+            "action_status": action["status"] if action is not None else None,
+            "action_attempt_count": int(action["attempt_count"]) if action is not None else 0,
+            "action_timeout_ms": int(action["timeout_ms"]) if action is not None else None,
+            "action_max_attempts": int(action["max_attempts"]) if action is not None else None,
+            "action_retry_policy": action["retry_policy"] if action is not None else None,
+            "action_next_attempt_at": action["next_attempt_at"] if action is not None else None,
+            "action_worker_id": action["worker_id"] if action is not None else None,
+            "action_lease_until": action["lease_until"] if action is not None else None,
+            "action_last_error": action["last_error"] if action is not None else None,
+            "action_unknown_reason": action["unknown_reason"] if action is not None else None,
             "evidence": evidence_record,
         }
 
     def cancel_run(
         self, run_id: str, tenant_id: str, principal_id: str
     ) -> Dict[str, Any]:
-        """Cancel a queued or locally running action before it can be retried."""
+        """Cancel before dispatch, or request cancellation for an active lease."""
         now = _timestamp(_utcnow())
         with self._lock:
             connection = self._conn()
-            run = connection.execute(
-                "SELECT * FROM runs WHERE id = ? AND tenant_id = ?",
-                (run_id, tenant_id),
-            ).fetchone()
-            if run is None:
-                raise NotFoundError("run not found")
-            if run["status"] in {"succeeded", "failed", "cancelled", "unknown"}:
-                raise ConflictError("run is not cancellable in its current state")
-            action = connection.execute(
-                "SELECT id FROM actions WHERE run_id = ? AND tenant_id = ? ORDER BY created_at LIMIT 1",
-                (run_id, tenant_id),
-            ).fetchone()
             connection.execute("BEGIN IMMEDIATE")
             try:
-                connection.execute(
-                    "UPDATE runs SET status = 'cancelled', finished_at = ? WHERE id = ? AND tenant_id = ?",
-                    (now, run_id, tenant_id),
-                )
-                if action is not None:
+                self._validate_principal_locked(connection, tenant_id, principal_id)
+                run, action = self._action_and_run_locked(connection, run_id, tenant_id)
+                if run["status"] in {"succeeded", "failed", "cancelled", "unknown"}:
+                    raise ConflictError("run is not cancellable in its current state")
+                if run["status"] == "cancel_requested":
+                    connection.execute("COMMIT")
+                    return self.get_run(run_id, tenant_id)
+                if action["status"] in {"queued", "retry", "waiting_approval"}:
                     connection.execute(
-                        "UPDATE actions SET status = 'cancelled', finished_at = ? WHERE id = ? AND tenant_id = ?",
+                        "UPDATE runs SET status = 'cancelled', finished_at = ?, cancel_requested = 0 "
+                        "WHERE id = ? AND tenant_id = ?",
+                        (now, run_id, tenant_id),
+                    )
+                    connection.execute(
+                        "UPDATE actions SET status = 'cancelled', finished_at = ?, "
+                        "next_attempt_at = NULL, worker_id = NULL, lease_token = NULL, "
+                        "lease_until = NULL, cancel_requested = 0 WHERE id = ? AND tenant_id = ?",
                         (now, action["id"], tenant_id),
                     )
-                payload = {"run_id": run_id, "status": "cancelled"}
+                    event_status = "cancelled"
+                elif action["status"] == "running":
+                    connection.execute(
+                        "UPDATE runs SET status = 'cancel_requested', finished_at = NULL, "
+                        "cancel_requested = 1 WHERE id = ? AND tenant_id = ?",
+                        (run_id, tenant_id),
+                    )
+                    connection.execute(
+                        "UPDATE actions SET status = 'cancel_requested', cancel_requested = 1 "
+                        "WHERE id = ? AND tenant_id = ? AND status = 'running'",
+                        (action["id"], tenant_id),
+                    )
+                    event_status = "cancel_requested"
+                else:
+                    raise ConflictError("run is not cancellable in its current state")
+                payload = {
+                    "run_id": run_id,
+                    "action_id": action["id"],
+                    "status": event_status,
+                }
                 event_id = "evt_" + hash_token(
-                    f"{tenant_id}:{run_id}:cancel:{os.urandom(16).hex()}"
+                    f"{tenant_id}:{run_id}:cancel:{event_status}:{os.urandom(16).hex()}"
                 )[:26]
                 self._append_audited_event_locked(
                     connection=connection,
                     tenant_id=tenant_id,
                     actor_kind="principal",
                     actor_id=principal_id,
-                    action="run.cancelled",
+                    action=f"run.{event_status}",
                     target=run_id,
                     outcome="success",
-                    event_type="run.cancelled",
+                    event_type=f"run.{event_status}",
                     aggregate_kind="run",
                     aggregate_id=run_id,
                     payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),

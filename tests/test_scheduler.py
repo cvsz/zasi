@@ -322,7 +322,7 @@ class DurableSchedulerTests(unittest.TestCase):
             reopened = ControlPlaneStore(database)
             reopened.initialize()
             try:
-                self.assertEqual(reopened.schema_version(), 9)
+                self.assertEqual(reopened.schema_version(), 10)
                 self.assertEqual(
                     reopened.get_schedule("schedule-a", "tenant-a")["next_run_at"],
                     "2026-09-02T09:00:00+00:00",

@@ -82,6 +82,21 @@ class ControlPlaneBrokerTests(unittest.TestCase):
         self.assertEqual(result.decision, "allow_with_approval")
         self.assertEqual(self.calls, [])
 
+    def test_approved_risk_bearing_tool_stays_queued_for_separate_worker(self):
+        result = self.broker.execute(
+            tenant_id="ten-a",
+            principal_id="usr-a",
+            tool_id="registry.test.write",
+            payload={"value": "still-bounded"},
+            requested_risk_tier="R2",
+            principal_scopes=frozenset({"workspace:write"}),
+            idempotency_key="write-approved-1",
+            approved=True,
+        )
+        self.assertEqual(result.status, "queued")
+        self.assertEqual(self.store.get_run(result.run_id, "ten-a")["action_status"], "queued")
+        self.assertEqual(self.calls, [])
+
     def test_r0_execution_is_durable_and_idempotent(self):
         first = self.broker.execute(
             tenant_id="ten-a",
@@ -106,7 +121,7 @@ class ControlPlaneBrokerTests(unittest.TestCase):
         self.assertEqual(first.run_id, second.run_id)
         self.assertEqual(len(self.calls), 1)
         self.assertEqual(first.evidence["status"], "simulated")
-        self.assertEqual(self.store.latest_sequence("ten-a"), 3)
+        self.assertEqual(self.store.latest_sequence("ten-a"), 4)
 
     def test_idempotency_key_cannot_be_reused_for_another_tool(self):
         first = self.broker.execute(

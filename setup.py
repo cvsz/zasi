@@ -15,6 +15,7 @@ setup(
             "zasi-demo=main:legacy_demo_main",
             "zasi-backup=scripts.backup_control_plane:main",
             "zasi-outbox-worker=scripts.run_outbox_worker:main",
+            "zasi-action-worker=scripts.run_action_worker:main",
         ]
     }
 )

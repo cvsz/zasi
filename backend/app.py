@@ -154,6 +154,14 @@ class TaskRunCompleteRequest(BaseModel):
     error: Dict[str, Any] = Field(default_factory=dict)
 
 
+class ActionReconcileRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    outcome: str = Field(pattern=r"^(retry|succeeded|failed|cancelled)$")
+    reason: str = Field(min_length=1, max_length=2000)
+    result: Dict[str, Any] = Field(default_factory=dict)
+
+
 class DevicePairRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -690,6 +698,7 @@ def create_app(
                 "evidence:write",
                 "analysis:write",
                 "run:cancel",
+                "run:reconcile",
                 "sequence:write",
             ],
         )
@@ -710,6 +719,7 @@ def create_app(
                 "intent:create",
                 "plan:create",
                 "run:cancel",
+                "run:reconcile",
                 "sequence:write",
                 "workspace:read",
                 "workspace:write",
@@ -2650,6 +2660,38 @@ def create_app(
             raise HTTPException(
                 status_code=404,
                 detail={"code": "NOT_FOUND", "message": "Run not found."},
+            )
+
+    @app.post("/api/v2/runs/{run_id}/reconcile")
+    async def reconcile_run(
+        run_id: str,
+        payload: ActionReconcileRequest,
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "run:reconcile", "Run reconciliation is not permitted.")
+        try:
+            return app.state.store.reconcile_action(
+                run_id=run_id,
+                tenant_id=context.tenant_id,
+                principal_id=context.principal_id,
+                outcome=payload.outcome,
+                reason=payload.reason,
+                result=payload.result,
+            )
+        except (NotFoundError, ScopeViolation):
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Run not found."},
+            )
+        except ConflictError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "RUN_RECONCILIATION_CONFLICT", "message": str(exc)},
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "VALIDATION_ERROR", "message": str(exc)},
             )
 
     @app.post("/api/v2/runs/{run_id}/cancel")
