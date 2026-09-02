@@ -29,7 +29,7 @@ class DurableSchedulerTests(unittest.TestCase):
         self.store.close()
 
     def test_once_schedule_deduplicates_occurrence_and_persists_run_history(self):
-        scheduled_for = dt.datetime(2026, 9, 2, 9, 0, tzinfo=dt.timezone.utc)
+        scheduled_for = dt.datetime.now(dt.timezone.utc)
         self.store.create_schedule(
             schedule_id="schedule-a",
             tenant_id="tenant-a",
@@ -85,7 +85,7 @@ class DurableSchedulerTests(unittest.TestCase):
         self.assertNotIn("lease_token", str(events))
 
     def test_interval_schedule_advances_without_duplicate_occurrences(self):
-        scheduled_for = dt.datetime(2026, 9, 2, 9, 0, tzinfo=dt.timezone.utc)
+        scheduled_for = dt.datetime.now(dt.timezone.utc)
         self.store.create_schedule(
             "schedule-a",
             "tenant-a",
@@ -109,7 +109,10 @@ class DurableSchedulerTests(unittest.TestCase):
             result={},
         )
         current = self.store.get_schedule("schedule-a", "tenant-a")
-        self.assertEqual(current["next_run_at"], "2026-09-02T09:01:00+00:00")
+        self.assertEqual(
+            current["next_run_at"],
+            (scheduled_for + dt.timedelta(minutes=1)).isoformat(),
+        )
         self.assertIsNone(
             self.store.claim_due_schedule(
                 "schedule-a",
@@ -128,7 +131,7 @@ class DurableSchedulerTests(unittest.TestCase):
         self.assertNotEqual(first["run"]["run_id"], second["run"]["run_id"])
 
     def test_interval_schedule_does_not_overlap_running_occurrences(self):
-        scheduled_for = dt.datetime(2026, 9, 2, 9, 0, tzinfo=dt.timezone.utc)
+        scheduled_for = dt.datetime.now(dt.timezone.utc)
         self.store.create_schedule(
             "schedule-a",
             "tenant-a",
