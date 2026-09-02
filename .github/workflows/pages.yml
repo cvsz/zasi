@@ -14,6 +14,7 @@ concurrency:
 
 jobs:
   deploy:
+    if: vars.ZASI_COCKPIT_API_ORIGIN != ''
     permissions:
       contents: read
       pages: write
@@ -22,6 +23,8 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    env:
+      VITE_API_ROOT: ${{ vars.ZASI_COCKPIT_API_ORIGIN }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7

@@ -18,7 +18,7 @@ import {
 } from 'react-router-dom';
 import * as THREE from 'three';
 
-const API_ROOT = '';
+const API_ROOT = (import.meta.env.VITE_API_ROOT || '').replace(/\/$/, '');
 
 class ApiError extends Error {
     constructor(response, payload) {
@@ -203,7 +203,7 @@ function useEventFeed() {
                 controller = new AbortController();
                 setState((current) => ({ ...current, status: 'connecting' }));
                 try {
-                    const response = await fetch(`/api/v2/events?after=${cursor}&follow=true`, {
+                    const response = await fetch(`${API_ROOT}/api/v2/events?after=${cursor}&follow=true`, {
                         headers: { Accept: 'text/event-stream', Authorization: `Bearer ${session.access_token}` },
                         cache: 'no-store',
                         signal: controller.signal,

@@ -23,8 +23,16 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+
       - name: Install build and SBOM tooling
         run: pip install '.[dev]' build
+
+      - name: Build bundled cockpit before packaging
+        run: npm ci --ignore-scripts && npm run build
 
       - name: Build Wheel & Tarball
         run: python3 -m build

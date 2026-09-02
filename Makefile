@@ -1,4 +1,4 @@
-.PHONY: all setup test test-api test-control-plane test-js test-all coverage clean build sbom install server run docker-build docker-run ci help
+.PHONY: all setup test test-api test-control-plane test-js test-all coverage clean build build-web sbom install server run docker-build docker-run ci help
 
 PYTHON ?= python3
 PIP ?= $(PYTHON) -m pip
@@ -33,7 +33,12 @@ clean:
 	rm -rf build/ dist/ *.egg-info .coverage htmlcov/ data/*.db
 
 build:
+	$(MAKE) build-web
 	$(PYTHON) -m build
+
+build-web:
+	npm ci --ignore-scripts
+	npm run build
 
 sbom:
 	$(PYTHON) scripts/generate_sbom.py --output dist/zasi-sbom.cdx.json --resolve-installed
