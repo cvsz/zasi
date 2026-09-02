@@ -1826,18 +1826,18 @@ the current frontend/static-hosting hardening is in signed commit
 `d60f11878560abe19a2a4d270080257203db2d55`, and the current container
 permission hardening is in signed commit
 `d169fa9b9e54ed0bf5263baa8e9bd36db5b05f59`.
+The current release/container/SBOM packaging hardening is in signed commit
+`3fa2b2fbccb5e7ede3b3dc71f72c2114ee763616`.
 The legacy-boundary quarantine and truthfulness regression is recorded in
 signed commit `afcc04c`; the compatibility-status label correction is in
 signed commit `6d0eaec`, with the documentation reconciliation in `15dd528`.
 #29](https://github.com/cvsz/zasi/pull/29) passed hosted checks for the prior
-release-gate head `e19d4de7e0d7d0e47745e0cf0982ab5b4806798a` and the prior
-implementation verification head `6d0eaec`, which includes the durable
-action-worker implementation, legacy-boundary hardening, and evidence updates.
-The implementation hardening set above was hosted-validated in PR #29 at
-integration head `d1d620c3dc21a39c7e07a0f33ef4605b0eb54f55`: CodeQL,
-Actions/JavaScript-TypeScript/Python analysis, Python 3.11/3.12,
-React/TypeScript validation, distribution, Docker image, and Docker build all
-passed; PR-only GHCR publication remained skipped by policy.
+implementation heads listed above, including the durable action-worker,
+legacy-boundary, and evidence updates. The complete current implementation
+head `3fa2b2fbccb5e7ede3b3dc71f72c2114ee763616` was then hosted-validated with
+CodeQL, Actions/JavaScript-TypeScript/Python analysis, Python 3.11/3.12,
+React/TypeScript validation, distribution, Docker image, and Docker build; the
+PR-only GHCR publication remained skipped by policy.
 There is no
 staging deployment, production checkout, or production release authorization.
 The existing `.coverage` deletion is preserved and is not part of the
@@ -1845,8 +1845,8 @@ implementation claim.
 
 | Command or inspection | Observed result | Evidence class |
 |---|---|---|
-| `python3 -m unittest discover -s tests -q` | 312 tests passed, 2 optional live-service checks skipped | Local functional regression |
-| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 312 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
+| `python3 -m unittest discover -s tests -q` | 315 tests passed, 2 optional live-service checks skipped | Local functional regression |
+| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 315 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
 | Focused control-plane/security suite (`tests.test_control_plane_core`, `tests.test_control_plane_broker`, `tests.test_control_plane_api`, `tests.test_security_hardening`, `tests.test_egress_security`) | Passed, including memory-hard API-key verification and TLS 1.2 floor tests | Local governed/security regression |
 | Focused outbox worker suite (`tests.test_outbox_worker tests.test_control_plane_core`) | 28 tests passed; bounded polling, interruptible shutdown, retry/dead-letter preservation, expired-lease reclaim, conditional-claim race handling, configuration fail-closed behavior, and worker identifier validation covered | Local outbox worker regression |
 | `PYTHONPATH=. python3 -m unittest tests.test_release_signing -v` | 4 tests passed; artifact selection/checksum determinism and protected release workflow requirements covered | Local release-signing regression |
@@ -1855,6 +1855,7 @@ implementation claim.
 | `PYTHONPATH=. python3 -m unittest tests.test_rollback_drill -v` | 6 tests passed; explicit local opt-in, staging/production rejection, generated-name quoting, sanitized result, socket-URL preservation, and remote-host rejection were verified | Local rollback-drill safety regression |
 | `python3 -m compileall -q backend src scripts tests main.py` | Passed | Local syntax check |
 | `python3 -m unittest tests.test_encrypted_backup -q` | 10 passed, including AES-256-GCM tamper and wrong-key rejection, atomic mode-600 files, missing-source rejection, no-clobber restore, and SQLite restore integrity | Local encrypted backup/restore regression |
+| `python3 -m unittest tests.test_sbom tests.test_installer -v` | 5 tests passed; SBOM npm-coordinate deduplication, selected Python extras, deterministic output, and fresh installer build-output selection are covered | Local packaging regression |
 | `node tests/test_components.js` | Passed; verifies React 19/Router 7 pins, typed entrypoint ownership, local scripts, and governed route declarations | Local bundle/source safety assertions |
 | `npm run typecheck` | Passed with TypeScript 7 strict settings for the production entrypoint | Local frontend type safety |
 | `node --check electron/main.js` | Passed | Local Electron syntax check |
@@ -1875,11 +1876,10 @@ implementation claim.
 | `docker compose config` | Passed with explicit local API key/CORS inputs | Local configuration rendering |
 | ASGI smoke: session bootstrap, authenticated OpenAPI, header-based SSE resume, `/health/live`, `/health/ready`, `/`, and an unknown API route | Session `201`; authenticated OpenAPI `200`; SSE resume `200` with `stream.end`; liveness/readiness/root `200`; unknown API route returned JSON 404 | Local HTTP smoke |
 | `docker build --pull -t zasi:architecture-implementation .` | Passed for the implementation branch | Local container build |
-| `docker build --pull` plus isolated hardened container smoke | Current image returned HTTP `200` from `/health/ready` with `status=ready`, schema 11, and frontend bundle `ready`; UID `10001:10001`, read-only rootfs, all capabilities dropped, no-new-privileges, PID limit, memory limit, and CPU limit were verified; external egress, research execution, and physical actuation reported disabled; temporary container was removed | Local runtime/container evidence |
-| `python3 scripts/generate_sbom.py --output dist/zasi-sbom.cdx.json --resolve-installed` in the isolated project environment | CycloneDX 1.5 SBOM generated with 376 components and a serial number | Local supply-chain evidence |
+| `docker build --pull` plus isolated hardened container smoke | Current image returned HTTP `200` from `/health/ready` with `status=ready`, schema 11, and frontend bundle `ready`; UID `10001:10001`, `/app/main.py` present, read-only rootfs, all capabilities dropped, no-new-privileges, PID limit `128`, and memory limit `512 MiB` were verified; external egress, research execution, and physical actuation reported disabled; temporary container was removed | Local runtime/container evidence |
+| `python3 scripts/generate_sbom.py --output zasi-sbom.cdx.json --resolve-installed` in the isolated project environment | CycloneDX 1.5 SBOM generated with 364 components, zero duplicate coordinates or `bom-ref` values, and the selected `psycopg-binary` extra present | Local supply-chain evidence |
 | `(cd dist && sha256sum --check SHA256SUMS)` and GPG verification of wheel, sdist, and SBOM signatures | Passed with the configured cvsz signing identity | Local artifact integrity evidence |
-| PR #29 hosted checks for exact pushed head `d6e9df50f33939efdad75ebc615bb708a52c40d7` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12 with the isolated dependency audit, React/TypeScript validation, distribution, Docker image, and Docker build checks passed; PR package publication skipped. This head contains the signed implementation, legacy-boundary, rollback-rehearsal, and evidence-documentation commits. | Hosted CI evidence; not release approval |
-| PR #29 hosted validation head `d1d620c3dc21a39c7e07a0f33ef4605b0eb54f55` | Control-plane, frontend, container, and evidence-documentation commits are GPG-signed and locally verified; local test, runtime, artifact, SBOM, and hosted checks are recorded above. PR-only GHCR publication was skipped by policy. | Hosted CI and local commit/artifact provenance; not release approval |
+| PR #29 hosted checks for exact pushed head `3fa2b2fbccb5e7ede3b3dc71f72c2114ee763616` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12 with the isolated dependency audit, React/TypeScript validation, distribution, Docker image, and Docker build checks passed; PR package publication skipped. The head is GPG-signed and contains the packaging/SBOM/container-entrypoint hardening. | Hosted CI evidence; not release approval |
 | GitHub Issue #18 | Remains `OPEN`; current status comments are maintained in the [roadmap thread](https://github.com/cvsz/zasi/issues/18) | External roadmap status, not release approval |
 
 The `ResourceWarning` regression test is intentionally retained. The original
