@@ -20,7 +20,8 @@ browser / Electron
         | authenticated JSON + bearer SSE
         v
 backend.app (ASGI)
-  identity -> policy -> intent/plan -> broker -> evidence
+  identity -> policy -> intent/plan -> broker -> durable action queue
+                                      -> worker -> evidence
         |                    |
         +---- PostgreSQL/SQLite ---- events + durable outbox
               |

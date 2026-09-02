@@ -118,6 +118,29 @@ external destinations retry and eventually dead-letter when no handler is
 configured. A worker command returning successfully is not evidence of
 production deployment, external delivery, or multi-process correctness.
 
+## Durable action worker
+
+Action dispatch is a separate durable worker boundary. `ActionBroker.submit`
+writes the action payload, idempotency key, timeout, retry policy, and queued
+state before a worker can claim it. `zasi-action-worker` claims only code-owned
+R0/R1 handlers by default:
+
+```bash
+set -a
+. .env
+set +a
+zasi-action-worker --once
+```
+
+The reference worker uses a bounded lease and never returns a lease token to
+clients. Lease expiry, timeout, cancellation during execution, and uncertain
+side effects become `unknown` and require an authenticated
+`POST /api/v2/runs/{run_id}/reconcile` decision before retry. R2-R5 actions
+remain queued; enabling a higher-risk worker requires an independently governed
+worker, sandbox, egress, approval, rollback, and Gate E evidence bundle.
+The command is a local/reference smoke surface, not proof of continuously
+deployed workers, external side effects, or production safety.
+
 ## Electron
 
 ```bash

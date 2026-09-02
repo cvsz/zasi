@@ -759,6 +759,7 @@ Session responses MUST not return reusable secrets. Refresh tokens, if used, MUS
 | POST | /api/v2/plans/{plan_id}/approve | R2-R4 | Approve exact plan digest when policy permits |
 | POST | /api/v2/plans/{plan_id}/run | R1-R4 | Queue execution after policy and approval checks |
 | POST | /api/v2/runs/{run_id}/cancel | R2 | Request cancellation |
+| POST | /api/v2/runs/{run_id}/reconcile | R2-R4 | Resolve an unknown action or explicitly authorize a retry |
 | GET | /api/v2/runs/{run_id} | R0 | Retrieve run state and evidence refs |
 
 /api/v2/intents/{intent_id}/plan MUST never execute a side effect. /api/v2/plans/{plan_id}/run MUST require an idempotency key for any tier above R0.
@@ -794,6 +795,27 @@ provides a bounded poller, retry/reclaim path, dead-letter transition, schedule
 cancellation, and durable task-run history. It does not execute task
 instructions or grant external side effects; a governed worker must consume a
 claimed run through the action broker.
+
+Action execution uses the same durable repository contract. `ActionBroker.submit`
+creates a queued run and action with the immutable request payload digest,
+timeout, retry policy, and idempotency key. `ActionWorker` claims the action
+with a bounded lease and worker token, invokes only the code-owned registry
+handler, and commits evidence plus completion events atomically. The reference
+application may drain R0/R1 observations inline after the durable enqueue to
+preserve its synchronous compatibility response; the inline path still claims
+the lease through `ActionWorker` and never calls a handler from an HTTP route.
+Risk-bearing R2-R5 actions remain queued for a separately governed worker and
+are not drained by the application process.
+
+Lease expiry, timeout, and a result whose side effect cannot be known are
+terminal `unknown` outcomes. They are never retried automatically. An
+authenticated principal with `run:reconcile` must record an auditable reason
+and choose `retry`, `succeeded`, `failed`, or `cancelled`; only `retry` returns
+the action to the queue. A running cancellation becomes `cancel_requested` and
+is reported as `unknown` if the handler returns without a cooperative
+cancellation proof. The installed `zasi-action-worker` command polls the local
+queue with R0/R1 as its default allowed risk set; enabling higher-risk worker
+profiles remains a separate Gate E decision.
 
 The durable outbox delivery worker is exposed as `zasi-outbox-worker` and
 `scripts/run_outbox_worker.py`. It claims only committed outbox rows through
@@ -938,8 +960,8 @@ Compatibility routes:
 | intents | id, tenant_id, principal_id, input_ref, goal_json, status, created_at |
 | plans | id, tenant_id, intent_id, digest, steps_json, status, expires_at |
 | approvals | id, tenant_id, plan_id, digest, approver_id, decision, expires_at |
-| runs | id, tenant_id, plan_id, idempotency_key, request_digest, status, timestamps |
-| actions | id, tenant_id, run_id, step_id, tool_id, status, attempt_count |
+| runs | id, tenant_id, principal_id, plan_id, idempotency_key, request_digest, status, cancel_requested, unknown_reason, timestamps |
+| actions | id, tenant_id, run_id, step_id, tool_id, status, attempt_count, payload, timeout, retry policy, worker lease, cancellation, unknown reason |
 | evidence | id, tenant_id, kind, status, provenance_json, artifact_ref, supersedes |
 | artifacts | id, tenant_id, digest, media_type, storage_ref, quarantine_status |
 | audit_records | id, tenant_id, actor_json, action, target, outcome, redacted_metadata |
@@ -1396,6 +1418,7 @@ Required cases:
 - crash after commit before outbox delivery;
 - duplicate worker delivery;
 - unknown external result and reconciliation;
+- action lease ownership, timeout, cancellation, bounded retry, and unknown-before-retry;
 - cursor replay after reconnect;
 - cursor outside retention and resync;
 - backup restore into a clean environment;
@@ -1543,6 +1566,13 @@ Outputs:
 - idempotency;
 - worker queue;
 - timeout, cancellation, retry, and unknown-result handling.
+
+The current reference implementation supplies `ActionBroker.submit`,
+`ActionWorker`, `zasi-action-worker`, action leases, immutable payload storage,
+bounded result serialization, explicit reconciliation, and a protected R0/R1
+inline drain. Higher-risk action deployment remains deliberately disabled from
+the application process until an independently governed worker and Gate E
+evidence exist.
 
 Validation:
 
@@ -1767,20 +1797,22 @@ Evidence capture date: **2026-09-02 UTC**. The results below distinguish local
 working-tree evidence, the signed implementation commits, hosted PR checks, and
 unverified deployment gates. The core PostgreSQL/Redis, CI, cockpit, and
 encrypted-backup hardening is recorded through signed code commit `49bba1c`,
-with the scheduler fixture, bounded outbox worker, and protected release
-signing follow-up in signed commits `25ad5f3`, `1c1dd62`, `7ba35f9`, and
-`eaf4c15`. PR [#29](https://github.com/cvsz/zasi/pull/29) passed hosted
+with the scheduler fixture, bounded outbox worker, protected release signing,
+and durable action-worker follow-up in signed commits `25ad5f3`, `1c1dd62`,
+`7ba35f9`, `eaf4c15`, `17e3771`, and `3e61e9a`. PR
+[#29](https://github.com/cvsz/zasi/pull/29) passed hosted
 checks for exact pushed verification head `e19d4de7e0d7d0e47745e0cf0982ab5b4806798a`,
 which includes the bounded outbox worker, release-signing gate, and evidence
-updates. There is no
+updates. Hosted verification for the two new action-worker commits will be
+recorded after they are pushed. There is no
 staging deployment, production checkout, or production release authorization.
 The existing `.coverage` deletion is preserved and is not part of the
 implementation claim.
 
 | Command or inspection | Observed result | Evidence class |
 |---|---|---|
-| `python3 -m unittest discover -s tests -q` | 275 tests passed, 2 optional live-service checks skipped | Local functional regression |
-| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 275 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
+| `python3 -m unittest discover -s tests -q` | 284 tests passed, 2 optional live-service checks skipped | Local functional regression |
+| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 284 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
 | Focused control-plane/security suite (`tests.test_control_plane_core`, `tests.test_control_plane_broker`, `tests.test_control_plane_api`, `tests.test_security_hardening`, `tests.test_egress_security`) | Passed, including memory-hard API-key verification and TLS 1.2 floor tests | Local governed/security regression |
 | Focused outbox worker suite (`tests.test_outbox_worker tests.test_control_plane_core`) | 20 tests passed; bounded polling, interruptible shutdown, retry/dead-letter preservation, configuration fail-closed behavior, and worker identifier validation covered | Local outbox worker regression |
 | `PYTHONPATH=. python3 -m unittest tests.test_release_signing -v` | 4 tests passed; artifact selection/checksum determinism and protected release workflow requirements covered | Local release-signing regression |
@@ -1793,11 +1825,12 @@ implementation claim.
 | `npm run build` | Vite production bundle passed; emitted a chunk-size advisory | Local frontend build |
 | `python3 -m build` | Source distribution and wheel build passed | Local package build |
 | `zasi-outbox-worker --once` against a temporary SQLite profile | Bounded one-iteration run passed; output contained only sanitized status/count fields and no secret material | Local worker CLI smoke |
+| `python3 scripts/run_action_worker.py --once` against a temporary SQLite profile | Direct source-checkout CLI smoke passed; one bounded R0/R1 poll completed with sanitized status/count output and no secret material | Local durable action-worker CLI smoke |
 | `scripts/sign_release_artifacts.py` in an isolated temporary output directory with the configured local GPG key | Wheel, sdist, SBOM, and SHA256SUMS were signed and verified; public key export and checksum verification passed; temporary signatures were outside the repository | Local artifact-signing smoke |
-| `ZASI_DATABASE_BACKEND=postgresql` with `PostgresControlPlaneStore` against the shared cluster | Schema 9 initialization, integrity check, authenticated session, project-memory/briefing/schedule repository paths, readiness, and custom-format backup catalog smoke passed | Local PostgreSQL integration |
-| Shared PostgreSQL/Redis ASGI smoke with a uniquely scoped tenant probe | Unauthenticated goals access returned `401`; authenticated session bootstrap returned `201` and remained scoped to `local`; `/health/ready` returned HTTP `200` with PostgreSQL and Redis `ready`; a foreign-tenant goal returned `404` and was absent from the local goal list; exact probe rows were removed and cleanup was verified | Local authenticated API, dependency, and tenant-isolation evidence |
-| `PostgresControlPlaneStore` against an ephemeral database on the shared PostgreSQL cluster | Schema 9 initialization, tenant-scoped Goal/Task DAG lifecycle, schedule occurrence deduplication, task-run lease ownership/reclaim, atomic completion, and goal completion passed; the ephemeral database was removed after verification | Local PostgreSQL vertical-slice integration |
-| `scripts/backup_control_plane.py create/validate --backend postgresql` with an ephemeral 32-byte key injected through `ZASI_BACKUP_KEY_B64` | Schema-9 encrypted archive created and validated from the shared PostgreSQL cluster; destination mode `600`. A new temporary PostgreSQL restore was not run in this pass because the deliberately least-privileged `zasi` role cannot create or drop validation databases; prior schema-8 restore mechanics remain historical evidence. | Local encrypted PostgreSQL backup create/validate evidence; restore is a separate open gate for schema 9 |
+| `ZASI_DATABASE_BACKEND=postgresql` with `PostgresControlPlaneStore` against the shared cluster | Schema 10 initialization, integrity check, authenticated session, project-memory/briefing/schedule repository paths, readiness, and custom-format backup catalog smoke passed | Local PostgreSQL integration |
+| Shared PostgreSQL/Redis ASGI smoke with a uniquely scoped tenant probe | Unauthenticated goals access returned `401`; authenticated session bootstrap returned `201` and remained scoped to `local`; `/health/ready` returned HTTP `200` with PostgreSQL schema 10 and Redis `ready`; a foreign-tenant goal returned `404` and was absent from the local goal list; exact probe rows were removed and cleanup was verified | Local authenticated API, dependency, and tenant-isolation evidence |
+| `PostgresControlPlaneStore` against an ephemeral database on the shared PostgreSQL cluster | Schema 10 initialization, tenant-scoped Goal/Task DAG lifecycle, schedule occurrence deduplication, task-run lease ownership/reclaim, atomic completion, and goal completion passed; the ephemeral database was removed after verification | Local PostgreSQL vertical-slice integration |
+| `scripts/backup_control_plane.py create/validate --backend postgresql` with an ephemeral 32-byte key injected through `ZASI_BACKUP_KEY_B64` | Schema-10 encrypted archive created and validated from the shared PostgreSQL cluster; destination mode `600`. A new temporary PostgreSQL restore was not run in this pass because the deliberately least-privileged `zasi` role cannot create or drop validation databases; prior restore mechanics remain historical evidence. | Local encrypted PostgreSQL backup create/validate evidence; restore is a separate open gate for schema 10 |
 | `ZASI_REDIS_URL` with `RedisRuntime` against the shared ACL user | Authenticated ping, atomic namespaced rate-limit, and ASGI request smoke passed; the live host ACL has `default` disabled and `zasi` limited to `~zasi:*` plus `PING`, `EVAL`, `INCRBY`, and `EXPIRE`; direct `CONFIG`/`GET`/`SET`, ACL introspection, outside-namespace keys, and unauthenticated access were denied | Local Redis integration and least-privilege ACL audit |
 | Private `.env` service credential shape | Mode `600`; `zasi` PostgreSQL/Redis URLs and `PGPASSWORD`/`REDIS_PASSWORD` contain operator-supplied high-entropy hex material; the value is ignored by Git and absent from tracked source | Local secret-handling inspection |
 | `npm audit --omit=dev --json` | 0 info/low/moderate/high/critical findings after the React Router 7.18.3 upgrade | Local dependency audit |
@@ -1805,8 +1838,8 @@ implementation claim.
 | `docker compose config` | Passed with explicit local API key/CORS inputs | Local configuration rendering |
 | ASGI smoke: session bootstrap, authenticated OpenAPI, header-based SSE resume, `/health/live`, `/health/ready`, `/`, and an unknown API route | Session `201`; authenticated OpenAPI `200`; SSE resume `200` with `stream.end`; liveness/readiness/root `200`; unknown API route returned JSON 404 | Local HTTP smoke |
 | `docker build --pull -t zasi:architecture-implementation .` | Passed for the implementation branch | Local container build |
-| `docker build --pull` plus isolated hardened container smoke | Current image returned HTTP `200` from `/health/ready` with `status=ready` and schema 9; UID `10001:10001`, read-only rootfs, all capabilities dropped, no-new-privileges, PID limit, memory limit, and CPU limit were verified; external egress, research execution, and physical actuation reported disabled; temporary container was removed | Local runtime/container evidence |
-| `python3 scripts/generate_sbom.py --output dist/zasi-sbom.cdx.json --resolve-installed` in the isolated project environment | CycloneDX 1.5 SBOM generated with 370 components and deterministic serial; the environment resolved cryptography 50.0.1 | Local supply-chain evidence |
+| `docker build --pull` plus isolated hardened container smoke | Current image returned HTTP `200` from `/health/ready` with `status=ready` and schema 10; UID `10001:10001`, read-only rootfs, all capabilities dropped, no-new-privileges, PID limit, memory limit, and CPU limit were verified; external egress, research execution, and physical actuation reported disabled; temporary container was removed | Local runtime/container evidence |
+| `python3 scripts/generate_sbom.py --output dist/zasi-sbom.cdx.json --resolve-installed` in the isolated project environment | CycloneDX 1.5 SBOM generated with 376 components and a serial number | Local supply-chain evidence |
 | `sha256sum --check dist/SHA256SUMS` and GPG verification of wheel, sdist, and SBOM signatures | Passed with the configured cvsz signing identity | Local artifact integrity evidence |
 | PR #29 hosted checks for exact pushed verification head `e19d4de` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12 with the isolated dependency audit, React/TypeScript validation, distribution, Docker image, and Docker build checks passed; PR package publication skipped. This head contains signed worker commit `1c1dd62`, signed release-gate commit `eaf4c15`, and signed evidence commit `e19d4de`. | Hosted CI evidence; not release approval |
 | GitHub Issue #18 | Remains `OPEN`; current status comments are maintained in the [roadmap thread](https://github.com/cvsz/zasi/issues/18) | External roadmap status, not release approval |
@@ -1827,10 +1860,10 @@ the acceptance criteria in [#9](https://github.com/cvsz/zasi/issues/9) through
 | Issue / phase | Current status | Evidence and remaining release gate |
 |---|---|---|
 | [#9 / P0](https://github.com/cvsz/zasi/issues/9) | Partial, local | `backend.app` is the authoritative ASGI owner; fail-closed settings, readiness, compatibility quarantine, and registry-derived status exist. Duplicate-port ownership detection and hosted runtime ownership evidence remain open. |
-| [#10 / P1](https://github.com/cvsz/zasi/issues/10) | Partial, local PostgreSQL/Redis and encrypted backup mechanics | Tenant-scoped identity, hashed sessions, devices, audit, events, rate limits, schema-9 migrations, PostgreSQL repository, Redis coordination, authenticated API smoke, AES-GCM schema-9 archive create/validate, SQLite restore integrity, and historical temporary PostgreSQL restore checks exist. A fresh schema-9 temporary restore, external identity/managed secrets, multi-process restart proof, managed object-storage retention/key rotation, staging restore, and rollback operations remain open. |
+| [#10 / P1](https://github.com/cvsz/zasi/issues/10) | Partial, local PostgreSQL/Redis and encrypted backup mechanics | Tenant-scoped identity, hashed sessions, devices, audit, events, rate limits, schema-10 migrations, PostgreSQL repository, Redis coordination, authenticated API smoke, AES-GCM schema-10 archive create/validate, SQLite restore integrity, and historical temporary PostgreSQL restore checks exist. A fresh schema-10 temporary restore, external identity/managed secrets, multi-process restart proof, managed object-storage retention/key rotation, staging restore, and rollback operations remain open. |
 | [#11 / P2](https://github.com/cvsz/zasi/issues/11) | Partial, local | Typed intents/plans, deterministic risk policy, exact-digest approval records, evidence provenance, and governed MCP calls exist. Full R0–R5 capability inventory, production verification procedures, and complete claim-to-evidence coverage remain open. |
 | [#12 / P3](https://github.com/cvsz/zasi/issues/12) | Partial, local | Transactional events/outbox, bounded `zasi-outbox-worker` delivery loop, leased claims, authenticated SSE replay, cursor validation, retention gaps, and snapshot resync exist. A continuously deployed production worker, 10,000-event performance evidence, backpressure policy, and multi-process delivery proof remain open. |
-| [#13 / P4](https://github.com/cvsz/zasi/issues/13) | Partial, reference-only | Stable tool registry, request digests, run idempotency, approval gating, fail-closed dynamic execution, and trusted handlers exist. External action workers, reconciliation of unknown side effects, durable cancellation/timeout workers, and certified sandbox evidence remain open. |
+| [#13 / P4](https://github.com/cvsz/zasi/issues/13) | Partial, durable reference worker | Stable tool registry, request digests, run idempotency, approval gating, immutable queued payloads, worker leases/tokens, atomic evidence/events, bounded local retry, timeout/cancellation/unknown semantics, explicit authenticated reconciliation, and the R0/R1 `zasi-action-worker` path exist. Certified isolation, higher-risk worker deployment, external-side-effect proof, multi-process recovery, and production worker evidence remain open. |
 | [#14 / P5](https://github.com/cvsz/zasi/issues/14) | Partial, React 19 / Router 7 with checked TypeScript source | Dependencies are bundled and locked, the cockpit uses authenticated v2 transport, safe rendering, CSP, reconnect/resync state, and a strict TypeScript root entrypoint; the cockpit source is now checked in `cockpit.tsx` and `app.jsx` is only a compatibility export. Accessibility/performance evidence and broad event-driven workspace coverage remain open. |
 | [#15 / P6](https://github.com/cvsz/zasi/issues/15) | Partial, local durable orchestration/reference connectors | SQLite/PostgreSQL goals, tasks, schedules, task runs, project-scoped memory, source-backed briefings, and connector health now provide tenant scope, dependency gating, occurrence/idempotency keys, worker leases, restart persistence, stale invalidation, authenticated routes, and atomic events. A continuously deployed production worker, real GitHub/email/calendar/files adapters, semantic retrieval, external-source freshness, and independent multi-process evidence remain open. |
 | [#16 / P7](https://github.com/cvsz/zasi/issues/16) | Unavailable by design | Artifact quarantine and provenance contracts exist; real CAD/STEP, vision, STT/TTS, anti-replay speaker verification, and hardware integration are not enabled. |
@@ -1846,8 +1879,8 @@ disclosures. It is **NO-GO for public production, external writes, hardware,
 self-evolution, formal/cryptographic assurance, or ASI/AGI claims**.
 
 The next implementation work is finite and ordered: complete the missing P0/P1
-ownership and production repository operations, then add the P4 action worker
-and reconciliation path, then finish the remaining P6 production worker, real
+ownership and production repository operations, complete Gate E for any
+higher-risk action worker, then finish the remaining P6 production worker, real
 connector adapters, semantic retrieval, and freshness evidence before the P8
 signed staging release process. An open GitHub issue, a target architecture
 diagram, a passing local test, or a historical badge cannot substitute for the

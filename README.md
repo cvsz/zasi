@@ -5,7 +5,7 @@
 [![PyPI Downloads](https://img.shields.io/pypi/dm/zasi.svg?color=blue)](https://pypi.org/project/zasi/)
 [![npm](https://img.shields.io/npm/v/zasi-cockpit.svg?logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/zasi-cockpit)
 [![Subsystems](https://img.shields.io/badge/subsystems-historical%20catalog-gray.svg)](docs/SUBSYSTEMS_REFERENCE.md)
-[![Tests](https://img.shields.io/badge/tests-275%20passing-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/tests-284%20passing-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.14-blue.svg)](https://python.org)
 [![React](https://img.shields.io/badge/frontend-React%2019%20%2B%20TypeScript%20%2B%20React%20Router%20v7-61dafb.svg)](web/)
 [![Discussions](https://img.shields.io/badge/community-Discussions-orange.svg)](https://github.com/cvsz/zasi/discussions)
@@ -29,6 +29,12 @@ authenticated session -> scoped observation -> typed intent -> policy
 -> immutable plan -> provenance-backed evidence -> durable event
 -> explicit approval -> brokered action
 ```
+
+Brokered actions are durably queued before dispatch. The reference application
+may drain bounded R0/R1 observations through the leased `ActionWorker`; timeout,
+lease expiry, cancellation during execution, and uncertain outcomes become
+explicit `unknown` states that require authenticated reconciliation. R2-R5
+actions remain queued and external writes are disabled in the reference profile.
 
 The repository also contains a historical 176-entry prototype catalog. A
 catalog entry is not an execution grant, and the catalog is not evidence that
@@ -89,6 +95,7 @@ Legacy side-effect routes such as `/api/tick`, `/api/mutate`, and
 python3 -m unittest discover -s tests -q
 PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q
 python3 -m unittest tests.test_control_plane_core tests.test_control_plane_broker tests.test_control_plane_api tests.test_security_hardening tests.test_egress_security -q
+python3 scripts/run_action_worker.py --once
 node tests/test_components.js
 npm run typecheck
 npm audit --omit=dev
