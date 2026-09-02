@@ -1328,6 +1328,15 @@ known limitations and skipped gates
 
 An evidence bundle that says “all systems online” without per-capability evidence is invalid.
 
+The tag release workflow MUST fail closed unless the protected `release`
+environment provides `ZASI_RELEASE_GPG_PRIVATE_KEY` and the matching
+`ZASI_RELEASE_GPG_FINGERPRINT`. `scripts/sign_release_artifacts.py` MUST
+create and verify detached signatures for every wheel, sdist, the CycloneDX
+SBOM, and `SHA256SUMS`, and the release MUST publish the signatures and public
+key beside those assets. The private key and optional passphrase MUST enter
+only through the protected environment; they MUST NOT appear in repository
+files, command arguments, logs, or release assets.
+
 ### 19.4 Installer and container requirements
 
 Installer behavior:
@@ -1758,22 +1767,25 @@ Evidence capture date: **2026-09-02 UTC**. The results below distinguish local
 working-tree evidence, the signed implementation commits, hosted PR checks, and
 unverified deployment gates. The core PostgreSQL/Redis, CI, cockpit, and
 encrypted-backup hardening is recorded through signed code commit `49bba1c`,
-with the scheduler fixture and bounded outbox worker follow-up in signed
-commits `25ad5f3`, `1c1dd62`, and `7ba35f9`. PR [#29](https://github.com/cvsz/zasi/pull/29) passed hosted
+with the scheduler fixture, bounded outbox worker, and protected release
+signing follow-up in signed commits `25ad5f3`, `1c1dd62`, `7ba35f9`, and
+`eaf4c15`. PR [#29](https://github.com/cvsz/zasi/pull/29) passed hosted
 checks for exact pushed verification head `f7f313932696c953300bda6ca3c7676f5a8cf29f`,
 which includes the bounded outbox worker and evidence updates; the hosted
-verification row below records that application-code head, while the latest
-worker-identity fix remains a separate locally verified follow-up. There is no
+verification row below records the previous application-code head; the latest
+worker and release-signing follow-ups remain locally verified pending hosted
+verification. There is no
 staging deployment, production checkout, or production release authorization.
 The existing `.coverage` deletion is preserved and is not part of the
 implementation claim.
 
 | Command or inspection | Observed result | Evidence class |
 |---|---|---|
-| `python3 -m unittest discover -s tests -q` | 271 tests passed, 2 optional live-service checks skipped | Local functional regression |
-| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 271 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
+| `python3 -m unittest discover -s tests -q` | 275 tests passed, 2 optional live-service checks skipped | Local functional regression |
+| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 275 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
 | Focused control-plane/security suite (`tests.test_control_plane_core`, `tests.test_control_plane_broker`, `tests.test_control_plane_api`, `tests.test_security_hardening`, `tests.test_egress_security`) | Passed, including memory-hard API-key verification and TLS 1.2 floor tests | Local governed/security regression |
 | Focused outbox worker suite (`tests.test_outbox_worker tests.test_control_plane_core`) | 20 tests passed; bounded polling, interruptible shutdown, retry/dead-letter preservation, configuration fail-closed behavior, and worker identifier validation covered | Local outbox worker regression |
+| `PYTHONPATH=. python3 -m unittest tests.test_release_signing -v` | 4 tests passed; artifact selection/checksum determinism and protected release workflow requirements covered | Local release-signing regression |
 | `python3 -m unittest tests.test_api -q` | 8 legacy compatibility tests passed, including retired webhook and truthful legacy OpenAPI assertions | Local migration-surface regression |
 | `python3 -m compileall -q backend src scripts tests main.py` | Passed | Local syntax check |
 | `python3 -m unittest tests.test_encrypted_backup -q` | 10 passed, including AES-256-GCM tamper and wrong-key rejection, atomic mode-600 files, missing-source rejection, no-clobber restore, and SQLite restore integrity | Local encrypted backup/restore regression |
@@ -1783,6 +1795,7 @@ implementation claim.
 | `npm run build` | Vite production bundle passed; emitted a chunk-size advisory | Local frontend build |
 | `python3 -m build` | Source distribution and wheel build passed | Local package build |
 | `zasi-outbox-worker --once` against a temporary SQLite profile | Bounded one-iteration run passed; output contained only sanitized status/count fields and no secret material | Local worker CLI smoke |
+| `scripts/sign_release_artifacts.py` in an isolated temporary output directory with the configured local GPG key | Wheel, sdist, SBOM, and SHA256SUMS were signed and verified; public key export and checksum verification passed; temporary signatures were outside the repository | Local artifact-signing smoke |
 | `ZASI_DATABASE_BACKEND=postgresql` with `PostgresControlPlaneStore` against the shared cluster | Schema 9 initialization, integrity check, authenticated session, project-memory/briefing/schedule repository paths, readiness, and custom-format backup catalog smoke passed | Local PostgreSQL integration |
 | Shared PostgreSQL/Redis ASGI smoke with a uniquely scoped tenant probe | Unauthenticated goals access returned `401`; authenticated session bootstrap returned `201` and remained scoped to `local`; `/health/ready` returned HTTP `200` with PostgreSQL and Redis `ready`; a foreign-tenant goal returned `404` and was absent from the local goal list; exact probe rows were removed and cleanup was verified | Local authenticated API, dependency, and tenant-isolation evidence |
 | `PostgresControlPlaneStore` against an ephemeral database on the shared PostgreSQL cluster | Schema 9 initialization, tenant-scoped Goal/Task DAG lifecycle, schedule occurrence deduplication, task-run lease ownership/reclaim, atomic completion, and goal completion passed; the ephemeral database was removed after verification | Local PostgreSQL vertical-slice integration |
@@ -1823,7 +1836,7 @@ the acceptance criteria in [#9](https://github.com/cvsz/zasi/issues/9) through
 | [#14 / P5](https://github.com/cvsz/zasi/issues/14) | Partial, React 19 / Router 7 with checked TypeScript source | Dependencies are bundled and locked, the cockpit uses authenticated v2 transport, safe rendering, CSP, reconnect/resync state, and a strict TypeScript root entrypoint; the cockpit source is now checked in `cockpit.tsx` and `app.jsx` is only a compatibility export. Accessibility/performance evidence and broad event-driven workspace coverage remain open. |
 | [#15 / P6](https://github.com/cvsz/zasi/issues/15) | Partial, local durable orchestration/reference connectors | SQLite/PostgreSQL goals, tasks, schedules, task runs, project-scoped memory, source-backed briefings, and connector health now provide tenant scope, dependency gating, occurrence/idempotency keys, worker leases, restart persistence, stale invalidation, authenticated routes, and atomic events. A continuously deployed production worker, real GitHub/email/calendar/files adapters, semantic retrieval, external-source freshness, and independent multi-process evidence remain open. |
 | [#16 / P7](https://github.com/cvsz/zasi/issues/16) | Unavailable by design | Artifact quarantine and provenance contracts exist; real CAD/STEP, vision, STT/TTS, anti-replay speaker verification, and hardware integration are not enabled. |
-| [#17 / P8](https://github.com/cvsz/zasi/issues/17) | Partial packaging and encrypted-backup hardening; NO-GO | Workflows, non-root container configuration, installer backup behavior, lockfiles, AES-GCM backup/restore mechanics, project-only Python/npm dependency audits, local signed wheel/sdist/SBOM/checksum evidence, hosted CodeQL, and container builds exist. Dedicated source/container scanner provenance, managed retention/key rotation, hosted release provenance, staging canary, rollback observation, and independent verification remain open. |
+| [#17 / P8](https://github.com/cvsz/zasi/issues/17) | Partial packaging and encrypted-backup hardening; NO-GO | Workflows, non-root container configuration, installer backup behavior, lockfiles, AES-GCM backup/restore mechanics, project-only Python/npm dependency audits, local signed wheel/sdist/SBOM/checksum evidence, a fail-closed protected-environment release-signing workflow, hosted CodeQL, and container builds exist. Dedicated source/container scanner provenance, managed retention/key rotation, hosted release provenance from an exercised tag, staging canary, rollback observation, and independent verification remain open. |
 | [#18 roadmap](https://github.com/cvsz/zasi/issues/18) | Open roadmap | The phase order and release gates are captured here; issue completion must not be inferred from local test output. |
 
 ### 26.3 Release decision from the evidence

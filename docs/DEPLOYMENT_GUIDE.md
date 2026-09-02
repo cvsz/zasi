@@ -66,6 +66,20 @@ The local encrypted archive validation is evidence for cryptographic envelope,
 integrity, and restore mechanics only; it is not managed object storage,
 retention, key rotation, staging restore, or rollback evidence.
 
+## Signed release artifacts
+
+The tag-triggered release workflow fails closed unless a protected GitHub
+`release` environment supplies `ZASI_RELEASE_GPG_PRIVATE_KEY` and the exact
+public-key fingerprint in `ZASI_RELEASE_GPG_FINGERPRINT`. An optional
+`ZASI_RELEASE_GPG_PASSPHRASE` is read only by the signing process. The private
+key is imported from the secret at job start and is never committed, printed,
+or included in the release. `scripts/sign_release_artifacts.py` creates and
+verifies detached ASCII-armored signatures for every wheel, sdist, the
+CycloneDX SBOM, and `SHA256SUMS`, then publishes the public key and signatures
+with the release assets. Configure the protected environment and key rotation
+process before creating a production tag; a local GPG signature is not hosted
+release provenance.
+
 ## Container reference profile
 
 ```bash

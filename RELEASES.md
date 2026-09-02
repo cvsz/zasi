@@ -12,6 +12,8 @@ prototype cockpit to an authenticated, scoped ASGI control plane. It includes:
 - loopback-supervised Electron startup and non-root, constrained container
   packaging;
 - fail-closed sandbox/self-compilation boundaries and brokered egress helpers;
+- a tag-release signing gate that requires a protected GPG key/fingerprint and
+  publishes verified signatures for artifacts, SBOM, and checksums;
 - explicit unavailable/disabled disclosures for hardware, external connectors,
   live telemetry, formal/cryptographic proof, and self-evolution.
 
@@ -30,7 +32,9 @@ external egress worker and
 dead-letter integration, hosted release provenance, vulnerability/container
 scans, staging canary, rollback observation, and independent verification.
 Local wheel, sdist, SBOM, checksum, and GPG-signature verification now exists
-for the implementation branch, but it is not a production release certificate.
+for the implementation branch, and the hosted workflow now stages the same
+verification behind a protected signing environment, but no production tag
+has been exercised and this is not a production release certificate.
 
 ## Evidence bundle requirement
 
