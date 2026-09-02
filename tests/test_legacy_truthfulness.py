@@ -42,6 +42,26 @@ class LegacyTruthfulnessTests(unittest.TestCase):
         step_cycle.assert_not_called()
         hot_swap.assert_not_called()
 
+    def test_legacy_chat_cannot_be_enabled_by_mutating_reference_flag(self):
+        with patch.object(legacy_server, "LEGACY_REFERENCE_ONLY", False):
+            response = self._chat("status")
+        lowered = response.lower()
+        self.assertIn("unavailable", lowered)
+        self.assertIn("reference", lowered)
+        self.assertNotIn("178.2 gw", lowered)
+        self.assertNotIn("320x", lowered)
+
+    def test_legacy_subsystem_cannot_be_enabled_by_mutating_reference_flag(self):
+        with (
+            patch.object(legacy_server, "LEGACY_REFERENCE_ONLY", False),
+            patch.object(legacy_server.fpga_accel, "dispatch_systolic_matmul") as dispatch,
+        ):
+            result = self.handler.execute_subsystem("fpga_accelerator")
+        dispatch.assert_not_called()
+        self.assertEqual(result["status"], "disabled")
+        self.assertFalse(result["active"])
+        self.assertEqual(result["evidence_state"], "unverified")
+
     def test_legacy_subsystem_execution_is_disabled(self):
         with patch.object(legacy_server.fpga_accel, "dispatch_systolic_matmul") as dispatch:
             result = self.handler.execute_subsystem("fpga_accelerator")
