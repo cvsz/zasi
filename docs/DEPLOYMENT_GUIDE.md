@@ -66,6 +66,39 @@ The local encrypted archive validation is evidence for cryptographic envelope,
 integrity, and restore mechanics only; it is not managed object storage,
 retention, key rotation, staging restore, or rollback evidence.
 
+## Local rollback rehearsal
+
+The `scripts/rollback_drill.py` command performs a bounded local rehearsal of
+the restore path. It creates one random database in the
+`zasi_rollback_drill_<random>` namespace using an administrator connection,
+restores a freshly encrypted PostgreSQL archive into that database, verifies
+schema and integrity, observes that the source schema/integrity are unchanged,
+and removes the temporary database. The source database is never replaced.
+The command requires an explicit `--allow-local-rehearsal` acknowledgement and
+rejects `staging` and `production` profiles.
+
+Inject the source URL, a separate administrator URL, and a one-off 32-byte
+backup key through the environment; neither URL nor key is printed by the
+command:
+
+```bash
+set -a
+. .env
+set +a
+export ZASI_ROLLBACK_SOURCE_URL="$ZASI_DATABASE_URL"
+export ZASI_ROLLBACK_ADMIN_URL="postgresql:///postgres?host=/var/run/postgresql&port=5433"
+export ZASI_BACKUP_KEY_B64="$(python3 -c 'import base64,secrets; print(base64.b64encode(secrets.token_bytes(32)).decode())')"
+python3 scripts/rollback_drill.py \
+  --allow-local-rehearsal \
+  --expected-schema-version 10
+```
+
+For a local peer-authenticated administrator URL, run the command as the
+database administrator or provide an equivalent administrator credential. A
+passing result is local restore/reversibility evidence only; it does not prove
+managed retention, key rotation, staging canary behavior, production traffic
+cutover, or rollback observation.
+
 ## Signed release artifacts
 
 The tag-triggered release workflow fails closed unless a protected GitHub
