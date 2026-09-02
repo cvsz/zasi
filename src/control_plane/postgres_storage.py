@@ -13,7 +13,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 from .storage import CURRENT_SCHEMA_VERSION, ControlPlaneStore
@@ -264,6 +264,13 @@ _POSTGRES_SCHEMA_STATEMENTS = (
         principal_id TEXT NOT NULL REFERENCES principals(id),
         content TEXT NOT NULL,
         scope TEXT NOT NULL,
+        memory_type TEXT NOT NULL DEFAULT 'conversation',
+        project_id TEXT,
+        source_ref TEXT NOT NULL DEFAULT '',
+        provenance_json TEXT NOT NULL DEFAULT '{}',
+        trust TEXT NOT NULL DEFAULT 'operator',
+        last_verified_at TEXT,
+        fresh_until TEXT,
         status TEXT NOT NULL,
         created_at TEXT NOT NULL,
         deleted_at TEXT
@@ -355,7 +362,59 @@ _POSTGRES_SCHEMA_STATEMENTS = (
         PRIMARY KEY (task_id, depends_on_task_id)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS schedules (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL REFERENCES tenants(id),
+        principal_id TEXT NOT NULL REFERENCES principals(id),
+        task_id TEXT NOT NULL REFERENCES tasks(id),
+        kind TEXT NOT NULL,
+        status TEXT NOT NULL,
+        next_run_at TEXT NOT NULL,
+        interval_seconds INTEGER,
+        misfire_policy TEXT NOT NULL DEFAULT 'skip',
+        idempotency_key TEXT NOT NULL,
+        last_run_at TEXT,
+        run_count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        cancelled_at TEXT,
+        UNIQUE (tenant_id, idempotency_key)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS task_runs (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL REFERENCES tenants(id),
+        goal_id TEXT NOT NULL REFERENCES goals(id),
+        task_id TEXT NOT NULL REFERENCES tasks(id),
+        schedule_id TEXT REFERENCES schedules(id),
+        occurrence_key TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL,
+        status TEXT NOT NULL,
+        attempt_count INTEGER NOT NULL DEFAULT 0,
+        max_attempts INTEGER NOT NULL DEFAULT 3,
+        worker_id TEXT,
+        lease_token TEXT,
+        lease_until TEXT,
+        scheduled_for TEXT,
+        result_json TEXT NOT NULL DEFAULT '{}',
+        error_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        started_at TEXT,
+        finished_at TEXT,
+        UNIQUE (tenant_id, idempotency_key),
+        UNIQUE (tenant_id, schedule_id, occurrence_key)
+    )
+    """,
     "ALTER TABLE tasks ADD COLUMN IF NOT EXISTS lease_owner TEXT",
+    "ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS memory_type TEXT NOT NULL DEFAULT 'conversation'",
+    "ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS project_id TEXT",
+    "ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS source_ref TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS provenance_json TEXT NOT NULL DEFAULT '{}'",
+    "ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS trust TEXT NOT NULL DEFAULT 'operator'",
+    "ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS last_verified_at TEXT",
+    "ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS fresh_until TEXT",
     "CREATE INDEX IF NOT EXISTS idx_sessions_tenant ON sessions(tenant_id, status, expires_at)",
     "CREATE INDEX IF NOT EXISTS idx_events_tenant_sequence ON events(tenant_id, sequence)",
     "CREATE INDEX IF NOT EXISTS idx_runs_tenant_idempotency ON runs(tenant_id, idempotency_key)",
@@ -367,6 +426,11 @@ _POSTGRES_SCHEMA_STATEMENTS = (
     "CREATE INDEX IF NOT EXISTS idx_goals_tenant_status ON goals(tenant_id, status, updated_at)",
     "CREATE INDEX IF NOT EXISTS idx_tasks_tenant_status_due ON tasks(tenant_id, status, not_before, updated_at)",
     "CREATE INDEX IF NOT EXISTS idx_task_dependencies_task ON task_dependencies(tenant_id, task_id)",
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_schedules_tenant_idempotency ON schedules(tenant_id, idempotency_key)",
+    "CREATE INDEX IF NOT EXISTS idx_schedules_due ON schedules(tenant_id, status, next_run_at)",
+    "CREATE INDEX IF NOT EXISTS idx_task_runs_task_history ON task_runs(tenant_id, task_id, created_at, id)",
+    "CREATE INDEX IF NOT EXISTS idx_task_runs_claimable ON task_runs(tenant_id, status, lease_until, scheduled_for)",
+    "CREATE INDEX IF NOT EXISTS idx_memory_project_scope ON memory_items(tenant_id, project_id, status, created_at)",
     (
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_pairing_tenant_idempotency "
         "ON device_pairing_challenges(tenant_id, idempotency_key) "

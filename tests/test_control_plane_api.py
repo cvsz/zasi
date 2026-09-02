@@ -373,8 +373,9 @@ class ControlPlaneAPITests(unittest.IsolatedAsyncioTestCase):
 
             briefing = await client.post("/api/v2/briefings", json={}, headers=headers)
             self.assertEqual(briefing.status_code, 201)
-            self.assertEqual(briefing.json()["content"]["status"], "unavailable")
+            self.assertEqual(briefing.json()["content"]["status"], "partial")
             self.assertIn("disclosure", briefing.json()["content"])
+            self.assertTrue(briefing.json()["content"]["claims"])
 
             artifact = await client.post(
                 "/api/v2/artifacts",

@@ -171,7 +171,7 @@ class GoalTaskStoreTests(unittest.TestCase):
             "task-a1", "tenant-a", "worker-2", second["lease_token"], {}
         )
 
-    def test_restart_preserves_goal_and_task_state_with_schema_eight(self):
+    def test_restart_preserves_goal_and_task_state_with_schema_nine(self):
         with tempfile.TemporaryDirectory() as directory:
             database = str(Path(directory) / "goals.db")
             store = ControlPlaneStore(database)
@@ -188,13 +188,13 @@ class GoalTaskStoreTests(unittest.TestCase):
                 "work",
                 "persist-key",
             )
-            self.assertEqual(store.schema_version(), 8)
+            self.assertEqual(store.schema_version(), 9)
             store.close()
 
             reopened = ControlPlaneStore(database)
             reopened.initialize()
             try:
-                self.assertEqual(reopened.schema_version(), 8)
+                self.assertEqual(reopened.schema_version(), 9)
                 self.assertEqual(
                     reopened.get_goal("goal-a", "tenant-a")["title"], "Persistent goal"
                 )
@@ -222,7 +222,7 @@ class GoalTaskStoreTests(unittest.TestCase):
             reopened = ControlPlaneStore(database)
             reopened.initialize()
             try:
-                self.assertEqual(reopened.schema_version(), 8)
+                self.assertEqual(reopened.schema_version(), 9)
                 columns = {
                     row["name"]
                     for row in reopened._conn()

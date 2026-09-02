@@ -26,7 +26,9 @@ from backend.compatibility import COMPATIBILITY_ROUTES
 from backend.frontend_assets import frontend_dist_path
 from backend.readiness import probe as readiness_probe
 from src.control_plane.config import ConfigurationError, Settings
+from src.control_plane.briefing import BriefingAggregator
 from src.control_plane.contracts import IntentCreateRequest, RiskTier
+from src.control_plane.connectors import ConnectorRegistry
 from src.control_plane.execution import ActionBroker, ToolDefinition, ToolRegistry
 from src.control_plane.identity import hash_token, issue_id, issue_token, optional_bearer
 from src.control_plane.policy import PolicyEngine
@@ -65,7 +67,20 @@ class MemoryCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     content: str = Field(min_length=1, max_length=16_384)
-    scope: str = Field(default="workspace", min_length=1, max_length=64)
+    scope: str = Field(default="workspace", pattern=r"^(workspace|project)$")
+    memory_type: str = Field(
+        default="conversation",
+        pattern=r"^(core|working|conversation|episodic|semantic|project|tool|audit)$",
+    )
+    project_id: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    source_ref: str = Field(default="", max_length=512)
+    provenance: Dict[str, Any] = Field(default_factory=dict)
+    trust: str = Field(
+        default="operator",
+        pattern=r"^(operator|verified_local|verified_external|inferred|unverified)$",
+    )
+    last_verified_at: Optional[str] = None
+    fresh_until: Optional[str] = None
 
 
 class BriefingRequest(BaseModel):
@@ -109,6 +124,34 @@ class TaskCompleteRequest(BaseModel):
     worker_id: str = Field(min_length=1, max_length=128)
     lease_token: SecretStr = Field(min_length=1, max_length=512)
     result: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ScheduleCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: str = Field(min_length=1, max_length=128)
+    kind: str = Field(pattern=r"^(once|interval)$")
+    next_run_at: str = Field(min_length=1, max_length=64)
+    idempotency_key: str = Field(min_length=1, max_length=256)
+    interval_seconds: Optional[int] = Field(default=None, ge=1, le=31_536_000)
+    misfire_policy: str = Field(default="skip", pattern=r"^(skip|run_once)$")
+
+
+class ScheduleClaimRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    worker_id: str = Field(min_length=1, max_length=128)
+    lease_seconds: int = Field(default=60, ge=1, le=3600)
+
+
+class TaskRunCompleteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    worker_id: str = Field(min_length=1, max_length=128)
+    lease_token: SecretStr = Field(min_length=1, max_length=512)
+    status: str = Field(pattern=r"^(succeeded|failed|cancelled)$")
+    result: Dict[str, Any] = Field(default_factory=dict)
+    error: Dict[str, Any] = Field(default_factory=dict)
 
 
 class DevicePairRequest(BaseModel):
@@ -317,6 +360,7 @@ def create_app(
             store = ControlPlaneStore(settings.database_path)
     redis_runtime = RedisRuntime(settings.redis_url) if settings.redis_url else None
     registry = ToolRegistry()
+    connector_registry = ConnectorRegistry()
 
     def system_status(_payload: Dict[str, Any]) -> Dict[str, Any]:
         store.latest_sequence("local")
@@ -389,6 +433,7 @@ def create_app(
     app.state.settings = settings
     app.state.store = store
     app.state.registry = registry
+    app.state.connector_registry = connector_registry
     app.state.broker = broker
     app.state.redis_runtime = redis_runtime
 
@@ -964,23 +1009,44 @@ def create_app(
                 status_code=403,
                 detail={"code": "POLICY_DENIED", "message": "Memory writes are not permitted for this session."},
             )
-        if payload.scope != "workspace":
+        if payload.scope == "project" and not payload.project_id:
             raise HTTPException(
-                status_code=403,
-                detail={"code": "SCOPE_INVALID", "message": "Only the authenticated workspace scope is available."},
+                status_code=422,
+                detail={"code": "VALIDATION_ERROR", "message": "Project memory requires project_id."},
             )
-        return request.app.state.store.create_memory(
-            memory_id=issue_id("mem"),
-            tenant_id=context.tenant_id,
-            principal_id=context.principal_id,
-            content=payload.content,
-            scope=payload.scope,
-        )
+        if payload.memory_type == "project" and not payload.project_id:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "VALIDATION_ERROR", "message": "Project memory requires project_id."},
+            )
+        try:
+            return request.app.state.store.create_memory(
+                memory_id=issue_id("mem"),
+                tenant_id=context.tenant_id,
+                principal_id=context.principal_id,
+                content=payload.content,
+                scope=payload.scope,
+                memory_type=payload.memory_type,
+                project_id=payload.project_id,
+                source_ref=payload.source_ref,
+                provenance=payload.provenance,
+                trust=payload.trust,
+                last_verified_at=payload.last_verified_at,
+                fresh_until=payload.fresh_until,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "VALIDATION_ERROR", "message": str(exc)},
+            )
 
     @app.get("/api/v2/memory/search")
     async def search_memory(
         query: str = Query(default="", max_length=256),
         limit: int = Query(default=50, ge=1, le=100),
+        project_id: Optional[str] = Query(default=None, min_length=1, max_length=256),
+        memory_type: Optional[str] = Query(default=None, max_length=32),
+        include_stale: bool = Query(default=False),
         context: AuthContext = Depends(_context_from_request),
     ):
         if "workspace:read" not in context.scopes:
@@ -988,10 +1054,21 @@ def create_app(
                 status_code=403,
                 detail={"code": "POLICY_DENIED", "message": "Memory visibility is not permitted."},
             )
-        return {
-            "items": app.state.store.search_memory(context.tenant_id, query, limit),
-            "tenant_id": context.tenant_id,
-        }
+        try:
+            items = app.state.store.search_memory(
+                context.tenant_id,
+                query,
+                limit,
+                project_id=project_id,
+                memory_type=memory_type,
+                include_stale=include_stale,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "VALIDATION_ERROR", "message": str(exc)},
+            )
+        return {"items": items, "tenant_id": context.tenant_id}
 
     @app.delete("/api/v2/memory/{memory_id}")
     async def delete_memory(
@@ -1132,6 +1209,245 @@ def create_app(
             )
         return {"tenant_id": context.tenant_id, "goal_id": goal_id, "tasks": tasks}
 
+    @app.post("/api/v2/goals/{goal_id}/schedules", status_code=201)
+    async def create_schedule(
+        goal_id: str,
+        payload: ScheduleCreateRequest,
+        request: Request,
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "workspace:write", "Schedule writes are not permitted.")
+        try:
+            task = request.app.state.store.get_task(payload.task_id, context.tenant_id)
+            if task["goal_id"] != goal_id:
+                raise ConflictError("scheduled task belongs to another goal")
+            return request.app.state.store.create_schedule(
+                schedule_id=issue_id("sch"),
+                tenant_id=context.tenant_id,
+                principal_id=context.principal_id,
+                task_id=payload.task_id,
+                kind=payload.kind,
+                next_run_at=payload.next_run_at,
+                idempotency_key=payload.idempotency_key,
+                interval_seconds=payload.interval_seconds,
+                misfire_policy=payload.misfire_policy,
+            )
+        except (NotFoundError, ScopeViolation):
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Goal or task not found."},
+            )
+        except ConflictError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "SCHEDULE_CONFLICT", "message": str(exc)},
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "VALIDATION_ERROR", "message": str(exc)},
+            )
+
+    @app.get("/api/v2/goals/{goal_id}/schedules")
+    async def list_goal_schedules(
+        goal_id: str,
+        limit: int = Query(default=100, ge=1, le=1000),
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "workspace:read", "Schedule visibility is not permitted.")
+        try:
+            schedules = app.state.store.list_schedules(
+                context.tenant_id, goal_id=goal_id, limit=limit
+            )
+        except (NotFoundError, ScopeViolation):
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Goal not found."},
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "VALIDATION_ERROR", "message": str(exc)},
+            )
+        return {"tenant_id": context.tenant_id, "goal_id": goal_id, "schedules": schedules}
+
+    @app.get("/api/v2/schedules/{schedule_id}")
+    async def get_schedule(
+        schedule_id: str,
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "workspace:read", "Schedule visibility is not permitted.")
+        try:
+            return app.state.store.get_schedule(schedule_id, context.tenant_id)
+        except (NotFoundError, ScopeViolation):
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Schedule not found."},
+            )
+
+    @app.post("/api/v2/schedules/{schedule_id}/cancel")
+    async def cancel_schedule(
+        schedule_id: str,
+        request: Request,
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "workspace:write", "Schedule cancellation is not permitted.")
+        try:
+            return request.app.state.store.cancel_schedule(
+                schedule_id=schedule_id,
+                tenant_id=context.tenant_id,
+                principal_id=context.principal_id,
+            )
+        except (NotFoundError, ScopeViolation):
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Schedule not found."},
+            )
+        except ConflictError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "SCHEDULE_CONFLICT", "message": str(exc)},
+            )
+
+    @app.post("/api/v2/schedules/{schedule_id}/claim")
+    async def claim_schedule(
+        schedule_id: str,
+        payload: ScheduleClaimRequest,
+        request: Request,
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "workspace:write", "Schedule execution is not permitted.")
+        try:
+            claimed = request.app.state.store.claim_due_schedule(
+                schedule_id=schedule_id,
+                tenant_id=context.tenant_id,
+                worker_id=payload.worker_id,
+                lease_seconds=payload.lease_seconds,
+            )
+        except (NotFoundError, ScopeViolation):
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Schedule not found."},
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "VALIDATION_ERROR", "message": str(exc)},
+            )
+        if claimed is None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "SCHEDULE_NOT_CLAIMABLE",
+                    "message": "Schedule is not due, is blocked, or already has an occurrence in progress.",
+                },
+            )
+        return claimed
+
+    @app.post("/api/v2/task-runs/{run_id}/claim")
+    async def claim_task_run(
+        run_id: str,
+        payload: ScheduleClaimRequest,
+        request: Request,
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "workspace:write", "Task-run execution is not permitted.")
+        try:
+            claimed = request.app.state.store.claim_task_run(
+                run_id=run_id,
+                tenant_id=context.tenant_id,
+                worker_id=payload.worker_id,
+                lease_seconds=payload.lease_seconds,
+            )
+        except (NotFoundError, ScopeViolation):
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Task run not found."},
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "VALIDATION_ERROR", "message": str(exc)},
+            )
+        if claimed is None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "TASK_RUN_NOT_CLAIMABLE",
+                    "message": "Task run is not retryable or its lease is still active.",
+                },
+            )
+        return claimed
+
+    @app.post("/api/v2/task-runs/{run_id}/complete")
+    async def complete_task_run(
+        run_id: str,
+        payload: TaskRunCompleteRequest,
+        request: Request,
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "workspace:write", "Task-run execution is not permitted.")
+        try:
+            return request.app.state.store.complete_task_run(
+                run_id=run_id,
+                tenant_id=context.tenant_id,
+                worker_id=payload.worker_id,
+                lease_token=payload.lease_token.get_secret_value(),
+                status=payload.status,
+                result=payload.result,
+                error=payload.error,
+            )
+        except (NotFoundError, ScopeViolation):
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Task run not found."},
+            )
+        except ConflictError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "TASK_RUN_CONFLICT", "message": str(exc)},
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "VALIDATION_ERROR", "message": str(exc)},
+            )
+
+    @app.get("/api/v2/tasks/{task_id}/runs")
+    async def list_task_runs(
+        task_id: str,
+        limit: int = Query(default=100, ge=1, le=1000),
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "workspace:read", "Task-run visibility is not permitted.")
+        try:
+            runs = app.state.store.list_task_runs(task_id, context.tenant_id, limit=limit)
+        except (NotFoundError, ScopeViolation):
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Task not found."},
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "VALIDATION_ERROR", "message": str(exc)},
+            )
+        return {"tenant_id": context.tenant_id, "task_id": task_id, "runs": runs}
+
+    @app.get("/api/v2/task-runs/{run_id}")
+    async def get_task_run(
+        run_id: str,
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "workspace:read", "Task-run visibility is not permitted.")
+        try:
+            return app.state.store.get_task_run(run_id, context.tenant_id)
+        except (NotFoundError, ScopeViolation):
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Task run not found."},
+            )
+
     @app.post("/api/v2/tasks/{task_id}/claim")
     async def claim_task(
         task_id: str,
@@ -1206,24 +1522,18 @@ def create_app(
         context: AuthContext = Depends(_context_from_request),
     ):
         require_scope(context, "workspace:read", "Briefing visibility is not permitted.")
-        # The reference profile never invents missing external sources.
-        content = {
-            "status": "unavailable" if not payload.sources else "unknown",
-            "sections": [],
-            "sources": [
-                {
-                    "source_ref": source,
-                    "status": "unavailable",
-                    "observed_at": None,
-                    "fresh_until": None,
-                    "disclosure": "No source adapter is enabled in the reference profile.",
-                }
-                for source in payload.sources
-            ],
-            "disclosure": "Briefing data is unavailable; no fixed live values are substituted.",
-        }
+        briefing_id = issue_id("brf")
+        content = BriefingAggregator(
+            request.app.state.store,
+            request.app.state.connector_registry,
+        ).build(
+            tenant_id=context.tenant_id,
+            principal_id=context.principal_id,
+            sources=payload.sources or None,
+        )
+        content["brief_id"] = briefing_id
         return request.app.state.store.create_briefing(
-            briefing_id=issue_id("brf"),
+            briefing_id=briefing_id,
             tenant_id=context.tenant_id,
             principal_id=context.principal_id,
             content=content,
@@ -1423,6 +1733,9 @@ def create_app(
         return {
             "tenant_id": context.tenant_id,
             "connectors": [
+                status.as_dict()
+                for status in app.state.connector_registry.statuses()
+            ] + [
                 {
                     "connector_id": "egress.default",
                     "status": "disabled" if not settings.external_egress_enabled else "configured",

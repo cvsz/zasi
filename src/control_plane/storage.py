@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from .identity import hash_token
 
 
-CURRENT_SCHEMA_VERSION = 8
+CURRENT_SCHEMA_VERSION = 9
 
 
 class NotFoundError(LookupError):
@@ -297,6 +297,13 @@ class ControlPlaneStore:
                     principal_id TEXT NOT NULL REFERENCES principals(id),
                     content TEXT NOT NULL,
                     scope TEXT NOT NULL,
+                    memory_type TEXT NOT NULL DEFAULT 'conversation',
+                    project_id TEXT,
+                    source_ref TEXT NOT NULL DEFAULT '',
+                    provenance_json TEXT NOT NULL DEFAULT '{}',
+                    trust TEXT NOT NULL DEFAULT 'operator',
+                    last_verified_at TEXT,
+                    fresh_until TEXT,
                     status TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     deleted_at TEXT
@@ -375,6 +382,47 @@ class ControlPlaneStore:
                     depends_on_task_id TEXT NOT NULL REFERENCES tasks(id),
                     PRIMARY KEY (task_id, depends_on_task_id)
                 );
+                CREATE TABLE IF NOT EXISTS schedules (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    principal_id TEXT NOT NULL REFERENCES principals(id),
+                    task_id TEXT NOT NULL REFERENCES tasks(id),
+                    kind TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    next_run_at TEXT NOT NULL,
+                    interval_seconds INTEGER,
+                    misfire_policy TEXT NOT NULL DEFAULT 'skip',
+                    idempotency_key TEXT NOT NULL,
+                    last_run_at TEXT,
+                    run_count INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    cancelled_at TEXT,
+                    UNIQUE (tenant_id, idempotency_key)
+                );
+                CREATE TABLE IF NOT EXISTS task_runs (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    goal_id TEXT NOT NULL REFERENCES goals(id),
+                    task_id TEXT NOT NULL REFERENCES tasks(id),
+                    schedule_id TEXT REFERENCES schedules(id),
+                    occurrence_key TEXT NOT NULL,
+                    idempotency_key TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    attempt_count INTEGER NOT NULL DEFAULT 0,
+                    max_attempts INTEGER NOT NULL DEFAULT 3,
+                    worker_id TEXT,
+                    lease_token TEXT,
+                    lease_until TEXT,
+                    scheduled_for TEXT,
+                    result_json TEXT NOT NULL DEFAULT '{}',
+                    error_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    started_at TEXT,
+                    finished_at TEXT,
+                    UNIQUE (tenant_id, idempotency_key),
+                    UNIQUE (tenant_id, schedule_id, occurrence_key)
+                );
                 CREATE INDEX IF NOT EXISTS idx_sessions_tenant
                     ON sessions(tenant_id, status, expires_at);
                 CREATE INDEX IF NOT EXISTS idx_events_tenant_sequence
@@ -397,6 +445,14 @@ class ControlPlaneStore:
                     ON tasks(tenant_id, status, not_before, updated_at);
                 CREATE INDEX IF NOT EXISTS idx_task_dependencies_task
                     ON task_dependencies(tenant_id, task_id);
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_schedules_tenant_idempotency
+                    ON schedules(tenant_id, idempotency_key);
+                CREATE INDEX IF NOT EXISTS idx_schedules_due
+                    ON schedules(tenant_id, status, next_run_at);
+                CREATE INDEX IF NOT EXISTS idx_task_runs_task_history
+                    ON task_runs(tenant_id, task_id, created_at, id);
+                CREATE INDEX IF NOT EXISTS idx_task_runs_claimable
+                    ON task_runs(tenant_id, status, lease_until, scheduled_for);
                 """
             )
             tenant_columns = {
@@ -502,6 +558,36 @@ class ControlPlaneStore:
                 connection.execute(
                     "ALTER TABLE artifacts ADD COLUMN storage_ref TEXT NOT NULL DEFAULT ''"
                 )
+            memory_columns = {
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(memory_items)").fetchall()
+            }
+            if "memory_type" not in memory_columns:
+                connection.execute(
+                    "ALTER TABLE memory_items ADD COLUMN memory_type TEXT NOT NULL DEFAULT 'conversation'"
+                )
+            if "project_id" not in memory_columns:
+                connection.execute("ALTER TABLE memory_items ADD COLUMN project_id TEXT")
+            if "source_ref" not in memory_columns:
+                connection.execute(
+                    "ALTER TABLE memory_items ADD COLUMN source_ref TEXT NOT NULL DEFAULT ''"
+                )
+            if "provenance_json" not in memory_columns:
+                connection.execute(
+                    "ALTER TABLE memory_items ADD COLUMN provenance_json TEXT NOT NULL DEFAULT '{}'"
+                )
+            if "trust" not in memory_columns:
+                connection.execute(
+                    "ALTER TABLE memory_items ADD COLUMN trust TEXT NOT NULL DEFAULT 'operator'"
+                )
+            if "last_verified_at" not in memory_columns:
+                connection.execute("ALTER TABLE memory_items ADD COLUMN last_verified_at TEXT")
+            if "fresh_until" not in memory_columns:
+                connection.execute("ALTER TABLE memory_items ADD COLUMN fresh_until TEXT")
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_memory_project_scope "
+                "ON memory_items(tenant_id, project_id, status, created_at)"
+            )
             run_columns = {
                 row["name"]
                 for row in connection.execute("PRAGMA table_info(runs)").fetchall()
@@ -1574,6 +1660,32 @@ class ControlPlaneStore:
             rows = self._conn().execute(query, parameters).fetchall()
         return [self._approval_record(row) for row in rows]
 
+    def list_pending_approvals(
+        self, tenant_id: str, limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        if not 1 <= limit <= 1000:
+            raise ValueError("invalid pending approval limit")
+        now = _timestamp(_utcnow())
+        with self._lock:
+            rows = self._conn().execute(
+                "SELECT id, intent_id, digest, expires_at FROM plans "
+                "WHERE tenant_id = ? AND status = 'awaiting_approval' "
+                "AND expires_at > ? ORDER BY created_at ASC, id ASC LIMIT ?",
+                (tenant_id, now, limit),
+            ).fetchall()
+        return [
+            {
+                "plan_id": row["id"],
+                "intent_id": row["intent_id"],
+                "digest": row["digest"],
+                "status": "awaiting_approval",
+                "expires_at": row["expires_at"],
+                "observed_at": now,
+                "source_ref": f"control-plane://tenant/{tenant_id}/plan/{row['id']}",
+            }
+            for row in rows
+        ]
+
     def get_approval(self, approval_id: str, tenant_id: str) -> Dict[str, Any]:
         with self._lock:
             row = self._conn().execute(
@@ -2082,6 +2194,37 @@ class ControlPlaneStore:
             "created_at": row["created_at"],
         }
 
+    @staticmethod
+    def _memory_record(row: Any) -> Dict[str, Any]:
+        return {
+            "memory_id": row["id"],
+            "tenant_id": row["tenant_id"],
+            "principal_id": row["principal_id"],
+            "content": row["content"],
+            "scope": row["scope"],
+            "memory_type": row["memory_type"],
+            "project_id": row["project_id"],
+            "source_ref": row["source_ref"],
+            "provenance": json.loads(row["provenance_json"]),
+            "trust": row["trust"],
+            "last_verified_at": row["last_verified_at"],
+            "fresh_until": row["fresh_until"],
+            "status": row["status"],
+            "created_at": row["created_at"],
+        }
+
+    @staticmethod
+    def _validate_memory_namespace(value: Optional[str], field_name: str) -> None:
+        if value is None:
+            return
+        if (
+            not isinstance(value, str)
+            or not value
+            or len(value) > 256
+            or any(ord(char) < 0x20 or ord(char) == 0x7F for char in value)
+        ):
+            raise ValueError(f"{field_name} must be non-empty and bounded")
+
     def create_memory(
         self,
         memory_id: str,
@@ -2089,28 +2232,98 @@ class ControlPlaneStore:
         principal_id: str,
         content: str,
         scope: str,
+        memory_type: str = "conversation",
+        project_id: Optional[str] = None,
+        source_ref: str = "",
+        provenance: Optional[Dict[str, Any]] = None,
+        trust: str = "operator",
+        last_verified_at: Any = None,
+        fresh_until: Any = None,
     ) -> Dict[str, Any]:
+        if not isinstance(content, str) or not content.strip() or len(content) > 16_384:
+            raise ValueError("memory content must be non-empty and bounded")
+        if scope not in {"workspace", "project"}:
+            raise ValueError("memory scope must be workspace or project")
+        if memory_type not in {
+            "core",
+            "working",
+            "conversation",
+            "episodic",
+            "semantic",
+            "project",
+            "tool",
+            "audit",
+        }:
+            raise ValueError("invalid memory type")
+        self._validate_memory_namespace(project_id, "project_id")
+        if scope == "project" and project_id is None:
+            raise ValueError("project memory requires a project_id")
+        if scope == "workspace" and project_id is not None:
+            raise ValueError("project_id requires project memory scope")
+        if memory_type == "project" and project_id is None:
+            raise ValueError("project memory requires a project_id")
+        if not isinstance(source_ref, str) or len(source_ref) > 512 or any(
+            ord(char) < 0x20 or ord(char) == 0x7F for char in source_ref
+        ):
+            raise ValueError("source_ref is invalid")
+        if provenance is None:
+            provenance = {}
+        if not isinstance(provenance, dict):
+            raise ValueError("memory provenance must be an object")
+        if trust not in {
+            "operator",
+            "verified_local",
+            "verified_external",
+            "inferred",
+            "unverified",
+        }:
+            raise ValueError("invalid memory trust level")
+        provenance_json = json.dumps(
+            provenance, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+        )
+        last_verified = _normalize_optional_timestamp(last_verified_at, "last_verified_at")
+        expires = _normalize_optional_timestamp(fresh_until, "fresh_until")
         now = _timestamp(_utcnow())
-        record = {
-            "memory_id": memory_id,
-            "content": content,
-            "scope": scope,
-            "status": "active",
-            "created_at": now,
-        }
         with self._lock:
             connection = self._conn()
             connection.execute("BEGIN IMMEDIATE")
             try:
+                self._validate_principal_locked(connection, tenant_id, principal_id)
                 connection.execute(
-                    "INSERT INTO memory_items(id, tenant_id, principal_id, content, scope, status, created_at) "
-                    "VALUES(?, ?, ?, ?, ?, 'active', ?)",
-                    (memory_id, tenant_id, principal_id, content, scope, now),
+                    "INSERT INTO memory_items("
+                    "id, tenant_id, principal_id, content, scope, memory_type, project_id, "
+                    "source_ref, provenance_json, trust, last_verified_at, fresh_until, "
+                    "status, created_at"
+                    ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)",
+                    (
+                        memory_id,
+                        tenant_id,
+                        principal_id,
+                        content,
+                        scope,
+                        memory_type,
+                        project_id,
+                        source_ref,
+                        provenance_json,
+                        trust,
+                        last_verified,
+                        expires,
+                        now,
+                    ),
                 )
                 event_id = "evt_" + hash_token(
                     f"{tenant_id}:{memory_id}:{os.urandom(16).hex()}"
                 )[:26]
-                payload = {"memory_id": memory_id, "scope": scope, "status": "active"}
+                payload = {
+                    "memory_id": memory_id,
+                    "scope": scope,
+                    "memory_type": memory_type,
+                    "project_id": project_id,
+                    "source_ref": source_ref,
+                    "trust": trust,
+                    "fresh_until": expires,
+                    "status": "active",
+                }
                 self._append_audited_event_locked(
                     connection=connection,
                     tenant_id=tenant_id,
@@ -2131,36 +2344,140 @@ class ControlPlaneStore:
             except Exception:
                 connection.execute("ROLLBACK")
                 raise
-        return {"tenant_id": tenant_id, "principal_id": principal_id, **record}
-
-    def search_memory(self, tenant_id: str, query: str, limit: int = 50) -> List[Dict[str, Any]]:
-        if not 1 <= limit <= 100 or len(query) > 256:
-            raise ValueError("invalid memory search")
-        with self._lock:
-            rows = self._conn().execute(
-                "SELECT * FROM memory_items WHERE tenant_id = ? AND status = 'active' "
-                "AND content LIKE ? ORDER BY created_at DESC LIMIT ?",
-                (tenant_id, f"%{query}%", limit),
-            ).fetchall()
-        return [
+        return self._memory_record(
             {
-                "memory_id": row["id"],
-                "tenant_id": row["tenant_id"],
-                "principal_id": row["principal_id"],
-                "content": row["content"],
-                "scope": row["scope"],
-                "status": row["status"],
-                "created_at": row["created_at"],
+                "id": memory_id,
+                "tenant_id": tenant_id,
+                "principal_id": principal_id,
+                "content": content,
+                "scope": scope,
+                "memory_type": memory_type,
+                "project_id": project_id,
+                "source_ref": source_ref,
+                "provenance_json": provenance_json,
+                "trust": trust,
+                "last_verified_at": last_verified,
+                "fresh_until": expires,
+                "status": "active",
+                "created_at": now,
             }
-            for row in rows
-        ]
+        )
+
+    def _invalidate_stale_memory_locked(
+        self, connection: Any, tenant_id: str, now_value: str
+    ) -> int:
+        rows = connection.execute(
+            "SELECT id, principal_id FROM memory_items WHERE tenant_id = ? "
+            "AND status = 'active' AND fresh_until IS NOT NULL AND fresh_until <= ?",
+            (tenant_id, now_value),
+        ).fetchall()
+        for row in rows:
+            connection.execute(
+                "UPDATE memory_items SET status = 'stale' WHERE id = ? AND tenant_id = ? "
+                "AND status = 'active'",
+                (row["id"], tenant_id),
+            )
+            payload = {"memory_id": row["id"], "status": "stale"}
+            event_id = "evt_" + hash_token(
+                f"{tenant_id}:{row['id']}:stale:{os.urandom(16).hex()}"
+            )[:26]
+            self._append_audited_event_locked(
+                connection=connection,
+                tenant_id=tenant_id,
+                actor_kind="system",
+                actor_id="memory-router",
+                action="memory.invalidated",
+                target=row["id"],
+                outcome="success",
+                event_type="memory.invalidated",
+                aggregate_kind="memory",
+                aggregate_id=row["id"],
+                payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                payload=payload,
+                now=now_value,
+                event_id=event_id,
+            )
+        return len(rows)
+
+    def invalidate_stale_memory(
+        self, tenant_id: str, now: Optional[datetime] = None
+    ) -> int:
+        now_value = _timestamp(_utcnow() if now is None else now)
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                invalidated = self._invalidate_stale_memory_locked(
+                    connection, tenant_id, now_value
+                )
+                connection.execute("COMMIT")
+                return invalidated
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+
+    def search_memory(
+        self,
+        tenant_id: str,
+        query: str,
+        limit: int = 50,
+        project_id: Optional[str] = None,
+        memory_type: Optional[str] = None,
+        include_stale: bool = False,
+    ) -> List[Dict[str, Any]]:
+        if not isinstance(query, str) or not 1 <= limit <= 100 or len(query) > 256:
+            raise ValueError("invalid memory search")
+        self._validate_memory_namespace(project_id, "project_id")
+        if memory_type is not None and memory_type not in {
+            "core",
+            "working",
+            "conversation",
+            "episodic",
+            "semantic",
+            "project",
+            "tool",
+            "audit",
+        }:
+            raise ValueError("invalid memory type")
+        now_value = _timestamp(_utcnow())
+        escaped_query = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._invalidate_stale_memory_locked(connection, tenant_id, now_value)
+                statement = (
+                    "SELECT * FROM memory_items WHERE tenant_id = ? "
+                    "AND status IN ('active', 'stale') "
+                    "AND content LIKE ? ESCAPE '\\'"
+                )
+                parameters: List[Any] = [tenant_id, f"%{escaped_query}%"]
+                if not include_stale:
+                    statement = statement.replace("status IN ('active', 'stale')", "status = 'active'")
+                if project_id is None:
+                    statement += " AND project_id IS NULL"
+                else:
+                    statement += " AND project_id = ?"
+                    parameters.append(project_id)
+                if memory_type is not None:
+                    statement += " AND memory_type = ?"
+                    parameters.append(memory_type)
+                statement += " ORDER BY created_at DESC, id DESC LIMIT ?"
+                parameters.append(limit)
+                rows = connection.execute(statement, parameters).fetchall()
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        return [self._memory_record(row) for row in rows]
 
     def delete_memory(self, memory_id: str, tenant_id: str, principal_id: str) -> Dict[str, Any]:
         now = _timestamp(_utcnow())
         with self._lock:
             connection = self._conn()
             row = connection.execute(
-                "SELECT * FROM memory_items WHERE id = ? AND tenant_id = ? AND status = 'active'",
+                "SELECT * FROM memory_items WHERE id = ? AND tenant_id = ? "
+                "AND status IN ('active', 'stale')",
                 (memory_id, tenant_id),
             ).fetchone()
             if row is None:
@@ -2641,10 +2958,38 @@ class ControlPlaneStore:
                     "SELECT * FROM tasks WHERE id = ? AND tenant_id = ?",
                     (task_id, tenant_id),
                 ).fetchone()
+                attempt_count = int(claimed["attempt_count"])
+                task_run_id = "trun_" + hash_token(
+                    f"{tenant_id}:{task_id}:manual:{attempt_count}:{os.urandom(32).hex()}"
+                )[:26]
+                connection.execute(
+                    "INSERT INTO task_runs("
+                    "id, tenant_id, goal_id, task_id, occurrence_key, idempotency_key, "
+                    "status, attempt_count, max_attempts, worker_id, lease_token, lease_until, "
+                    "scheduled_for, created_at, started_at"
+                    ") VALUES(?, ?, ?, ?, ?, ?, 'running', ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        task_run_id,
+                        tenant_id,
+                        claimed["goal_id"],
+                        task_id,
+                        f"manual:{attempt_count}",
+                        f"task:{task_id}:attempt:{attempt_count}",
+                        attempt_count,
+                        claimed["max_attempts"],
+                        worker_id,
+                        lease_token,
+                        lease_until,
+                        now_value,
+                        now_value,
+                        now_value,
+                    ),
+                )
                 payload = {
                     "task_id": task_id,
+                    "task_run_id": task_run_id,
                     "status": "running",
-                    "attempt_count": int(claimed["attempt_count"]),
+                    "attempt_count": attempt_count,
                     "lease_until": lease_until,
                 }
                 event_id = "evt_" + hash_token(
@@ -2671,6 +3016,7 @@ class ControlPlaneStore:
                     self._task_dependencies_locked(connection, task_id, tenant_id),
                     include_lease_token=True,
                 )
+                record["task_run_id"] = task_run_id
                 connection.execute("COMMIT")
                 return record
             except Exception:
@@ -2713,6 +3059,12 @@ class ControlPlaneStore:
                     raise ConflictError("task lease belongs to another worker")
                 if not hmac.compare_digest(str(row["lease_token"] or ""), lease_token):
                     raise ConflictError("task lease token is invalid")
+                task_run = connection.execute(
+                    "SELECT * FROM task_runs WHERE task_id = ? AND tenant_id = ? "
+                    "AND status = 'running' AND worker_id = ? AND lease_token = ? "
+                    "ORDER BY attempt_count DESC, created_at DESC LIMIT 1",
+                    (task_id, tenant_id, worker_id, lease_token),
+                ).fetchone()
                 updated = connection.execute(
                     "UPDATE tasks SET status = 'completed', result_json = ?, completed_at = ?, "
                     "updated_at = ?, lease_owner = NULL, lease_token = NULL, lease_until = NULL "
@@ -2722,8 +3074,16 @@ class ControlPlaneStore:
                 )
                 if getattr(updated, "rowcount", 1) != 1:
                     raise ConflictError("task lease is no longer valid")
+                if task_run is not None:
+                    connection.execute(
+                        "UPDATE task_runs SET status = 'succeeded', result_json = ?, "
+                        "worker_id = NULL, lease_token = NULL, lease_until = NULL, "
+                        "finished_at = ? WHERE id = ? AND tenant_id = ? AND status = 'running'",
+                        (result_json, now, task_run["id"], tenant_id),
+                    )
                 payload = {
                     "task_id": task_id,
+                    "task_run_id": task_run["id"] if task_run is not None else None,
                     "status": "completed",
                     "attempt_count": int(row["attempt_count"]),
                 }
@@ -2799,7 +3159,877 @@ class ControlPlaneStore:
             except Exception:
                 connection.execute("ROLLBACK")
                 raise
-        return self.get_task(task_id, tenant_id)
+        record = self.get_task(task_id, tenant_id)
+        if task_run is not None:
+            record["task_run_id"] = task_run["id"]
+        return record
+
+    @staticmethod
+    def _schedule_record(row: Any) -> Dict[str, Any]:
+        return {
+            "schedule_id": row["id"],
+            "tenant_id": row["tenant_id"],
+            "principal_id": row["principal_id"],
+            "task_id": row["task_id"],
+            "kind": row["kind"],
+            "status": row["status"],
+            "next_run_at": row["next_run_at"],
+            "interval_seconds": row["interval_seconds"],
+            "misfire_policy": row["misfire_policy"],
+            "idempotency_key": row["idempotency_key"],
+            "last_run_at": row["last_run_at"],
+            "run_count": row["run_count"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+            "cancelled_at": row["cancelled_at"],
+        }
+
+    @staticmethod
+    def _task_run_record(row: Any, include_lease_token: bool = False) -> Dict[str, Any]:
+        record = {
+            "run_id": row["id"],
+            "tenant_id": row["tenant_id"],
+            "goal_id": row["goal_id"],
+            "task_id": row["task_id"],
+            "schedule_id": row["schedule_id"],
+            "occurrence_key": row["occurrence_key"],
+            "idempotency_key": row["idempotency_key"],
+            "status": row["status"],
+            "attempt_count": row["attempt_count"],
+            "max_attempts": row["max_attempts"],
+            "worker_id": row["worker_id"],
+            "lease_until": row["lease_until"],
+            "scheduled_for": row["scheduled_for"],
+            "result": json.loads(row["result_json"]),
+            "error": json.loads(row["error_json"]),
+            "created_at": row["created_at"],
+            "started_at": row["started_at"],
+            "finished_at": row["finished_at"],
+        }
+        if include_lease_token:
+            record["lease_token"] = row["lease_token"]
+        return record
+
+    @staticmethod
+    def _required_timestamp(value: Any, field_name: str) -> str:
+        normalized = _normalize_optional_timestamp(value, field_name)
+        if normalized is None:
+            raise ValueError(f"{field_name} is required")
+        return normalized
+
+    @staticmethod
+    def _next_interval_run(
+        scheduled_for: datetime,
+        now: datetime,
+        interval_seconds: int,
+        misfire_policy: str,
+    ) -> str:
+        if misfire_policy == "run_once":
+            return _timestamp(now + timedelta(seconds=interval_seconds))
+        elapsed_seconds = max(0, (now - scheduled_for).total_seconds())
+        intervals = max(1, int(elapsed_seconds // interval_seconds) + 1)
+        return _timestamp(scheduled_for + timedelta(seconds=intervals * interval_seconds))
+
+    def create_schedule(
+        self,
+        schedule_id: str,
+        tenant_id: str,
+        principal_id: str,
+        task_id: str,
+        kind: str,
+        next_run_at: Any,
+        idempotency_key: str,
+        interval_seconds: Optional[int] = None,
+        misfire_policy: str = "skip",
+    ) -> Dict[str, Any]:
+        if (
+            not isinstance(schedule_id, str)
+            or not schedule_id
+            or len(schedule_id) > 128
+            or any(ord(char) < 0x20 or ord(char) == 0x7F for char in schedule_id)
+        ):
+            raise ValueError("schedule_id must be non-empty and bounded")
+        if kind not in {"once", "interval"}:
+            raise ValueError("schedule kind must be once or interval")
+        if misfire_policy not in {"skip", "run_once"}:
+            raise ValueError("invalid misfire policy")
+        if kind == "interval":
+            if (
+                isinstance(interval_seconds, bool)
+                or not isinstance(interval_seconds, int)
+                or not 1 <= interval_seconds <= 31_536_000
+            ):
+                raise ValueError("interval schedules require a bounded interval_seconds")
+        elif interval_seconds is not None:
+            raise ValueError("once schedules must not specify interval_seconds")
+        self._validate_idempotency_key(idempotency_key)
+        next_run = self._required_timestamp(next_run_at, "next_run_at")
+        now = _timestamp(_utcnow())
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._validate_principal_locked(connection, tenant_id, principal_id)
+                task = connection.execute(
+                    "SELECT goal_id, tenant_id FROM tasks WHERE id = ?", (task_id,)
+                ).fetchone()
+                if task is None:
+                    raise NotFoundError("task not found")
+                if task["tenant_id"] != tenant_id:
+                    raise ScopeViolation("task is outside tenant scope")
+                connection.execute(
+                    "INSERT INTO schedules("
+                    "id, tenant_id, principal_id, task_id, kind, status, next_run_at, "
+                    "interval_seconds, misfire_policy, idempotency_key, created_at, updated_at"
+                    ") VALUES(?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?)",
+                    (
+                        schedule_id,
+                        tenant_id,
+                        principal_id,
+                        task_id,
+                        kind,
+                        next_run,
+                        interval_seconds,
+                        misfire_policy,
+                        idempotency_key,
+                        now,
+                        now,
+                    ),
+                )
+                payload = {
+                    "schedule_id": schedule_id,
+                    "task_id": task_id,
+                    "kind": kind,
+                    "status": "active",
+                    "next_run_at": next_run,
+                }
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{schedule_id}:created:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="principal",
+                    actor_id=principal_id,
+                    action="schedule.created",
+                    target=schedule_id,
+                    outcome="success",
+                    event_type="schedule.created",
+                    aggregate_kind="schedule",
+                    aggregate_id=schedule_id,
+                    payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                connection.execute("COMMIT")
+            except Exception as error:
+                connection.execute("ROLLBACK")
+                if _is_unique_integrity_error(error):
+                    raise ConflictError("schedule conflicts with an existing record") from error
+                raise
+        return self.get_schedule(schedule_id, tenant_id)
+
+    def get_schedule(self, schedule_id: str, tenant_id: str) -> Dict[str, Any]:
+        with self._lock:
+            row = self._conn().execute(
+                "SELECT * FROM schedules WHERE id = ?", (schedule_id,)
+            ).fetchone()
+        if row is None:
+            raise NotFoundError("schedule not found")
+        if row["tenant_id"] != tenant_id:
+            raise ScopeViolation("schedule is outside tenant scope")
+        return self._schedule_record(row)
+
+    def list_schedules(
+        self,
+        tenant_id: str,
+        task_id: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: int = 100,
+        goal_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        if not 1 <= limit <= 1000:
+            raise ValueError("invalid schedule limit")
+        if status is not None and status not in {
+            "active",
+            "running",
+            "completed",
+            "failed",
+            "cancelled",
+        }:
+            raise ValueError("invalid schedule status")
+        statement = "SELECT schedules.* FROM schedules WHERE schedules.tenant_id = ?"
+        parameters: List[Any] = [tenant_id]
+        if task_id is not None:
+            statement += " AND schedules.task_id = ?"
+            parameters.append(task_id)
+        if goal_id is not None:
+            with self._lock:
+                goal = self._conn().execute(
+                    "SELECT tenant_id FROM goals WHERE id = ?", (goal_id,)
+                ).fetchone()
+            if goal is None:
+                raise NotFoundError("goal not found")
+            if goal["tenant_id"] != tenant_id:
+                raise ScopeViolation("goal is outside tenant scope")
+            statement += (
+                " AND schedules.task_id IN (SELECT id FROM tasks "
+                "WHERE goal_id = ? AND tenant_id = ?)"
+            )
+            parameters.extend([goal_id, tenant_id])
+        if status is not None:
+            statement += " AND schedules.status = ?"
+            parameters.append(status)
+        statement += " ORDER BY schedules.next_run_at, schedules.id LIMIT ?"
+        parameters.append(limit)
+        with self._lock:
+            rows = self._conn().execute(statement, parameters).fetchall()
+        return [self._schedule_record(row) for row in rows]
+
+    def cancel_schedule(
+        self, schedule_id: str, tenant_id: str, principal_id: str
+    ) -> Dict[str, Any]:
+        now = _timestamp(_utcnow())
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                self._validate_principal_locked(connection, tenant_id, principal_id)
+                schedule = connection.execute(
+                    "SELECT * FROM schedules WHERE id = ?", (schedule_id,)
+                ).fetchone()
+                if schedule is None:
+                    raise NotFoundError("schedule not found")
+                if schedule["tenant_id"] != tenant_id:
+                    raise ScopeViolation("schedule is outside tenant scope")
+                if schedule["status"] == "cancelled":
+                    connection.execute("COMMIT")
+                    return self._schedule_record(schedule)
+                if schedule["status"] in {"completed", "failed"}:
+                    raise ConflictError("schedule is already terminal")
+                connection.execute(
+                    "UPDATE schedules SET status = 'cancelled', cancelled_at = ?, updated_at = ? "
+                    "WHERE id = ? AND tenant_id = ? AND status IN ('active', 'running')",
+                    (now, now, schedule_id, tenant_id),
+                )
+                running_runs = connection.execute(
+                    "SELECT id FROM task_runs WHERE schedule_id = ? AND tenant_id = ? "
+                    "AND status = 'running'",
+                    (schedule_id, tenant_id),
+                ).fetchall()
+                for running_run in running_runs:
+                    connection.execute(
+                        "UPDATE task_runs SET status = 'cancelled', worker_id = NULL, "
+                        "lease_token = NULL, lease_until = NULL, finished_at = ? "
+                        "WHERE id = ? AND tenant_id = ? AND status = 'running'",
+                        (now, running_run["id"], tenant_id),
+                    )
+                    run_payload = {
+                        "run_id": running_run["id"],
+                        "schedule_id": schedule_id,
+                        "status": "cancelled",
+                    }
+                    run_event_id = "evt_" + hash_token(
+                        f"{tenant_id}:{running_run['id']}:cancelled:{os.urandom(16).hex()}"
+                    )[:26]
+                    self._append_audited_event_locked(
+                        connection=connection,
+                        tenant_id=tenant_id,
+                        actor_kind="principal",
+                        actor_id=principal_id,
+                        action="task_run.cancelled",
+                        target=running_run["id"],
+                        outcome="success",
+                        event_type="task_run.cancelled",
+                        aggregate_kind="task_run",
+                        aggregate_id=running_run["id"],
+                        payload_json=json.dumps(
+                            run_payload, sort_keys=True, separators=(",", ":")
+                        ),
+                        payload=run_payload,
+                        now=now,
+                        event_id=run_event_id,
+                    )
+                payload = {"schedule_id": schedule_id, "status": "cancelled"}
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{schedule_id}:cancelled:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="principal",
+                    actor_id=principal_id,
+                    action="schedule.cancelled",
+                    target=schedule_id,
+                    outcome="success",
+                    event_type="schedule.cancelled",
+                    aggregate_kind="schedule",
+                    aggregate_id=schedule_id,
+                    payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                current = connection.execute(
+                    "SELECT * FROM schedules WHERE id = ? AND tenant_id = ?",
+                    (schedule_id, tenant_id),
+                ).fetchone()
+                connection.execute("COMMIT")
+                return self._schedule_record(current)
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+
+    def _task_run_by_id_locked(
+        self, connection: Any, run_id: str, tenant_id: str
+    ) -> Any:
+        row = connection.execute(
+            "SELECT * FROM task_runs WHERE id = ?", (run_id,)
+        ).fetchone()
+        if row is None:
+            raise NotFoundError("task run not found")
+        if row["tenant_id"] != tenant_id:
+            raise ScopeViolation("task run is outside tenant scope")
+        return row
+
+    def get_task_run(self, run_id: str, tenant_id: str) -> Dict[str, Any]:
+        with self._lock:
+            row = self._task_run_by_id_locked(self._conn(), run_id, tenant_id)
+        return self._task_run_record(row)
+
+    def list_task_runs(
+        self, task_id: str, tenant_id: str, limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        if not 1 <= limit <= 1000:
+            raise ValueError("invalid task run limit")
+        with self._lock:
+            connection = self._conn()
+            task = connection.execute(
+                "SELECT tenant_id FROM tasks WHERE id = ?", (task_id,)
+            ).fetchone()
+            if task is None:
+                raise NotFoundError("task not found")
+            if task["tenant_id"] != tenant_id:
+                raise ScopeViolation("task is outside tenant scope")
+            rows = connection.execute(
+                "SELECT * FROM task_runs WHERE task_id = ? AND tenant_id = ? "
+                "ORDER BY created_at DESC, id DESC LIMIT ?",
+                (task_id, tenant_id, limit),
+            ).fetchall()
+        return [self._task_run_record(row) for row in rows]
+
+    def claim_due_schedule(
+        self,
+        schedule_id: str,
+        tenant_id: str,
+        worker_id: str,
+        lease_seconds: int = 60,
+        now: Optional[datetime] = None,
+    ) -> Optional[Dict[str, Any]]:
+        self._validate_worker_id(worker_id)
+        if (
+            isinstance(lease_seconds, bool)
+            or not isinstance(lease_seconds, int)
+            or not 1 <= lease_seconds <= 3600
+        ):
+            raise ValueError("lease_seconds must be between 1 and 3600")
+        now_dt = _utcnow() if now is None else now
+        if not isinstance(now_dt, datetime) or now_dt.tzinfo is None:
+            raise ValueError("now must include a timezone")
+        now_value = _timestamp(now_dt)
+        lease_until = _timestamp(now_dt + timedelta(seconds=lease_seconds))
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                schedule = connection.execute(
+                    "SELECT * FROM schedules WHERE id = ?", (schedule_id,)
+                ).fetchone()
+                if schedule is None:
+                    raise NotFoundError("schedule not found")
+                if schedule["tenant_id"] != tenant_id:
+                    raise ScopeViolation("schedule is outside tenant scope")
+                if schedule["status"] != "active" or schedule["next_run_at"] > now_value:
+                    connection.execute("ROLLBACK")
+                    return None
+                task = connection.execute(
+                    "SELECT * FROM tasks WHERE id = ? AND tenant_id = ?",
+                    (schedule["task_id"], tenant_id),
+                ).fetchone()
+                if task is None:
+                    raise NotFoundError("scheduled task not found")
+                pending = connection.execute(
+                    "SELECT COUNT(*) AS count FROM task_dependencies d "
+                    "JOIN tasks dependency ON dependency.id = d.depends_on_task_id "
+                    "WHERE d.tenant_id = ? AND d.task_id = ? "
+                    "AND dependency.status != 'completed'",
+                    (tenant_id, task["id"]),
+                ).fetchone()
+                if int(pending["count"]) != 0:
+                    connection.execute("ROLLBACK")
+                    return None
+                running = connection.execute(
+                    "SELECT id FROM task_runs WHERE tenant_id = ? AND schedule_id = ? "
+                    "AND status = 'running' LIMIT 1",
+                    (tenant_id, schedule_id),
+                ).fetchone()
+                if running is not None:
+                    connection.execute("ROLLBACK")
+                    return None
+                occurrence_key = schedule["next_run_at"]
+                existing = connection.execute(
+                    "SELECT id FROM task_runs WHERE tenant_id = ? AND schedule_id = ? "
+                    "AND occurrence_key = ?",
+                    (tenant_id, schedule_id, occurrence_key),
+                ).fetchone()
+                if existing is not None:
+                    connection.execute("ROLLBACK")
+                    return None
+                lease_token = hash_token(
+                    f"{tenant_id}:{schedule_id}:{worker_id}:{now_value}:{os.urandom(32).hex()}"
+                )
+                run_id = "trun_" + hash_token(
+                    f"{tenant_id}:{schedule_id}:{occurrence_key}:{os.urandom(32).hex()}"
+                )[:26]
+                run_idempotency_key = f"schedule:{schedule_id}:{occurrence_key}"
+                connection.execute(
+                    "INSERT INTO task_runs("
+                    "id, tenant_id, goal_id, task_id, schedule_id, occurrence_key, "
+                    "idempotency_key, status, attempt_count, max_attempts, worker_id, "
+                    "lease_token, lease_until, scheduled_for, created_at, started_at"
+                    ") VALUES(?, ?, ?, ?, ?, ?, ?, 'running', 1, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        run_id,
+                        tenant_id,
+                        task["goal_id"],
+                        task["id"],
+                        schedule_id,
+                        occurrence_key,
+                        run_idempotency_key,
+                        task["max_attempts"],
+                        worker_id,
+                        lease_token,
+                        lease_until,
+                        occurrence_key,
+                        now_value,
+                        now_value,
+                    ),
+                )
+                if schedule["kind"] == "interval":
+                    next_run = self._next_interval_run(
+                        _parse_utc_timestamp(occurrence_key, "next_run_at"),
+                        now_dt.astimezone(timezone.utc),
+                        int(schedule["interval_seconds"]),
+                        schedule["misfire_policy"],
+                    )
+                else:
+                    next_run = occurrence_key
+                connection.execute(
+                    "UPDATE schedules SET status = ?, next_run_at = ?, last_run_at = ?, "
+                    "run_count = run_count + 1, updated_at = ? WHERE id = ? AND tenant_id = ?",
+                    (
+                        "active" if schedule["kind"] == "interval" else "running",
+                        next_run,
+                        occurrence_key,
+                        now_value,
+                        schedule_id,
+                        tenant_id,
+                    ),
+                )
+                payload = {
+                    "schedule_id": schedule_id,
+                    "task_id": task["id"],
+                    "run_id": run_id,
+                    "status": "running",
+                    "attempt_count": 1,
+                    "scheduled_for": occurrence_key,
+                    "lease_until": lease_until,
+                }
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{run_id}:claimed:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="worker",
+                    actor_id=worker_id,
+                    action="task_run.claimed",
+                    target=run_id,
+                    outcome="success",
+                    event_type="task_run.claimed",
+                    aggregate_kind="task_run",
+                    aggregate_id=run_id,
+                    payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    payload=payload,
+                    now=now_value,
+                    event_id=event_id,
+                )
+                current_schedule = connection.execute(
+                    "SELECT * FROM schedules WHERE id = ? AND tenant_id = ?",
+                    (schedule_id, tenant_id),
+                ).fetchone()
+                current_run = connection.execute(
+                    "SELECT * FROM task_runs WHERE id = ? AND tenant_id = ?",
+                    (run_id, tenant_id),
+                ).fetchone()
+                connection.execute("COMMIT")
+                return {
+                    "schedule": self._schedule_record(current_schedule),
+                    "run": self._task_run_record(current_run, include_lease_token=True),
+                }
+            except Exception as error:
+                connection.execute("ROLLBACK")
+                if _is_unique_integrity_error(error):
+                    return None
+                raise
+
+    def claim_task_run(
+        self,
+        run_id: str,
+        tenant_id: str,
+        worker_id: str,
+        lease_seconds: int = 60,
+        now: Optional[datetime] = None,
+    ) -> Optional[Dict[str, Any]]:
+        self._validate_worker_id(worker_id)
+        if (
+            isinstance(lease_seconds, bool)
+            or not isinstance(lease_seconds, int)
+            or not 1 <= lease_seconds <= 3600
+        ):
+            raise ValueError("lease_seconds must be between 1 and 3600")
+        now_dt = _utcnow() if now is None else now
+        if not isinstance(now_dt, datetime) or now_dt.tzinfo is None:
+            raise ValueError("now must include a timezone")
+        now_value = _timestamp(now_dt)
+        lease_until = _timestamp(now_dt + timedelta(seconds=lease_seconds))
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                row = self._task_run_by_id_locked(connection, run_id, tenant_id)
+                expired = (
+                    row["status"] == "running"
+                    and row["lease_until"] is not None
+                    and row["lease_until"] <= now_value
+                )
+                if row["status"] not in {"queued", "retry"} and not expired:
+                    connection.execute("ROLLBACK")
+                    return None
+                next_attempt = int(row["attempt_count"]) + 1
+                if next_attempt > int(row["max_attempts"]):
+                    connection.execute(
+                        "UPDATE task_runs SET status = 'dead_lettered', worker_id = NULL, "
+                        "lease_token = NULL, lease_until = NULL, finished_at = ? "
+                        "WHERE id = ? AND tenant_id = ?",
+                        (now_value, run_id, tenant_id),
+                    )
+                    if row["schedule_id"] is not None:
+                        schedule = connection.execute(
+                            "SELECT kind FROM schedules WHERE id = ? AND tenant_id = ?",
+                            (row["schedule_id"], tenant_id),
+                        ).fetchone()
+                        if schedule is not None and schedule["kind"] == "once":
+                            connection.execute(
+                                "UPDATE schedules SET status = 'failed', updated_at = ? "
+                                "WHERE id = ? AND tenant_id = ? AND status IN ('active', 'running')",
+                                (now_value, row["schedule_id"], tenant_id),
+                            )
+                    connection.execute(
+                        "UPDATE tasks SET status = 'failed', lease_owner = NULL, "
+                        "lease_token = NULL, lease_until = NULL, updated_at = ? "
+                        "WHERE id = ? AND tenant_id = ? AND status IN ('queued', 'running', 'retry')",
+                        (now_value, row["task_id"], tenant_id),
+                    )
+                    payload = {
+                        "run_id": run_id,
+                        "task_id": row["task_id"],
+                        "schedule_id": row["schedule_id"],
+                        "status": "dead_lettered",
+                        "attempt_count": int(row["attempt_count"]),
+                    }
+                    event_id = "evt_" + hash_token(
+                        f"{tenant_id}:{run_id}:dead_lettered:{os.urandom(16).hex()}"
+                    )[:26]
+                    self._append_audited_event_locked(
+                        connection=connection,
+                        tenant_id=tenant_id,
+                        actor_kind="worker",
+                        actor_id=worker_id,
+                        action="task_run.dead_lettered",
+                        target=run_id,
+                        outcome="dead_lettered",
+                        event_type="task_run.dead_lettered",
+                        aggregate_kind="task_run",
+                        aggregate_id=run_id,
+                        payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                        payload=payload,
+                        now=now_value,
+                        event_id=event_id,
+                    )
+                    connection.execute("COMMIT")
+                    return None
+                lease_token = hash_token(
+                    f"{tenant_id}:{run_id}:{worker_id}:{now_value}:{os.urandom(32).hex()}"
+                )
+                updated = connection.execute(
+                    "UPDATE task_runs SET status = 'running', attempt_count = ?, worker_id = ?, "
+                    "lease_token = ?, lease_until = ?, started_at = COALESCE(started_at, ?), "
+                    "finished_at = NULL WHERE id = ? AND tenant_id = ?",
+                    (
+                        next_attempt,
+                        worker_id,
+                        lease_token,
+                        lease_until,
+                        now_value,
+                        run_id,
+                        tenant_id,
+                    ),
+                )
+                if getattr(updated, "rowcount", 1) != 1:
+                    connection.execute("ROLLBACK")
+                    return None
+                if row["schedule_id"] is None:
+                    connection.execute(
+                        "UPDATE tasks SET status = 'running', lease_owner = ?, lease_token = ?, "
+                        "lease_until = ?, updated_at = ? WHERE id = ? AND tenant_id = ? "
+                        "AND status IN ('queued', 'retry', 'running')",
+                        (
+                            worker_id,
+                            lease_token,
+                            lease_until,
+                            now_value,
+                            row["task_id"],
+                            tenant_id,
+                        ),
+                    )
+                payload = {
+                    "run_id": run_id,
+                    "task_id": row["task_id"],
+                    "status": "running",
+                    "attempt_count": next_attempt,
+                    "lease_until": lease_until,
+                }
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{run_id}:reclaimed:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="worker",
+                    actor_id=worker_id,
+                    action="task_run.claimed",
+                    target=run_id,
+                    outcome="success",
+                    event_type="task_run.claimed",
+                    aggregate_kind="task_run",
+                    aggregate_id=run_id,
+                    payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    payload=payload,
+                    now=now_value,
+                    event_id=event_id,
+                )
+                current = connection.execute(
+                    "SELECT * FROM task_runs WHERE id = ? AND tenant_id = ?",
+                    (run_id, tenant_id),
+                ).fetchone()
+                connection.execute("COMMIT")
+                return self._task_run_record(current, include_lease_token=True)
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+
+    def complete_task_run(
+        self,
+        run_id: str,
+        tenant_id: str,
+        worker_id: str,
+        lease_token: str,
+        status: str,
+        result: Optional[Dict[str, Any]] = None,
+        error: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        self._validate_worker_id(worker_id)
+        if not isinstance(lease_token, str) or not lease_token or len(lease_token) > 512:
+            raise ValueError("lease_token is invalid")
+        if status not in {"succeeded", "failed", "cancelled"}:
+            raise ValueError("invalid task run status")
+        if result is None:
+            result = {}
+        if error is None:
+            error = {}
+        if not isinstance(result, dict) or not isinstance(error, dict):
+            raise ValueError("task run result and error must be objects")
+        result_json = json.dumps(
+            result, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+        )
+        error_json = json.dumps(
+            error, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False
+        )
+        now = _timestamp(_utcnow())
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                row = self._task_run_by_id_locked(connection, run_id, tenant_id)
+                if row["status"] != "running":
+                    raise ConflictError("task run is not running")
+                if row["lease_until"] is None or row["lease_until"] <= now:
+                    raise ConflictError("task run lease has expired")
+                if not hmac.compare_digest(str(row["worker_id"] or ""), worker_id):
+                    raise ConflictError("task run lease belongs to another worker")
+                if not hmac.compare_digest(str(row["lease_token"] or ""), lease_token):
+                    raise ConflictError("task run lease token is invalid")
+                effective_status = status
+                if status == "failed":
+                    effective_status = (
+                        "retry"
+                        if int(row["attempt_count"]) < int(row["max_attempts"])
+                        else "dead_lettered"
+                    )
+                updated = connection.execute(
+                    "UPDATE task_runs SET status = ?, result_json = ?, error_json = ?, "
+                    "worker_id = NULL, lease_token = NULL, lease_until = NULL, finished_at = ? "
+                    "WHERE id = ? AND tenant_id = ? AND status = 'running' "
+                    "AND worker_id = ? AND lease_token = ?",
+                    (
+                        effective_status,
+                        result_json,
+                        error_json,
+                        now,
+                        run_id,
+                        tenant_id,
+                        worker_id,
+                        lease_token,
+                    ),
+                )
+                if getattr(updated, "rowcount", 1) != 1:
+                    raise ConflictError("task run lease is no longer valid")
+                schedule = None
+                if row["schedule_id"] is not None:
+                    schedule = connection.execute(
+                        "SELECT * FROM schedules WHERE id = ? AND tenant_id = ?",
+                        (row["schedule_id"], tenant_id),
+                    ).fetchone()
+                    if schedule is not None and schedule["kind"] == "once":
+                        schedule_status = {
+                            "succeeded": "completed",
+                            "dead_lettered": "failed",
+                            "cancelled": "cancelled",
+                            "retry": "active",
+                        }.get(effective_status)
+                        if schedule_status is not None:
+                            connection.execute(
+                                "UPDATE schedules SET status = ?, updated_at = ?, "
+                                "cancelled_at = ? WHERE id = ? AND tenant_id = ?",
+                                (
+                                    schedule_status,
+                                    now,
+                                    now if schedule_status == "cancelled" else None,
+                                    row["schedule_id"],
+                                    tenant_id,
+                                ),
+                            )
+                if effective_status == "succeeded":
+                    connection.execute(
+                        "UPDATE tasks SET status = 'completed', completed_at = ?, updated_at = ?, "
+                        "lease_owner = NULL, lease_token = NULL, lease_until = NULL "
+                        "WHERE id = ? AND tenant_id = ? AND status IN ('queued', 'running', 'retry')",
+                        (now, now, row["task_id"], tenant_id),
+                    )
+                elif effective_status == "dead_lettered":
+                    connection.execute(
+                        "UPDATE tasks SET status = 'failed', updated_at = ? "
+                        "WHERE id = ? AND tenant_id = ? AND status IN ('queued', 'running', 'retry')",
+                        (now, row["task_id"], tenant_id),
+                    )
+                elif row["schedule_id"] is None and effective_status == "retry":
+                    connection.execute(
+                        "UPDATE tasks SET status = 'retry', lease_owner = NULL, lease_token = NULL, "
+                        "lease_until = NULL, updated_at = ? WHERE id = ? AND tenant_id = ?",
+                        (now, row["task_id"], tenant_id),
+                    )
+                elif row["schedule_id"] is None and effective_status == "cancelled":
+                    connection.execute(
+                        "UPDATE tasks SET status = 'queued', completed_at = NULL, "
+                        "lease_owner = NULL, lease_token = NULL, lease_until = NULL, updated_at = ? "
+                        "WHERE id = ? AND tenant_id = ? AND status IN ('queued', 'running', 'retry')",
+                        (now, row["task_id"], tenant_id),
+                    )
+                payload = {
+                    "run_id": run_id,
+                    "task_id": row["task_id"],
+                    "schedule_id": row["schedule_id"],
+                    "status": effective_status,
+                    "attempt_count": int(row["attempt_count"]),
+                }
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{run_id}:{effective_status}:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="worker",
+                    actor_id=worker_id,
+                    action=f"task_run.{effective_status}",
+                    target=run_id,
+                    outcome="success" if effective_status == "succeeded" else effective_status,
+                    event_type="task_run.completed",
+                    aggregate_kind="task_run",
+                    aggregate_id=run_id,
+                    payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                if effective_status == "succeeded":
+                    goal = connection.execute(
+                        "SELECT id, status FROM goals WHERE id = ? AND tenant_id = ?",
+                        (row["goal_id"], tenant_id),
+                    ).fetchone()
+                    incomplete = connection.execute(
+                        "SELECT COUNT(*) AS count FROM tasks WHERE goal_id = ? AND tenant_id = ? "
+                        "AND status != 'completed'",
+                        (row["goal_id"], tenant_id),
+                    ).fetchone()
+                    if (
+                        goal is not None
+                        and goal["status"] == "active"
+                        and int(incomplete["count"]) == 0
+                    ):
+                        connection.execute(
+                            "UPDATE goals SET status = 'completed', completed_at = ?, updated_at = ? "
+                            "WHERE id = ? AND tenant_id = ? AND status = 'active'",
+                            (now, now, row["goal_id"], tenant_id),
+                        )
+                        goal_payload = {"goal_id": row["goal_id"], "status": "completed"}
+                        goal_event_id = "evt_" + hash_token(
+                            f"{tenant_id}:{row['goal_id']}:completed:{os.urandom(16).hex()}"
+                        )[:26]
+                        self._append_audited_event_locked(
+                            connection=connection,
+                            tenant_id=tenant_id,
+                            actor_kind="worker",
+                            actor_id=worker_id,
+                            action="goal.completed",
+                            target=row["goal_id"],
+                            outcome="success",
+                            event_type="goal.completed",
+                            aggregate_kind="goal",
+                            aggregate_id=row["goal_id"],
+                            payload_json=json.dumps(
+                                goal_payload, sort_keys=True, separators=(",", ":")
+                            ),
+                            payload=goal_payload,
+                            now=now,
+                            event_id=goal_event_id,
+                        )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        return self.get_task_run(run_id, tenant_id)
 
     def create_briefing(
         self,
