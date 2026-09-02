@@ -36,7 +36,11 @@ def probe(
     checks["physical_actuation"] = "disabled"
     bundle_path = str(frontend_dist_path() / "index.html")
     checks["frontend_bundle"] = "ready" if os.path.isfile(bundle_path) else "unavailable"
-    ready = checks["database"] == "ready" and checks["redis"] in {"ready", "disabled"}
+    ready = (
+        checks["database"] == "ready"
+        and checks["redis"] in {"ready", "disabled"}
+        and checks["frontend_bundle"] == "ready"
+    )
     return {
         "status": "ready" if ready else "degraded",
         "profile": settings.profile,

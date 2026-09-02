@@ -12,7 +12,7 @@ import asyncio
 import hashlib
 import json
 import os
-from typing import Any, AsyncGenerator, AsyncIterator, Dict, FrozenSet, Iterator, Optional, Union
+from typing import Any, AsyncGenerator, AsyncIterator, Dict, FrozenSet, Iterator, Optional, Sequence, Union
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
@@ -30,6 +30,7 @@ from src.control_plane.briefing import BriefingAggregator
 from src.control_plane.contracts import IntentCreateRequest, RiskTier
 from src.control_plane.connectors import ConnectorRegistry
 from src.control_plane.execution import ActionBroker, ToolDefinition, ToolRegistry
+from src.control_plane.events import OutboxDispatcher
 from src.control_plane.identity import hash_token, issue_id, issue_token, optional_bearer
 from src.control_plane.policy import PolicyEngine
 from src.control_plane.redis_runtime import RedisRuntime
@@ -39,6 +40,7 @@ from src.control_plane.storage import (
     ControlPlaneStore,
     NotFoundError,
     ScopeViolation,
+    _prepare_private_directory,
 )
 
 
@@ -292,6 +294,35 @@ def _context_from_request(request: Request) -> AuthContext:
     )
 
 
+def _session_is_active(
+    store: ControlPlaneStore,
+    token: Optional[str],
+    context: AuthContext,
+) -> bool:
+    """Revalidate the session and its authorization snapshot for live streams."""
+    if token is None:
+        return False
+    session = store.authenticate_session(token)
+    if session is None:
+        return False
+    try:
+        raw_scopes = json.loads(session.get("scope_json") or "[]")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return False
+    if not isinstance(raw_scopes, list) or not all(
+        isinstance(scope, str) for scope in raw_scopes
+    ):
+        return False
+    scopes = frozenset(raw_scopes)
+    return (
+        session.get("id") == context.session_id
+        and session.get("tenant_id") == context.tenant_id
+        and session.get("principal_id") == context.principal_id
+        and session.get("device_id") == context.device_id
+        and scopes == context.scopes
+    )
+
+
 def _request_id(request: Request) -> str:
     return getattr(request.state, "request_id", "")
 
@@ -334,6 +365,23 @@ async def _read_body_limited(request: Request, limit: int) -> bytes:
     return body
 
 
+def _safe_validation_errors(errors: Sequence[Any]) -> list[Dict[str, Any]]:
+    """Keep validation diagnostics useful without echoing submitted values."""
+    safe_errors = []
+    for error in errors:
+        location = error.get("loc", ())
+        if not isinstance(location, (list, tuple)):
+            location = (location,)
+        safe_errors.append(
+            {
+                "type": str(error.get("type", "validation_error")),
+                "loc": [str(item) for item in location],
+                "message": str(error.get("msg", "Request validation failed.")),
+            }
+        )
+    return safe_errors
+
+
 def _side_effect_for_risk(risk_tier: str) -> str:
     if risk_tier in {"R0", "R1"}:
         return "none"
@@ -350,6 +398,33 @@ def _idempotency_key(request: Request, message: str) -> str:
             detail={"code": "IDEMPOTENCY_REQUIRED", "message": message},
         )
     return value
+
+
+def _canonical_timestamp(value: Optional[str], field_name: str) -> Optional[str]:
+    """Match repository timestamp normalization during idempotency replay."""
+    if value is None:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field_name} must be an ISO-8601 timestamp") from exc
+    if parsed.tzinfo is None:
+        raise ValueError(f"{field_name} must include a timezone")
+    return parsed.astimezone(timezone.utc).isoformat()
+
+
+def _maintain_events_once(
+    store: ControlPlaneStore,
+    retain_latest: int,
+    tenant_id: Optional[str] = "local",
+) -> None:
+    """Deliver the durable event stream before applying event retention."""
+    report = OutboxDispatcher(store).dispatch_once(limit=100)
+    if report.retried:
+        raise ConflictError("outbox delivery is pending")
+    tenant_ids = [tenant_id] if tenant_id is not None else store.list_tenant_ids()
+    for current_tenant_id in tenant_ids:
+        store.prune_events(current_tenant_id, retain_latest)
 
 
 def create_app(
@@ -406,10 +481,14 @@ def create_app(
         while True:
             await asyncio.sleep(60)
             try:
-                application.state.store.prune_events("local", settings.event_retention)
+                _maintain_events_once(
+                    application.state.store,
+                    settings.event_retention,
+                    tenant_id=None,
+                )
             except (ConflictError, RuntimeError):
-                # An undelivered outbox record deliberately defers pruning until
-                # the dispatcher has a chance to deliver it.
+                # A failed outbox delivery deliberately defers pruning until a
+                # later maintenance cycle can retry it.
                 continue
 
     @asynccontextmanager
@@ -419,7 +498,8 @@ def create_app(
         application.state.store.create_principal("local-operator", "local")
         for definition in application.state.registry.definitions():
             application.state.store.upsert_capability(definition.manifest())
-        os.makedirs(settings.artifact_directory, mode=0o700, exist_ok=True)
+        artifact_directory = _prepare_private_directory(settings.artifact_directory)
+        application.state.artifact_directory = artifact_directory
         maintenance_task = asyncio.create_task(event_retention_maintenance(application))
         try:
             yield
@@ -467,9 +547,13 @@ def create_app(
         }
         for path, operations in schema.get("paths", {}).items():
             if path.startswith("/api/"):
-                for operation in operations.values():
+                for method, operation in operations.items():
                     if isinstance(operation, dict):
-                        operation["security"] = [{"BearerAuth": []}]
+                        operation["security"] = (
+                            []
+                            if path == "/api/v2/sessions" and method == "post"
+                            else [{"BearerAuth": []}]
+                        )
         app.openapi_schema = schema
         return schema
 
@@ -614,7 +698,7 @@ def create_app(
 
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException):
-        detail = exc.detail if isinstance(exc.detail, dict) else {}
+        detail: Dict[str, Any] = exc.detail if isinstance(exc.detail, dict) else {}
         return _error(
             exc.status_code,
             detail.get("code", "HTTP_ERROR"),
@@ -637,7 +721,7 @@ def create_app(
             "Malformed JSON request body." if malformed_json else "Request validation failed.",
             _request_id(request),
             False,
-            {"errors": errors},
+            {"errors": _safe_validation_errors(errors)},
         )
 
     @app.get("/health/live")
@@ -810,7 +894,9 @@ def create_app(
         context: AuthContext = Depends(_context_from_request),
     ):
         require_scope(context, "device:pair", "Device pairing is not permitted.")
-        _idempotency_key(request, "Idempotency-Key is required for device approval.")
+        idempotency_key = _idempotency_key(
+            request, "Idempotency-Key is required for device approval."
+        )
         try:
             return request.app.state.store.approve_pairing_challenge(
                 device_id=device_id,
@@ -818,6 +904,7 @@ def create_app(
                 principal_id=context.principal_id,
                 challenge=payload.challenge.get_secret_value(),
                 enrollment_hash=hash_token(f"{device_id}:{payload.challenge.get_secret_value()}"),
+                idempotency_key=idempotency_key,
             )
         except NotFoundError:
             raise HTTPException(
@@ -845,15 +932,31 @@ def create_app(
         context: AuthContext = Depends(_context_from_request),
     ):
         require_scope(context, "device:revoke", "Device revocation is not permitted.")
-        _idempotency_key(request, "Idempotency-Key is required for device revocation.")
+        idempotency_key = _idempotency_key(
+            request, "Idempotency-Key is required for device revocation."
+        )
         try:
             return request.app.state.store.revoke_device(
-                device_id, context.tenant_id, context.principal_id
+                device_id,
+                context.tenant_id,
+                context.principal_id,
+                idempotency_key=idempotency_key,
             )
         except NotFoundError:
             raise HTTPException(
                 status_code=404,
                 detail={"code": "NOT_FOUND", "message": "Device not found."},
+            )
+        except ConflictError as exc:
+            message = str(exc)
+            code = (
+                "IDEMPOTENCY_CONFLICT"
+                if "idempotency" in message
+                else "DEVICE_CONFLICT"
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={"code": code, "message": message},
             )
 
     @app.get("/api/v2/devices/{device_id}/telemetry")
@@ -1173,7 +1276,35 @@ def create_app(
         context: AuthContext = Depends(_context_from_request),
     ):
         require_scope(context, "workspace:write", "Task writes are not permitted.")
+        def replay_task_if_matching() -> Optional[JSONResponse]:
+            canonical_not_before = _canonical_timestamp(payload.not_before, "not_before")
+            existing = request.app.state.store.get_task_by_idempotency(
+                context.tenant_id, payload.idempotency_key
+            )
+            if existing is None:
+                return None
+            if (
+                existing["goal_id"] != goal_id
+                or existing["title"] != payload.title
+                or existing["instruction"] != payload.instruction
+                or existing["priority"] != payload.priority
+                or existing["not_before"] != canonical_not_before
+                or existing["max_attempts"] != payload.max_attempts
+                or existing["dependencies"] != sorted(payload.depends_on)
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "IDEMPOTENCY_CONFLICT",
+                        "message": "Idempotency key is bound to different task input.",
+                    },
+                )
+            return JSONResponse(status_code=200, content=existing)
+
         try:
+            replay = replay_task_if_matching()
+            if replay is not None:
+                return replay
             return request.app.state.store.create_task(
                 task_id=issue_id("task"),
                 goal_id=goal_id,
@@ -1193,6 +1324,9 @@ def create_app(
                 detail={"code": "NOT_FOUND", "message": "Goal or dependency not found."},
             )
         except ConflictError as exc:
+            replay = replay_task_if_matching()
+            if replay is not None:
+                return replay
             raise HTTPException(
                 status_code=409,
                 detail={"code": "TASK_CONFLICT", "message": str(exc)},
@@ -1227,7 +1361,46 @@ def create_app(
         context: AuthContext = Depends(_context_from_request),
     ):
         require_scope(context, "workspace:write", "Schedule writes are not permitted.")
+        def replay_schedule_if_matching() -> Optional[JSONResponse]:
+            canonical_next_run_at = _canonical_timestamp(
+                payload.next_run_at, "next_run_at"
+            )
+            existing = request.app.state.store.get_schedule_by_idempotency(
+                context.tenant_id, payload.idempotency_key
+            )
+            if existing is None:
+                return None
+            if (
+                existing["task_id"] != payload.task_id
+                or existing["kind"] != payload.kind
+                or existing["next_run_at"] != canonical_next_run_at
+                or existing["interval_seconds"] != payload.interval_seconds
+                or existing["misfire_policy"] != payload.misfire_policy
+            ):
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "IDEMPOTENCY_CONFLICT",
+                        "message": "Idempotency key is bound to different schedule input.",
+                    },
+                )
+            existing_task = request.app.state.store.get_task(
+                existing["task_id"], context.tenant_id
+            )
+            if existing_task["goal_id"] != goal_id:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "IDEMPOTENCY_CONFLICT",
+                        "message": "Idempotency key is bound to a different goal.",
+                    },
+                )
+            return JSONResponse(status_code=200, content=existing)
+
         try:
+            replay = replay_schedule_if_matching()
+            if replay is not None:
+                return replay
             task = request.app.state.store.get_task(payload.task_id, context.tenant_id)
             if task["goal_id"] != goal_id:
                 raise ConflictError("scheduled task belongs to another goal")
@@ -1248,6 +1421,9 @@ def create_app(
                 detail={"code": "NOT_FOUND", "message": "Goal or task not found."},
             )
         except ConflictError as exc:
+            replay = replay_schedule_if_matching()
+            if replay is not None:
+                return replay
             raise HTTPException(
                 status_code=409,
                 detail={"code": "SCHEDULE_CONFLICT", "message": str(exc)},
@@ -1302,11 +1478,15 @@ def create_app(
         context: AuthContext = Depends(_context_from_request),
     ):
         require_scope(context, "workspace:write", "Schedule cancellation is not permitted.")
+        idempotency_key = _idempotency_key(
+            request, "Idempotency-Key is required for schedule cancellation."
+        )
         try:
             return request.app.state.store.cancel_schedule(
                 schedule_id=schedule_id,
                 tenant_id=context.tenant_id,
                 principal_id=context.principal_id,
+                idempotency_key=idempotency_key,
             )
         except (NotFoundError, ScopeViolation):
             raise HTTPException(
@@ -1314,9 +1494,15 @@ def create_app(
                 detail={"code": "NOT_FOUND", "message": "Schedule not found."},
             )
         except ConflictError as exc:
+            message = str(exc)
+            code = (
+                "IDEMPOTENCY_CONFLICT"
+                if "idempotency" in message
+                else "SCHEDULE_CONFLICT"
+            )
             raise HTTPException(
                 status_code=409,
-                detail={"code": "SCHEDULE_CONFLICT", "message": str(exc)},
+                detail={"code": code, "message": message},
             )
 
     @app.post("/api/v2/schedules/{schedule_id}/claim")
@@ -1594,12 +1780,21 @@ def create_app(
             )
         digest = "sha256:" + hashlib.sha256(raw).hexdigest()
         artifact_id = issue_id("art")
-        artifact_path = os.path.join(settings.artifact_directory, f"{artifact_id}.bin")
+        artifact_directory = request.app.state.artifact_directory
+        artifact_path = os.path.join(artifact_directory, f"{artifact_id}.bin")
         temp_path = f"{artifact_path}.tmp"
         try:
-            with open(temp_path, "xb") as artifact_file:
-                artifact_file.write(raw)
+            flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0)
+            descriptor = os.open(temp_path, flags, 0o600)
+            try:
+                with os.fdopen(descriptor, "wb") as artifact_file:
+                    descriptor = -1
+                    artifact_file.write(raw)
+            finally:
+                if descriptor != -1:
+                    os.close(descriptor)
             os.replace(temp_path, artifact_path)
+            os.chmod(artifact_path, 0o600)
             record = request.app.state.store.create_artifact(
                 artifact_id=artifact_id,
                 tenant_id=context.tenant_id,
@@ -1813,6 +2008,11 @@ def create_app(
                             **definition.manifest(),
                             "name": definition.tool_id,
                             "description": definition.disclosure,
+                            "inputSchema": {
+                                "type": "object",
+                                "additionalProperties": True,
+                                "x-zasi-schema-ref": definition.input_schema_ref,
+                            },
                         }
                         for definition in request.app.state.registry.definitions()
                     ]
@@ -1952,6 +2152,8 @@ def create_app(
             if definition is None:
                 errors.append(f"step.{index}.capability.unavailable")
                 continue
+            if step.get("tool_version") != definition.version:
+                errors.append(f"step.{index}.capability.version_mismatch")
             decision = policy.evaluate(
                 capability_id=tool_id,
                 requested_risk_tier=risk_tier,
@@ -1977,6 +2179,7 @@ def create_app(
                 {
                     "step_id": generated_step_ids[index],
                     "tool_id": item.tool_id,
+                    "tool_version": definition.version if definition is not None else None,
                     "risk_tier": item.risk_tier,
                     "payload": item.payload,
                     "depends_on": [client_refs.get(ref, ref) for ref in item.depends_on],
@@ -2124,6 +2327,23 @@ def create_app(
                 detail={"code": "SEQUENCE_EXPIRED", "message": "Sequence revision has expired."},
             )
         for step in sequence["steps"]:
+            definition = request.app.state.registry.get(step.get("tool_id"))
+            if definition is None:
+                raise HTTPException(
+                    status_code=503,
+                    detail={
+                        "code": "CAPABILITY_DISABLED",
+                        "message": "A sequence capability is unavailable.",
+                    },
+                )
+            if step.get("tool_version") != definition.version:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "CAPABILITY_VERSION_MISMATCH",
+                        "message": "A sequence capability changed after validation.",
+                    },
+                )
             if step["risk_tier"] not in {"R0", "R1"}:
                 raise HTTPException(
                     status_code=503,
@@ -2201,6 +2421,7 @@ def create_app(
         after: Optional[int] = Query(default=None, ge=0),
         limit: int = Query(default=100, ge=1, le=1000),
     ):
+        after = 0 if after is None else after
         try:
             app.state.store.get_sequence(sequence_id, context.tenant_id)
             event_items = app.state.store.list_sequence_events(
@@ -2701,10 +2922,15 @@ def create_app(
         context: AuthContext = Depends(_context_from_request),
     ):
         require_scope(context, "run:cancel", "Run cancellation is not permitted.")
-        _idempotency_key(request, "Idempotency-Key is required for cancellation.")
+        idempotency_key = _idempotency_key(
+            request, "Idempotency-Key is required for cancellation."
+        )
         try:
             return request.app.state.store.cancel_run(
-                run_id, context.tenant_id, context.principal_id
+                run_id,
+                context.tenant_id,
+                context.principal_id,
+                idempotency_key=idempotency_key,
             )
         except NotFoundError:
             raise HTTPException(
@@ -2712,9 +2938,15 @@ def create_app(
                 detail={"code": "NOT_FOUND", "message": "Run not found."},
             )
         except ConflictError as exc:
+            message = str(exc)
+            code = (
+                "IDEMPOTENCY_CONFLICT"
+                if "idempotency" in message
+                else "RUN_STATE_CONFLICT"
+            )
             raise HTTPException(
                 status_code=409,
-                detail={"code": "RUN_STATE_CONFLICT", "message": str(exc)},
+                detail={"code": code, "message": message},
             )
 
     @app.get("/api/v2/snapshot")
@@ -2747,6 +2979,7 @@ def create_app(
     ):
         query_after = after
         after = 0 if after is None else after
+        last_after: Optional[int] = None
         if last_event_id is not None:
             try:
                 last_after = int(last_event_id)
@@ -2774,7 +3007,7 @@ def create_app(
                 )
             if header_after < 0 or (
                 query_after is not None and query_after != header_after
-            ):
+            ) or (last_after is not None and last_after != header_after):
                 raise HTTPException(
                     status_code=400,
                     detail={
@@ -2796,6 +3029,9 @@ def create_app(
                 status_code=400,
                 detail={"code": "INVALID_CURSOR", "message": "The event cursor is invalid."},
             )
+
+        next_cursor = event_items[-1]["sequence"] if event_items else after
+        stream_token = optional_bearer(request.headers.get("Authorization"))
 
         def format_event(item: Dict[str, Any]) -> str:
             return (
@@ -2829,7 +3065,7 @@ def create_app(
                 yield format_event(item)
             yield (
                 "event: stream.end\n"
-                f"data: {json.dumps({'next_cursor': latest, 'resync_required': False})}\n\n"
+                f"data: {json.dumps({'next_cursor': next_cursor, 'resync_required': False})}\n\n"
             )
 
         async def live_event_stream() -> AsyncGenerator[str, None]:
@@ -2853,6 +3089,25 @@ def create_app(
             while True:
                 if await request.is_disconnected():
                     return
+                if not _session_is_active(
+                    request.app.state.store,
+                    stream_token,
+                    context,
+                ):
+                    yield (
+                        "event: stream.end\n"
+                        + "data: "
+                        + json.dumps(
+                            {
+                                "next_cursor": cursor,
+                                "resync_required": False,
+                                "reason": "session_revoked_or_expired",
+                            },
+                            sort_keys=True,
+                        )
+                        + "\n\n"
+                    )
+                    return
                 items = request.app.state.store.list_events(
                     context.tenant_id, after=cursor, limit=limit
                 )
@@ -2870,7 +3125,7 @@ def create_app(
             headers={
                 "Cache-Control": "no-cache",
                 "X-Accel-Buffering": "no",
-                "X-ZASI-Event-Cursor": str(latest),
+                "X-ZASI-Event-Cursor": str(latest if requires_resync else next_cursor),
             },
         )
 

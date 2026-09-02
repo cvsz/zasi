@@ -1,5 +1,6 @@
 import threading
 import unittest
+from datetime import datetime, timezone
 
 from src.control_plane.storage import ControlPlaneStore
 from src.control_plane.worker import OutboxWorker
@@ -95,6 +96,39 @@ class OutboxWorkerTests(unittest.TestCase):
         pending = self.store.list_outbox(status="pending")
         self.assertEqual(len(pending), 1)
         self.assertEqual(pending[0]["last_error"], "outbox handler is not configured")
+
+    def test_dispatcher_reclaims_an_expired_processing_lease(self):
+        self._append_event()
+        outbox_id = self.store.list_outbox()[0]["id"]
+        claimed = self.store.claim_outbox(outbox_id)
+        self.assertIsNotNone(claimed)
+        self.store._conn().execute(
+            "UPDATE outbox SET lease_until = ?, status = 'processing' WHERE id = ?",
+            (datetime(2000, 1, 1, tzinfo=timezone.utc).isoformat(), outbox_id),
+        )
+
+        report = OutboxWorker(self.store, poll_interval_seconds=0.01).run_once()
+
+        self.assertEqual(report.claimed, 1)
+        self.assertEqual(report.delivered, 1)
+        self.assertEqual(self.store.list_outbox(status="delivered")[0]["id"], outbox_id)
+
+    def test_claim_outbox_returns_none_when_conditional_update_changes_no_row(self):
+        self._append_event()
+        outbox_id = self.store.list_outbox()[0]["id"]
+        self.store._conn().execute(
+            """
+            CREATE TRIGGER ignore_outbox_claim
+            BEFORE UPDATE OF status ON outbox
+            WHEN NEW.status = 'processing'
+            BEGIN
+                SELECT RAISE(IGNORE);
+            END
+            """
+        )
+
+        self.assertIsNone(self.store.claim_outbox(outbox_id))
+        self.assertEqual(len(self.store.list_outbox(status="pending")), 1)
 
     def test_max_iterations_bounds_a_worker_run_without_sleeping_forever(self):
         report = OutboxWorker(

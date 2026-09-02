@@ -3,7 +3,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.control_plane.storage import ConflictError, ControlPlaneStore, ScopeViolation
+from src.control_plane.storage import (
+    CURRENT_SCHEMA_VERSION,
+    ConflictError,
+    ControlPlaneStore,
+    ScopeViolation,
+)
 
 
 class GoalTaskStoreTests(unittest.TestCase):
@@ -188,13 +193,13 @@ class GoalTaskStoreTests(unittest.TestCase):
                 "work",
                 "persist-key",
             )
-            self.assertEqual(store.schema_version(), 10)
+            self.assertEqual(store.schema_version(), CURRENT_SCHEMA_VERSION)
             store.close()
 
             reopened = ControlPlaneStore(database)
             reopened.initialize()
             try:
-                self.assertEqual(reopened.schema_version(), 10)
+                self.assertEqual(reopened.schema_version(), CURRENT_SCHEMA_VERSION)
                 self.assertEqual(
                     reopened.get_goal("goal-a", "tenant-a")["title"], "Persistent goal"
                 )
@@ -222,7 +227,7 @@ class GoalTaskStoreTests(unittest.TestCase):
             reopened = ControlPlaneStore(database)
             reopened.initialize()
             try:
-                self.assertEqual(reopened.schema_version(), 10)
+                self.assertEqual(reopened.schema_version(), CURRENT_SCHEMA_VERSION)
                 columns = {
                     row["name"]
                     for row in reopened._conn()

@@ -248,6 +248,17 @@ _POSTGRES_SCHEMA_STATEMENTS = (
     )
     """,
     """
+    CREATE TABLE IF NOT EXISTS idempotency_records (
+        tenant_id TEXT NOT NULL REFERENCES tenants(id),
+        operation TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL,
+        request_digest TEXT NOT NULL,
+        response_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (tenant_id, operation, idempotency_key)
+    )
+    """,
+    """
     CREATE TABLE IF NOT EXISTS rate_limits (
         tenant_id TEXT NOT NULL REFERENCES tenants(id),
         subject TEXT NOT NULL,
@@ -421,6 +432,7 @@ _POSTGRES_SCHEMA_STATEMENTS = (
         UNIQUE (tenant_id, schedule_id, occurrence_key)
     )
     """,
+    "ALTER TABLE device_pairing_challenges ADD COLUMN IF NOT EXISTS idempotency_key TEXT",
     "ALTER TABLE runs ADD COLUMN IF NOT EXISTS principal_id TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE runs ADD COLUMN IF NOT EXISTS cancel_requested INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE runs ADD COLUMN IF NOT EXISTS unknown_reason TEXT",

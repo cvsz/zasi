@@ -11,6 +11,7 @@ from scripts.rollback_drill import (
     _require_local_postgresql_url,
     _url_for_database,
 )
+from src.control_plane.storage import CURRENT_SCHEMA_VERSION
 
 
 class RollbackDrillSafetyTests(unittest.TestCase):
@@ -40,7 +41,7 @@ class RollbackDrillSafetyTests(unittest.TestCase):
 
     def test_result_has_explicit_rehearsal_disclosure_and_no_target_name(self):
         result = RollbackDrillResult(
-            schema_version=10,
+            schema_version=CURRENT_SCHEMA_VERSION,
             source_observation_unchanged=True,
             restored_integrity=True,
             cleanup_passed=True,

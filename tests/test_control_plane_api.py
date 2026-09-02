@@ -1,7 +1,9 @@
 import datetime as dt
+import json
 import tempfile
 import unittest
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from pathlib import Path
 
 import httpx
@@ -130,6 +132,10 @@ class ControlPlaneAPITests(unittest.IsolatedAsyncioTestCase):
                 document.json()["paths"]["/api/v2/capabilities"]["get"]["security"],
                 [{"BearerAuth": []}],
             )
+            self.assertEqual(
+                document.json()["paths"]["/api/v2/sessions"]["post"]["security"],
+                [],
+            )
 
     async def test_json_contract_rejects_malformed_body_and_wrong_media_type(self):
         async with self.client() as client:
@@ -147,6 +153,15 @@ class ControlPlaneAPITests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(wrong_type.status_code, 415)
             self.assertEqual(wrong_type.json()["error"]["code"], "UNSUPPORTED_MEDIA_TYPE")
+
+            secret = "validation-secret-that-must-not-be-echoed"
+            invalid = await client.post(
+                "/api/v2/sessions",
+                json={"api_key": secret + ("x" * 4096)},
+            )
+            self.assertEqual(invalid.status_code, 422)
+            self.assertNotIn(secret, invalid.text)
+            self.assertNotIn('"input"', invalid.text)
 
     async def test_unauthenticated_stream_and_mutation_are_rejected(self):
         async with self.client() as client:
@@ -352,6 +367,58 @@ class ControlPlaneAPITests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(header_only_resume.status_code, 200)
             self.assertIn("stream.end", header_only_resume.text)
 
+    async def test_event_stream_rejects_disagreement_between_resume_headers(self):
+        async with self.client() as client:
+            session_response = await client.post(
+                "/api/v2/sessions", json={"api_key": "test-bootstrap-secret"}
+            )
+            headers = {
+                "Authorization": f"Bearer {session_response.json()['access_token']}",
+                "Last-Event-ID": "1",
+                "X-ZASI-Event-Cursor": "2",
+            }
+            response = await client.get("/api/v2/events", headers=headers)
+            self.assertEqual(response.status_code, 400)
+            self.assertEqual(response.json()["error"]["code"], "CURSOR_MISMATCH")
+
+    async def test_event_page_cursor_is_last_returned_event_not_global_latest(self):
+        async with self.client() as client:
+            session_response = await client.post(
+                "/api/v2/sessions", json={"api_key": "test-bootstrap-secret"}
+            )
+            headers = {"Authorization": f"Bearer {session_response.json()['access_token']}"}
+            for index in range(3):
+                self.store.append_audited_event(
+                    tenant_id="local",
+                    actor_kind="system",
+                    actor_id="cursor-test",
+                    action=f"cursor.test.{index}",
+                    target="cursor-test",
+                    outcome="success",
+                    event_type="cursor.test",
+                    aggregate_kind="cursor-test",
+                    aggregate_id=str(index),
+                    payload={"index": index},
+                )
+
+            response = await client.get(
+                "/api/v2/events",
+                params={"after": 0, "limit": 1},
+                headers=headers,
+            )
+            self.assertEqual(response.status_code, 200)
+            event_ids = [
+                int(line.removeprefix("id: "))
+                for line in response.text.splitlines()
+                if line.startswith("id: ")
+            ]
+            stream_end = response.text.split("event: stream.end\ndata: ", 1)[1].split(
+                "\n\n", 1
+            )[0]
+            self.assertEqual(len(event_ids), 1)
+            self.assertEqual(json.loads(stream_end)["next_cursor"], event_ids[-1])
+            self.assertEqual(response.headers["X-ZASI-Event-Cursor"], str(event_ids[-1]))
+
     async def test_audit_session_revoke_and_safe_read_models(self):
         async with self.client() as client:
             session_response = await client.post(
@@ -387,6 +454,11 @@ class ControlPlaneAPITests(unittest.IsolatedAsyncioTestCase):
             artifact_body = artifact.json()
             self.assertTrue(artifact_body["digest"].startswith("sha256:"))
             self.assertNotIn("artifacts", artifact.text)
+            artifact_path = (
+                Path(self.app.state.settings.artifact_directory)
+                / f"{artifact_body['artifact_id']}.bin"
+            )
+            self.assertEqual(artifact_path.stat().st_mode & 0o777, 0o600)
             fetched = await client.get(
                 f"/api/v2/artifacts/{artifact_body['artifact_id']}", headers=headers
             )
@@ -419,7 +491,10 @@ class ControlPlaneAPITests(unittest.IsolatedAsyncioTestCase):
                 headers=headers,
             )
             self.assertEqual(listed.status_code, 200)
-            self.assertEqual(listed.json()["result"]["tools"][0]["name"], "registry.system.status")
+            tool = listed.json()["result"]["tools"][0]
+            self.assertEqual(tool["name"], "registry.system.status")
+            self.assertEqual(tool["inputSchema"]["type"], "object")
+            self.assertTrue(tool["inputSchema"]["additionalProperties"])
 
             called = await client.post(
                 "/api/v2/mcp",
@@ -498,9 +573,20 @@ class ControlPlaneAPITests(unittest.IsolatedAsyncioTestCase):
             replay = await client.post(
                 f"/api/v2/mobile/{pairing['device_id']}/approve",
                 json={"challenge": pairing["challenge"]},
+                headers={**headers, "Idempotency-Key": "approve-phone-1"},
+            )
+            self.assertEqual(replay.status_code, 200)
+            self.assertEqual(replay.json()["device_id"], pairing["device_id"])
+
+            conflicting_replay = await client.post(
+                f"/api/v2/mobile/{pairing['device_id']}/approve",
+                json={"challenge": pairing["challenge"]},
                 headers={**headers, "Idempotency-Key": "approve-phone-2"},
             )
-            self.assertEqual(replay.status_code, 404)
+            self.assertEqual(conflicting_replay.status_code, 409)
+            self.assertEqual(
+                conflicting_replay.json()["error"]["code"], "PAIRING_CONFLICT"
+            )
 
             devices = await client.get("/api/v2/devices", headers=headers)
             self.assertEqual(devices.status_code, 200)
@@ -511,6 +597,22 @@ class ControlPlaneAPITests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(revoked.status_code, 200)
             self.assertEqual(revoked.json()["status"], "revoked")
+
+            revoke_replay = await client.post(
+                f"/api/v2/devices/{pairing['device_id']}/revoke",
+                headers={**headers, "Idempotency-Key": "device-revoke-1"},
+            )
+            self.assertEqual(revoke_replay.status_code, 200)
+            self.assertEqual(revoke_replay.json()["device_id"], pairing["device_id"])
+
+            conflicting_revoke = await client.post(
+                "/api/v2/devices/device-from-another-request/revoke",
+                headers={**headers, "Idempotency-Key": "device-revoke-1"},
+            )
+            self.assertEqual(conflicting_revoke.status_code, 409)
+            self.assertEqual(
+                conflicting_revoke.json()["error"]["code"], "IDEMPOTENCY_CONFLICT"
+            )
 
     async def test_sequences_and_unavailable_analysis_are_governed(self):
         async with self.client() as client:
@@ -530,6 +632,9 @@ class ControlPlaneAPITests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(sequence.status_code, 201)
             sequence_body = sequence.json()
+            self.assertEqual(
+                sequence_body["steps"][0]["tool_version"], "1.0.0"
+            )
             validated = await client.post(
                 f"/api/v2/sequences/{sequence_body['sequence_id']}/validate",
                 headers=headers,
@@ -550,6 +655,59 @@ class ControlPlaneAPITests(unittest.IsolatedAsyncioTestCase):
                 replay.json()["sequence_run_id"], run.json()["sequence_run_id"]
             )
             self.assertEqual(replay.json()["status"], "completed")
+
+            versioned_sequence = await client.post(
+                "/api/v2/sequences",
+                json={
+                    "name": "version-bound status",
+                    "steps": [
+                        {"tool_id": "registry.system.status", "risk_tier": "R0"}
+                    ],
+                },
+                headers=headers,
+            )
+            self.assertEqual(versioned_sequence.status_code, 201)
+            versioned_id = versioned_sequence.json()["sequence_id"]
+            self.assertEqual(
+                (await client.post(
+                    f"/api/v2/sequences/{versioned_id}/validate", headers=headers
+                )).status_code,
+                200,
+            )
+            definition = self.app.state.registry.get("registry.system.status")
+            self.app.state.registry._tools["registry.system.status"] = replace(
+                definition, version="2.0.0"
+            )
+            version_mismatch = await client.post(
+                f"/api/v2/sequences/{versioned_id}/run",
+                headers={**headers, "Idempotency-Key": "sequence-version-drift"},
+            )
+            self.assertEqual(version_mismatch.status_code, 409)
+            self.assertEqual(
+                version_mismatch.json()["error"]["code"],
+                "CAPABILITY_VERSION_MISMATCH",
+            )
+
+            sequence_events = await client.get(
+                f"/api/v2/sequences/{sequence_body['sequence_id']}/events",
+                params={"after": 0},
+                headers=headers,
+            )
+            self.assertEqual(sequence_events.status_code, 200)
+            self.assertIn("sequence.run.created", sequence_events.text)
+            self.assertIn("sequence.run.updated", sequence_events.text)
+            error_tolerant_transport = httpx.ASGITransport(
+                app=self.app, raise_app_exceptions=False
+            )
+            async with httpx.AsyncClient(
+                transport=error_tolerant_transport, base_url="http://testserver"
+            ) as error_tolerant_client:
+                default_cursor_events = await error_tolerant_client.get(
+                    f"/api/v2/sequences/{sequence_body['sequence_id']}/events",
+                    headers=headers,
+                )
+            self.assertEqual(default_cursor_events.status_code, 200)
+            self.assertIn("sequence.created", default_cursor_events.text)
 
             artifact = await client.post(
                 "/api/v2/artifacts",

@@ -72,6 +72,40 @@ class DurableSchedulerAPITests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(schedule.status_code, 201)
             schedule_id = schedule.json()["schedule_id"]
 
+            schedule_replay = await client.post(
+                f"/api/v2/goals/{goal.json()['goal_id']}/schedules",
+                json={
+                    "task_id": task.json()["task_id"],
+                    "kind": "once",
+                    "next_run_at": (
+                        dt.datetime.fromisoformat(due) + dt.timedelta(hours=1)
+                    ).isoformat().replace("+00:00", "+01:00"),
+                    "idempotency_key": "scheduler-api-once",
+                },
+                headers=headers,
+            )
+            self.assertEqual(schedule_replay.status_code, 200)
+            self.assertEqual(schedule_replay.json()["schedule_id"], schedule_id)
+
+            other_goal = await client.post(
+                "/api/v2/goals", json={"title": "Another schedule goal"}, headers=headers
+            )
+            self.assertEqual(other_goal.status_code, 201)
+            wrong_goal_replay = await client.post(
+                f"/api/v2/goals/{other_goal.json()['goal_id']}/schedules",
+                json={
+                    "task_id": task.json()["task_id"],
+                    "kind": "once",
+                    "next_run_at": due,
+                    "idempotency_key": "scheduler-api-once",
+                },
+                headers=headers,
+            )
+            self.assertEqual(wrong_goal_replay.status_code, 409)
+            self.assertEqual(
+                wrong_goal_replay.json()["error"]["code"], "IDEMPOTENCY_CONFLICT"
+            )
+
             claimed = await client.post(
                 f"/api/v2/schedules/{schedule_id}/claim",
                 json={"worker_id": "api-scheduler"},
@@ -120,9 +154,34 @@ class DurableSchedulerAPITests(unittest.IsolatedAsyncioTestCase):
                 headers=headers,
             )
             self.assertEqual(future.status_code, 201)
-            cancelled = await client.post(
+            cancel_headers = {**headers, "Idempotency-Key": "scheduler-cancel-1"}
+            missing_cancel_key = await client.post(
                 f"/api/v2/schedules/{future.json()['schedule_id']}/cancel",
                 headers=headers,
             )
+            self.assertEqual(missing_cancel_key.status_code, 400)
+            self.assertEqual(
+                missing_cancel_key.json()["error"]["code"], "IDEMPOTENCY_REQUIRED"
+            )
+            cancelled = await client.post(
+                f"/api/v2/schedules/{future.json()['schedule_id']}/cancel",
+                headers=cancel_headers,
+            )
             self.assertEqual(cancelled.status_code, 200)
             self.assertEqual(cancelled.json()["status"], "cancelled")
+            cancel_replay = await client.post(
+                f"/api/v2/schedules/{future.json()['schedule_id']}/cancel",
+                headers=cancel_headers,
+            )
+            self.assertEqual(cancel_replay.status_code, 200)
+            self.assertEqual(
+                cancel_replay.json()["schedule_id"], future.json()["schedule_id"]
+            )
+            conflicting_cancel = await client.post(
+                "/api/v2/schedules/schedule-from-another-request/cancel",
+                headers=cancel_headers,
+            )
+            self.assertEqual(conflicting_cancel.status_code, 409)
+            self.assertEqual(
+                conflicting_cancel.json()["error"]["code"], "IDEMPOTENCY_CONFLICT"
+            )

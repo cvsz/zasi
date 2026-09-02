@@ -2,12 +2,23 @@ import os
 import unittest
 from unittest.mock import Mock
 
-from src.control_plane.postgres_storage import _PostgresConnection
+from src.control_plane.postgres_storage import (
+    _POSTGRES_SCHEMA_STATEMENTS,
+    _PostgresConnection,
+)
 from src.control_plane.storage import CURRENT_SCHEMA_VERSION
 from src.control_plane.redis_runtime import RedisRuntime
 
 
 class PostgresRedisRuntimeTests(unittest.TestCase):
+    def test_postgres_schema_migrates_pairing_idempotency_column_before_index(self):
+        schema = "\n".join(_POSTGRES_SCHEMA_STATEMENTS)
+        self.assertIn(
+            "ALTER TABLE device_pairing_challenges "
+            "ADD COLUMN IF NOT EXISTS idempotency_key TEXT",
+            schema,
+        )
+
     def test_postgres_connection_translates_sqlite_compatibility_statements(self):
         raw = Mock()
         raw.execute.return_value = Mock()

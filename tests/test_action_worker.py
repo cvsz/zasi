@@ -302,6 +302,37 @@ class ActionWorkerTests(unittest.TestCase):
         )
         self.assertEqual(completed["status"], "unknown")
 
+    def test_cancellation_idempotency_replays_without_duplicate_event(self):
+        submitted = self._submit("cancel-idempotent")
+        first = self.store.cancel_run(
+            submitted.run_id,
+            "tenant-a",
+            "principal-a",
+            idempotency_key="cancel-request-1",
+        )
+        second = self.store.cancel_run(
+            submitted.run_id,
+            "tenant-a",
+            "principal-a",
+            idempotency_key="cancel-request-1",
+        )
+        self.assertEqual(second, first)
+        self.assertEqual(
+            [event["type"] for event in self.store.list_events("tenant-a")].count(
+                "run.cancelled"
+            ),
+            1,
+        )
+
+        another = self._submit("cancel-idempotent-another")
+        with self.assertRaises(ConflictError):
+            self.store.cancel_run(
+                another.run_id,
+                "tenant-a",
+                "principal-a",
+                idempotency_key="cancel-request-1",
+            )
+
     def test_cancel_requested_lease_expiry_becomes_unknown(self):
         submitted = self._submit("cancel-expired")
         base = dt.datetime.now(dt.timezone.utc)

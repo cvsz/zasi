@@ -40,7 +40,7 @@ class OutboxDispatcher:
         limit: int = 100,
     ) -> DispatchReport:
         claimed = delivered = retried = 0
-        for item in self.store.list_outbox(status="pending", limit=limit):
+        for item in self.store.list_claimable_outbox(limit=limit):
             claimed_item = self.store.claim_outbox(item["id"])
             if claimed_item is None:
                 continue

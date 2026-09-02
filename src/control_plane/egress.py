@@ -64,6 +64,13 @@ def _secure_tls_context() -> ssl.SSLContext:
     return context
 
 
+def _remaining_timeout(deadline: float) -> float:
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise EgressRequestFailed("outbound request exceeded total timeout")
+    return remaining
+
+
 def _host_allowed(hostname: str, allowed_hosts: FrozenSet[str]) -> bool:
     normalized = hostname.rstrip(".").lower()
     for candidate in allowed_hosts:
@@ -186,11 +193,11 @@ class EgressBroker:
         ).encode("utf-8")
         if len(body) > self.policy.max_payload_bytes:
             raise EgressDenied("outbound payload exceeds policy limit")
-        destination = validate_destination(url, self.policy, resolver=self.resolver)
         deadline = time.monotonic() + self.policy.total_timeout_sec
-        sock = self._connect(destination)
+        destination = validate_destination(url, self.policy, resolver=self.resolver)
+        sock = self._connect(destination, deadline=deadline)
         try:
-            sock.settimeout(max(0.1, min(self.policy.total_timeout_sec, deadline - time.monotonic())))
+            sock.settimeout(_remaining_timeout(deadline))
             host_header = destination.hostname
             if destination.port not in (80, 443):
                 host_header = f"{host_header}:{destination.port}"
@@ -203,6 +210,7 @@ class EgressBroker:
                 "Connection: close\r\n\r\n"
             ).encode("ascii") + body
             sock.sendall(request)
+            sock.settimeout(_remaining_timeout(deadline))
             response = http.client.HTTPResponse(sock)
             response.begin()
             if response.status in {301, 302, 303, 307, 308}:
@@ -214,8 +222,11 @@ class EgressBroker:
                         raise EgressRequestFailed("outbound response exceeds policy limit")
                 except ValueError as exc:
                     raise EgressRequestFailed("outbound response length is invalid") from exc
-            sock.settimeout(max(0.1, min(self.policy.total_timeout_sec, deadline - time.monotonic())))
-            response_body = response.read(self.policy.max_response_bytes + 1)
+            response_body = self._read_response_body(
+                response,
+                sock,
+                deadline,
+            )
             if len(response_body) > self.policy.max_response_bytes:
                 raise EgressRequestFailed("outbound response exceeds policy limit")
             if response.status >= 400:
@@ -231,13 +242,31 @@ class EgressBroker:
         finally:
             sock.close()
 
-    def _connect(self, destination: ResolvedDestination):
+    def _read_response_body(self, response, sock, deadline: float) -> bytes:
+        chunks = []
+        total = 0
+        remaining = self.policy.max_response_bytes + 1
+        while remaining > 0:
+            sock.settimeout(_remaining_timeout(deadline))
+            chunk = response.read(min(64 * 1024, remaining))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > self.policy.max_response_bytes:
+                raise EgressRequestFailed("outbound response exceeds policy limit")
+            remaining -= len(chunk)
+        return b"".join(chunks)
+
+    def _connect(self, destination: ResolvedDestination, deadline: float):
         last_error = None
         allowed_addresses = {sockaddr[0] for _family, sockaddr in destination.addresses}
         for family, sockaddr in destination.addresses:
             sock = socket.socket(family, socket.SOCK_STREAM)
-            sock.settimeout(self.policy.connect_timeout_sec)
             try:
+                sock.settimeout(
+                    min(self.policy.connect_timeout_sec, _remaining_timeout(deadline))
+                )
                 sock.connect(sockaddr)
                 peer = sock.getpeername()
                 peer_address = peer[0] if isinstance(peer, tuple) and peer else ""
@@ -246,11 +275,24 @@ class EgressBroker:
                     raise EgressDenied("connected peer was not in the validated address set")
                 if destination.scheme == "https":
                     context = _secure_tls_context()
+                    sock.settimeout(_remaining_timeout(deadline))
                     sock = context.wrap_socket(
                         sock,
                         server_hostname=destination.hostname,
                     )
                 return sock
+            except EgressDenied:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
+                raise
+            except EgressRequestFailed:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
+                raise
             except Exception as exc:
                 last_error = exc
                 try:

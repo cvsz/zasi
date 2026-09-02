@@ -1,11 +1,14 @@
 import datetime as dt
 import hashlib
+import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
 
 from pydantic import ValidationError
 
+import backend.app as backend_app
 from src.control_plane.config import ConfigurationError, Settings
 from src.control_plane.contracts import Goal, IntentCreateRequest
 from src.control_plane.events import OutboxDispatcher
@@ -198,9 +201,54 @@ class ControlPlaneCoreTests(unittest.TestCase):
             expires_at=dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=5),
         )
         self.assertIsNotNone(store.authenticate_session("session-a"))
+        store._conn().execute(
+            "UPDATE principals SET status = 'suspended' WHERE id = ?", ("usr-a",)
+        )
+        self.assertIsNone(store.authenticate_session("session-a"))
+        store._conn().execute(
+            "UPDATE principals SET status = 'active' WHERE id = ?", ("usr-a",)
+        )
         store.revoke_session("ses-a")
         self.assertIsNone(store.authenticate_session("session-a"))
         store.close()
+
+    def test_long_lived_stream_revalidates_revoked_session(self):
+        store = ControlPlaneStore(":memory:")
+        store.initialize()
+        store.create_tenant("ten-a")
+        store.create_principal("usr-a", "ten-a")
+        token = "stream-token"
+        store.create_session(
+            session_id="ses-a",
+            tenant_id="ten-a",
+            principal_id="usr-a",
+            device_id=None,
+            token_hash=hash_token(token),
+            expires_at=dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=5),
+            scopes=["workspace:read"],
+        )
+        context = backend_app.AuthContext(
+            session_id="ses-a",
+            tenant_id="ten-a",
+            principal_id="usr-a",
+            device_id=None,
+            scopes=frozenset({"workspace:read"}),
+        )
+        try:
+            self.assertTrue(backend_app._session_is_active(store, token, context))
+            store._conn().execute(
+                "UPDATE sessions SET scope_json = ? WHERE id = ?",
+                (json.dumps({"workspace:read": True}), "ses-a"),
+            )
+            self.assertFalse(backend_app._session_is_active(store, token, context))
+            store._conn().execute(
+                "UPDATE sessions SET scope_json = ? WHERE id = ?",
+                (json.dumps(["workspace:read"]), "ses-a"),
+            )
+            store.revoke_session("ses-a")
+            self.assertFalse(backend_app._session_is_active(store, token, context))
+        finally:
+            store.close()
 
     def test_retention_gap_is_detectable_before_stream_replay(self):
         store = ControlPlaneStore(":memory:")
@@ -258,6 +306,99 @@ class ControlPlaneCoreTests(unittest.TestCase):
             self.assertEqual(restored.oldest_sequence("ten-a"), 3)
             self.assertTrue(restored.cursor_requires_resync("ten-a", after=0))
             restored.close()
+
+    def test_file_backed_sqlite_state_is_private(self):
+        with tempfile.TemporaryDirectory() as directory:
+            database_path = str(Path(directory) / "private" / "control-plane.db")
+            store = ControlPlaneStore(database_path)
+            store.initialize()
+            try:
+                self.assertEqual(os.stat(database_path).st_mode & 0o777, 0o600)
+                self.assertEqual(
+                    os.stat(Path(database_path).parent).st_mode & 0o777,
+                    0o700,
+                )
+            finally:
+                store.close()
+
+    def test_file_backed_sqlite_rejects_an_insecure_existing_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            private_directory = Path(directory) / "private"
+            private_directory.mkdir(mode=0o700)
+            os.chmod(private_directory, 0o755)
+            store = ControlPlaneStore(str(private_directory / "control-plane.db"))
+            with self.assertRaises(PermissionError):
+                store.initialize()
+            store.close()
+
+    def test_app_maintenance_dispatches_event_outbox_before_pruning(self):
+        store = ControlPlaneStore(":memory:")
+        store.initialize()
+        store.create_tenant("local")
+        store.create_tenant("tenant-b")
+        try:
+            for tenant_id in ("local", "tenant-b"):
+                for index in range(3):
+                    store.append_audited_event(
+                        tenant_id=tenant_id,
+                        actor_kind="system",
+                        actor_id="test",
+                        action=f"event-{index}",
+                        target="test",
+                        outcome="success",
+                        event_type="test.event",
+                        aggregate_kind="test",
+                        aggregate_id=str(index),
+                        payload={"index": index},
+                    )
+
+            backend_app._maintain_events_once(store, retain_latest=1, tenant_id=None)
+
+            self.assertEqual(store.oldest_sequence("local"), 3)
+            self.assertEqual(store.oldest_sequence("tenant-b"), 3)
+            self.assertEqual(store.list_outbox(status="pending"), [])
+            self.assertEqual(
+                [event["sequence"] for event in store.list_events("local", after=0)],
+                [3],
+            )
+            self.assertEqual(
+                [event["sequence"] for event in store.list_events("tenant-b", after=0)],
+                [3],
+            )
+        finally:
+            store.close()
+
+    def test_app_maintenance_defers_pruning_when_outbox_delivery_retries(self):
+        store = ControlPlaneStore(":memory:")
+        store.initialize()
+        store.create_tenant("local")
+        try:
+            for index in range(3):
+                store.append_audited_event(
+                    tenant_id="local",
+                    actor_kind="system",
+                    actor_id="test",
+                    action=f"external-event-{index}",
+                    target="test",
+                    outcome="success",
+                    event_type="external.event",
+                    aggregate_kind="test",
+                    aggregate_id=str(index),
+                    payload={"index": index},
+                )
+            outbox_id = store.list_outbox()[0]["id"]
+            store._conn().execute(
+                "UPDATE outbox SET destination = 'external_sink' WHERE id = ?",
+                (outbox_id,),
+            )
+
+            with self.assertRaises(ConflictError):
+                backend_app._maintain_events_once(store, retain_latest=1)
+
+            self.assertEqual(store.oldest_sequence("local"), 1)
+            self.assertEqual(len(store.list_outbox(status="pending")), 1)
+        finally:
+            store.close()
 
     def test_approval_binds_exact_plan_digest_and_can_be_revoked(self):
         store = ControlPlaneStore(":memory:")

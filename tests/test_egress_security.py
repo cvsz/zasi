@@ -1,10 +1,14 @@
 import socket
 import ssl
+import time
 import unittest
+from unittest.mock import Mock, patch
 
 from src.control_plane.egress import (
     EgressDenied,
+    EgressBroker,
     EgressPolicy,
+    ResolvedDestination,
     _secure_tls_context,
     validate_destination,
     validate_redirect,
@@ -77,6 +81,28 @@ class EgressSecurityTests(unittest.TestCase):
                 policy,
                 resolver=resolver,
             )
+
+    def test_connect_timeout_is_capped_by_total_deadline(self):
+        fake_socket = Mock()
+        fake_socket.getpeername.return_value = ("93.184.216.34", 443)
+        destination = ResolvedDestination(
+            url="http://public.example/hook",
+            scheme="http",
+            hostname="public.example",
+            port=80,
+            request_target="/hook",
+            addresses=((socket.AF_INET, ("93.184.216.34", 80)),),
+        )
+        broker = EgressBroker(
+            EgressPolicy(
+                allowed_hosts=frozenset({"public.example"}),
+                connect_timeout_sec=5.0,
+                total_timeout_sec=0.25,
+            )
+        )
+        with patch("src.control_plane.egress.socket.socket", return_value=fake_socket):
+            broker._connect(destination, deadline=time.monotonic() + 0.25)
+        self.assertLessEqual(fake_socket.settimeout.call_args.args[0], 0.25)
 
 
 if __name__ == "__main__":

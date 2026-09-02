@@ -64,6 +64,32 @@ class GoalTaskAPITests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(first_response.status_code, 201)
             first = first_response.json()
 
+            replay_response = await client.post(
+                f"/api/v2/goals/{goal['goal_id']}/tasks",
+                json={
+                    "title": "Collect sources",
+                    "instruction": "Read the registered local sources.",
+                    "idempotency_key": "api-goal-collect",
+                },
+                headers=headers,
+            )
+            self.assertEqual(replay_response.status_code, 200)
+            self.assertEqual(replay_response.json()["task_id"], first["task_id"])
+
+            conflicting_replay = await client.post(
+                f"/api/v2/goals/{goal['goal_id']}/tasks",
+                json={
+                    "title": "Different task",
+                    "instruction": "Read the registered local sources.",
+                    "idempotency_key": "api-goal-collect",
+                },
+                headers=headers,
+            )
+            self.assertEqual(conflicting_replay.status_code, 409)
+            self.assertEqual(
+                conflicting_replay.json()["error"]["code"], "IDEMPOTENCY_CONFLICT"
+            )
+
             second_response = await client.post(
                 f"/api/v2/goals/{goal['goal_id']}/tasks",
                 json={

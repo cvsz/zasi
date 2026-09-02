@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from src.control_plane.scheduler import DurableScheduler
-from src.control_plane.storage import ConflictError, ControlPlaneStore
+from src.control_plane.storage import CURRENT_SCHEMA_VERSION, ConflictError, ControlPlaneStore
 
 
 class DurableSchedulerTests(unittest.TestCase):
@@ -96,6 +96,9 @@ class DurableSchedulerTests(unittest.TestCase):
             "schedule-key-a",
             interval_seconds=60,
         )
+        self.assertIsNone(
+            self.store.claim_due_task("task-a", "tenant-a", "manual-worker")
+        )
         first = self.store.claim_due_schedule(
             "schedule-a", "tenant-a", "scheduler-1", now=scheduled_for
         )
@@ -108,6 +111,8 @@ class DurableSchedulerTests(unittest.TestCase):
             status="succeeded",
             result={},
         )
+        self.assertEqual(self.store.get_task("task-a", "tenant-a")["status"], "queued")
+        self.assertEqual(self.store.get_goal("goal-a", "tenant-a")["status"], "active")
         current = self.store.get_schedule("schedule-a", "tenant-a")
         self.assertEqual(
             current["next_run_at"],
@@ -322,7 +327,7 @@ class DurableSchedulerTests(unittest.TestCase):
             reopened = ControlPlaneStore(database)
             reopened.initialize()
             try:
-                self.assertEqual(reopened.schema_version(), 10)
+                self.assertEqual(reopened.schema_version(), CURRENT_SCHEMA_VERSION)
                 self.assertEqual(
                     reopened.get_schedule("schedule-a", "tenant-a")["next_run_at"],
                     "2026-09-02T09:00:00+00:00",

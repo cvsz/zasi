@@ -20,7 +20,7 @@ import sys
 import tempfile
 from pathlib import Path
 from typing import Optional
-from urllib.parse import parse_qs, quote, unquote, urlsplit, urlunsplit
+from urllib.parse import parse_qs, quote, urlsplit, urlunsplit
 
 # Allow the checked-in CLI to run directly from a source checkout without an
 # editable install.

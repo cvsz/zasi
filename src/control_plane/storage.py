@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import json
 import os
 import sqlite3
+import stat
 import threading
 import time
 import hmac
@@ -14,7 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from .identity import hash_token
 
 
-CURRENT_SCHEMA_VERSION = 10
+CURRENT_SCHEMA_VERSION = 11
 
 
 class NotFoundError(LookupError):
@@ -66,6 +67,65 @@ def _normalize_optional_timestamp(value: Any, field_name: str) -> Optional[str]:
     return _timestamp(_parse_utc_timestamp(value, field_name))
 
 
+def _process_uid() -> Optional[int]:
+    """Return the POSIX effective UID when the host platform exposes one."""
+    getter = getattr(os, "geteuid", None)
+    return getter() if getter is not None else None
+
+
+def _prepare_private_directory(directory_path: str) -> str:
+    """Create/check a service-private directory and return its absolute path."""
+    absolute_path = os.path.abspath(directory_path)
+    if os.path.realpath(absolute_path) != absolute_path:
+        raise PermissionError("private directory path must not contain symlinks")
+    try:
+        directory_stat = os.lstat(absolute_path)
+    except FileNotFoundError:
+        os.makedirs(absolute_path, mode=0o700, exist_ok=True)
+        os.chmod(absolute_path, 0o700)
+        directory_stat = os.lstat(absolute_path)
+    process_uid = _process_uid()
+    if (
+        stat.S_ISLNK(directory_stat.st_mode)
+        or not stat.S_ISDIR(directory_stat.st_mode)
+        or process_uid is not None and directory_stat.st_uid != process_uid
+        or stat.S_IMODE(directory_stat.st_mode) & 0o077
+    ):
+        raise PermissionError("directory must be private to the service account")
+    os.chmod(absolute_path, 0o700)
+    return absolute_path
+
+
+def _prepare_private_sqlite_path(database_path: str) -> None:
+    """Create/check SQLite state paths before SQLite opens them.
+
+    The repository contains credentials, session hashes, and tenant data. A
+    default process umask is not a sufficient protection for a newly-created
+    database or its WAL sidecars, so the containing directory and database
+    file must be private to the service account. Existing paths fail closed
+    when they are not owned by the process or expose group/other permissions.
+    """
+    absolute_path = os.path.abspath(database_path)
+    parent = os.path.dirname(absolute_path)
+    _prepare_private_directory(parent)
+
+    try:
+        file_stat = os.lstat(absolute_path)
+    except FileNotFoundError:
+        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+        flags |= getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(absolute_path, flags, 0o600)
+        os.close(descriptor)
+        file_stat = os.lstat(absolute_path)
+    if (
+        stat.S_ISLNK(file_stat.st_mode)
+        or not stat.S_ISREG(file_stat.st_mode)
+        or _process_uid() is not None and file_stat.st_uid != _process_uid()
+    ):
+        raise PermissionError("SQLite database file must be a private regular file")
+    os.chmod(absolute_path, 0o600)
+
+
 class ControlPlaneStore:
     def __init__(self, database_path: str):
         self.database_path = database_path
@@ -77,8 +137,7 @@ class ControlPlaneStore:
             if self._connection is not None:
                 return
             if self.database_path != ":memory:":
-                parent = os.path.dirname(os.path.abspath(self.database_path))
-                os.makedirs(parent, exist_ok=True)
+                _prepare_private_sqlite_path(self.database_path)
             connection = sqlite3.connect(
                 self.database_path,
                 check_same_thread=False,
@@ -284,6 +343,15 @@ class ControlPlaneStore:
                     claimed_at TEXT,
                     lease_until TEXT,
                     claim_token TEXT
+                );
+                CREATE TABLE IF NOT EXISTS idempotency_records (
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    operation TEXT NOT NULL,
+                    idempotency_key TEXT NOT NULL,
+                    request_digest TEXT NOT NULL,
+                    response_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    PRIMARY KEY (tenant_id, operation, idempotency_key)
                 );
                 CREATE TABLE IF NOT EXISTS rate_limits (
                     tenant_id TEXT NOT NULL REFERENCES tenants(id),
@@ -701,9 +769,7 @@ class ControlPlaneStore:
         target_path = os.path.abspath(backup_path)
         if source_path == target_path:
             raise ValueError("backup path must differ from database path")
-        parent = os.path.dirname(target_path)
-        if parent:
-            os.makedirs(parent, exist_ok=True)
+        _prepare_private_sqlite_path(target_path)
         with self._lock:
             destination = sqlite3.connect(target_path)
             try:
@@ -717,6 +783,14 @@ class ControlPlaneStore:
                 "INSERT OR IGNORE INTO tenants(id, status, created_at) VALUES(?, 'active', ?)",
                 (tenant_id, _timestamp(_utcnow())),
             )
+
+    def list_tenant_ids(self) -> List[str]:
+        """Return tenant identifiers for repository-wide maintenance tasks."""
+        with self._lock:
+            rows = self._conn().execute(
+                "SELECT id FROM tenants ORDER BY id"
+            ).fetchall()
+        return [str(row["id"]) for row in rows]
 
     def create_principal(self, principal_id: str, tenant_id: str) -> None:
         with self._lock:
@@ -885,42 +959,70 @@ class ControlPlaneStore:
         principal_id: str,
         challenge: str,
         enrollment_hash: str,
+        idempotency_key: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Consume one challenge and enroll exactly one active device."""
         if not challenge or len(challenge) > 512:
             raise ConflictError("pairing challenge is invalid")
+        if idempotency_key is not None:
+            self._validate_idempotency_key(idempotency_key)
         challenge_hash = hash_token(challenge)
+        request_digest = self._idempotency_digest(
+            {
+                "device_id": device_id,
+                "challenge_hash": challenge_hash,
+                "enrollment_hash": enrollment_hash,
+            }
+        )
         now = _timestamp(_utcnow())
         with self._lock:
             connection = self._conn()
-            row = connection.execute(
-                "SELECT * FROM device_pairing_challenges "
-                "WHERE device_id = ? AND tenant_id = ? AND status = 'pending'",
-                (device_id, tenant_id),
-            ).fetchone()
-            if row is None:
-                raise NotFoundError("pairing challenge not found")
-            if _parse_utc_timestamp(row["expires_at"], "pairing.expires_at") <= _utcnow():
-                connection.execute(
-                    "UPDATE device_pairing_challenges SET status = 'expired' "
-                    "WHERE id = ? AND status = 'pending'",
-                    (row["id"],),
-                )
-                raise ConflictError("pairing challenge expired")
-            if not hmac.compare_digest(challenge_hash, row["challenge_hash"]):
-                raise ConflictError("pairing challenge is invalid")
+            transaction_active = False
             connection.execute("BEGIN IMMEDIATE")
+            transaction_active = True
             try:
+                if idempotency_key is not None:
+                    replay = self._idempotency_response_locked(
+                        connection,
+                        tenant_id,
+                        "device.approve",
+                        idempotency_key,
+                        request_digest,
+                    )
+                    if replay is not None:
+                        connection.execute("COMMIT")
+                        transaction_active = False
+                        return replay
+                row = connection.execute(
+                    "SELECT * FROM device_pairing_challenges "
+                    "WHERE device_id = ? AND tenant_id = ?",
+                    (device_id, tenant_id),
+                ).fetchone()
+                if row is None:
+                    raise NotFoundError("pairing challenge not found")
+                if row["status"] != "pending":
+                    raise ConflictError("pairing challenge has already been used")
+                if _parse_utc_timestamp(row["expires_at"], "pairing.expires_at") <= _utcnow():
+                    connection.execute(
+                        "UPDATE device_pairing_challenges SET status = 'expired' "
+                        "WHERE id = ? AND status = 'pending'",
+                        (row["id"],),
+                    )
+                    raise ConflictError("pairing challenge expired")
+                if not hmac.compare_digest(challenge_hash, row["challenge_hash"]):
+                    raise ConflictError("pairing challenge is invalid")
                 connection.execute(
                     "INSERT INTO devices(id, tenant_id, label, status, enrollment_hash, created_at) "
                     "VALUES(?, ?, ?, 'active', ?, ?)",
                     (device_id, tenant_id, row["device_label"], enrollment_hash, now),
                 )
-                connection.execute(
+                updated = connection.execute(
                     "UPDATE device_pairing_challenges SET status = 'approved', used_at = ? "
                     "WHERE id = ? AND status = 'pending'",
                     (now, row["id"]),
                 )
+                if updated.rowcount != 1:
+                    raise ConflictError("pairing challenge has already been used")
                 payload = {
                     "device_id": device_id,
                     "device_label": row["device_label"],
@@ -946,11 +1048,30 @@ class ControlPlaneStore:
                     now=now,
                     event_id=event_id,
                 )
+                device_row = connection.execute(
+                    "SELECT * FROM devices WHERE id = ? AND tenant_id = ?",
+                    (device_id, tenant_id),
+                ).fetchone()
+                if device_row is None:
+                    raise RuntimeError("device enrollment was not persisted")
+                response = self._device_record(device_row)
+                if idempotency_key is not None:
+                    self._record_idempotency_response_locked(
+                        connection,
+                        tenant_id,
+                        "device.approve",
+                        idempotency_key,
+                        request_digest,
+                        response,
+                        now,
+                    )
                 connection.execute("COMMIT")
+                transaction_active = False
             except Exception:
-                connection.execute("ROLLBACK")
+                if transaction_active:
+                    connection.execute("ROLLBACK")
                 raise
-        return self.get_device(device_id, tenant_id)
+        return response
 
     @staticmethod
     def _device_record(row: sqlite3.Row) -> Dict[str, Any]:
@@ -985,26 +1106,64 @@ class ControlPlaneStore:
         return [self._device_record(row) for row in rows]
 
     def revoke_device(
-        self, device_id: str, tenant_id: str, principal_id: str
+        self,
+        device_id: str,
+        tenant_id: str,
+        principal_id: str,
+        idempotency_key: Optional[str] = None,
     ) -> Dict[str, Any]:
         now = _timestamp(_utcnow())
+        if idempotency_key is not None:
+            self._validate_idempotency_key(idempotency_key)
+        request_digest = self._idempotency_digest(
+            {"device_id": device_id, "principal_id": principal_id}
+        )
         with self._lock:
             connection = self._conn()
-            row = connection.execute(
-                "SELECT * FROM devices WHERE id = ? AND tenant_id = ?",
-                (device_id, tenant_id),
-            ).fetchone()
-            if row is None:
-                raise NotFoundError("device not found")
-            if row["status"] == "revoked":
-                return self._device_record(row)
             connection.execute("BEGIN IMMEDIATE")
+            transaction_active = True
             try:
-                connection.execute(
+                self._validate_principal_locked(connection, tenant_id, principal_id)
+                if idempotency_key is not None:
+                    replay = self._idempotency_response_locked(
+                        connection,
+                        tenant_id,
+                        "device.revoke",
+                        idempotency_key,
+                        request_digest,
+                    )
+                    if replay is not None:
+                        connection.execute("COMMIT")
+                        transaction_active = False
+                        return replay
+                row = connection.execute(
+                    "SELECT * FROM devices WHERE id = ? AND tenant_id = ?",
+                    (device_id, tenant_id),
+                ).fetchone()
+                if row is None:
+                    raise NotFoundError("device not found")
+                if row["status"] == "revoked":
+                    response = self._device_record(row)
+                    if idempotency_key is not None:
+                        self._record_idempotency_response_locked(
+                            connection,
+                            tenant_id,
+                            "device.revoke",
+                            idempotency_key,
+                            request_digest,
+                            response,
+                            now,
+                        )
+                    connection.execute("COMMIT")
+                    transaction_active = False
+                    return response
+                updated = connection.execute(
                     "UPDATE devices SET status = 'revoked', revoked_at = ? "
                     "WHERE id = ? AND tenant_id = ? AND status != 'revoked'",
                     (now, device_id, tenant_id),
                 )
+                if updated.rowcount != 1:
+                    raise ConflictError("device state changed during revocation")
                 connection.execute(
                     "UPDATE sessions SET status = 'revoked', revoked_at = ? "
                     "WHERE device_id = ? AND tenant_id = ? AND status = 'active'",
@@ -1030,11 +1189,30 @@ class ControlPlaneStore:
                     now=now,
                     event_id=event_id,
                 )
+                current = connection.execute(
+                    "SELECT * FROM devices WHERE id = ? AND tenant_id = ?",
+                    (device_id, tenant_id),
+                ).fetchone()
+                if current is None:
+                    raise RuntimeError("device revocation was not persisted")
+                response = self._device_record(current)
+                if idempotency_key is not None:
+                    self._record_idempotency_response_locked(
+                        connection,
+                        tenant_id,
+                        "device.revoke",
+                        idempotency_key,
+                        request_digest,
+                        response,
+                        now,
+                    )
                 connection.execute("COMMIT")
+                transaction_active = False
             except Exception:
-                connection.execute("ROLLBACK")
+                if transaction_active:
+                    connection.execute("ROLLBACK")
                 raise
-        return self.get_device(device_id, tenant_id)
+        return response
 
     def create_session(
         self,
@@ -1066,6 +1244,18 @@ class ControlPlaneStore:
             )[:26]
             connection.execute("BEGIN IMMEDIATE")
             try:
+                self._validate_principal_locked(connection, tenant_id, principal_id)
+                if device_id is not None:
+                    device = connection.execute(
+                        "SELECT tenant_id, status FROM devices WHERE id = ?",
+                        (device_id,),
+                    ).fetchone()
+                    if device is None:
+                        raise NotFoundError("device not found")
+                    if device["tenant_id"] != tenant_id:
+                        raise ScopeViolation("device is outside tenant scope")
+                    if device["status"] != "active":
+                        raise ConflictError("device is not active")
                 connection.execute(
                     "INSERT INTO sessions("
                     "id, tenant_id, principal_id, device_id, token_hash, scope_json, status, created_at, expires_at"
@@ -1117,7 +1307,13 @@ class ControlPlaneStore:
         token_hash = hash_token(token)
         with self._lock:
             row = self._conn().execute(
-                "SELECT * FROM sessions WHERE token_hash = ? AND status = 'active'",
+                "SELECT sessions.* FROM sessions "
+                "JOIN tenants ON tenants.id = sessions.tenant_id "
+                "JOIN principals ON principals.id = sessions.principal_id "
+                "LEFT JOIN devices ON devices.id = sessions.device_id "
+                "WHERE sessions.token_hash = ? AND sessions.status = 'active' "
+                "AND tenants.status = 'active' AND principals.status = 'active' "
+                "AND (sessions.device_id IS NULL OR devices.status = 'active')",
                 (token_hash,),
             ).fetchone()
         if row is None:
@@ -2033,6 +2229,21 @@ class ControlPlaneStore:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def list_claimable_outbox(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Return due rows, including processing rows whose leases expired."""
+        if not 1 <= limit <= 1000:
+            raise ValueError("invalid outbox limit")
+        now = _timestamp(_utcnow())
+        with self._lock:
+            rows = self._conn().execute(
+                "SELECT * FROM outbox WHERE "
+                "(status = 'pending' AND next_attempt_at <= ?) OR "
+                "(status = 'processing' AND lease_until IS NOT NULL AND lease_until <= ?) "
+                "ORDER BY next_attempt_at, id LIMIT ?",
+                (now, now, limit),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def claim_outbox(self, outbox_id: str, lease_seconds: int = 60) -> Optional[Dict[str, Any]]:
         if not 1 <= lease_seconds <= 86_400:
             raise ValueError("invalid outbox lease")
@@ -2052,15 +2263,20 @@ class ControlPlaneStore:
                 if row is None:
                     connection.execute("ROLLBACK")
                     return None
-                connection.execute(
+                updated = connection.execute(
                     "UPDATE outbox SET status = 'processing', attempt_count = attempt_count + 1, "
                     "claimed_at = ?, lease_until = ?, claim_token = ? WHERE id = ? AND ("
                     "(status = 'pending' AND next_attempt_at <= ?) OR "
                     "(status = 'processing' AND lease_until IS NOT NULL AND lease_until <= ?))",
                     (now, lease_until, claim_token, outbox_id, now, now),
                 )
+                if updated.rowcount != 1:
+                    connection.execute("ROLLBACK")
+                    return None
                 updated = connection.execute(
-                    "SELECT * FROM outbox WHERE id = ?", (outbox_id,)
+                    "SELECT * FROM outbox WHERE id = ? AND status = 'processing' "
+                    "AND claim_token = ?",
+                    (outbox_id, claim_token),
                 ).fetchone()
                 connection.execute("COMMIT")
                 return dict(updated) if updated is not None else None
@@ -2585,14 +2801,74 @@ class ControlPlaneStore:
             raise ValueError("idempotency_key must be non-empty and bounded")
 
     @staticmethod
+    def _idempotency_digest(payload: Dict[str, Any]) -> str:
+        return "sha256:" + hash_token(
+            json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        )
+
+    @classmethod
+    def _idempotency_response_locked(
+        cls,
+        connection: Any,
+        tenant_id: str,
+        operation: str,
+        idempotency_key: str,
+        request_digest: str,
+    ) -> Optional[Dict[str, Any]]:
+        row = connection.execute(
+            "SELECT request_digest, response_json FROM idempotency_records "
+            "WHERE tenant_id = ? AND operation = ? AND idempotency_key = ?",
+            (tenant_id, operation, idempotency_key),
+        ).fetchone()
+        if row is None:
+            return None
+        if not hmac.compare_digest(str(row["request_digest"]), request_digest):
+            raise ConflictError("idempotency key is bound to another request")
+        try:
+            response = json.loads(row["response_json"])
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise RuntimeError("idempotency response is invalid") from exc
+        if not isinstance(response, dict):
+            raise RuntimeError("idempotency response is invalid")
+        return response
+
+    @staticmethod
+    def _record_idempotency_response_locked(
+        connection: Any,
+        tenant_id: str,
+        operation: str,
+        idempotency_key: str,
+        request_digest: str,
+        response: Dict[str, Any],
+        created_at: str,
+    ) -> None:
+        connection.execute(
+            "INSERT INTO idempotency_records(tenant_id, operation, idempotency_key, "
+            "request_digest, response_json, created_at) VALUES(?, ?, ?, ?, ?, ?)",
+            (
+                tenant_id,
+                operation,
+                idempotency_key,
+                request_digest,
+                json.dumps(response, sort_keys=True, separators=(",", ":"), allow_nan=False),
+                created_at,
+            ),
+        )
+
+    @staticmethod
     def _validate_principal_locked(connection: Any, tenant_id: str, principal_id: str) -> None:
         row = connection.execute(
-            "SELECT tenant_id, status FROM principals WHERE id = ?", (principal_id,)
+            "SELECT principals.tenant_id, principals.status, tenants.status AS tenant_status "
+            "FROM principals JOIN tenants ON tenants.id = principals.tenant_id "
+            "WHERE principals.id = ?",
+            (principal_id,),
         ).fetchone()
         if row is None:
             raise NotFoundError("principal not found")
         if row["tenant_id"] != tenant_id:
             raise ScopeViolation("principal is outside tenant scope")
+        if row["tenant_status"] != "active":
+            raise ConflictError("tenant is not active")
         if row["status"] != "active":
             raise ConflictError("principal is not active")
 
@@ -2905,6 +3181,20 @@ class ControlPlaneStore:
             dependencies = self._task_dependencies_locked(connection, task_id, tenant_id)
         return self._task_record(row, dependencies)
 
+    def get_task_by_idempotency(
+        self, tenant_id: str, idempotency_key: str
+    ) -> Optional[Dict[str, Any]]:
+        """Return the tenant-scoped task associated with an idempotency key."""
+        self._validate_idempotency_key(idempotency_key)
+        with self._lock:
+            row = self._conn().execute(
+                "SELECT id FROM tasks WHERE tenant_id = ? AND idempotency_key = ?",
+                (tenant_id, idempotency_key),
+            ).fetchone()
+        if row is None:
+            return None
+        return self.get_task(row["id"], tenant_id)
+
     def list_tasks(self, goal_id: str, tenant_id: str, limit: int = 100) -> List[Dict[str, Any]]:
         if not 1 <= limit <= 1000:
             raise ValueError("invalid task limit")
@@ -2961,6 +3251,14 @@ class ControlPlaneStore:
                     raise NotFoundError("task not found")
                 if row["tenant_id"] != tenant_id:
                     raise ScopeViolation("task is outside tenant scope")
+                recurring_schedule = connection.execute(
+                    "SELECT 1 FROM schedules WHERE task_id = ? AND tenant_id = ? "
+                    "AND kind = 'interval' AND status IN ('active', 'running') LIMIT 1",
+                    (task_id, tenant_id),
+                ).fetchone()
+                if recurring_schedule is not None:
+                    connection.execute("ROLLBACK")
+                    return None
                 lease_expired = (
                     row["status"] == "running"
                     and row["lease_until"] is not None
@@ -3391,6 +3689,20 @@ class ControlPlaneStore:
             raise ScopeViolation("schedule is outside tenant scope")
         return self._schedule_record(row)
 
+    def get_schedule_by_idempotency(
+        self, tenant_id: str, idempotency_key: str
+    ) -> Optional[Dict[str, Any]]:
+        """Return the tenant-scoped schedule associated with an idempotency key."""
+        self._validate_idempotency_key(idempotency_key)
+        with self._lock:
+            row = self._conn().execute(
+                "SELECT id FROM schedules WHERE tenant_id = ? AND idempotency_key = ?",
+                (tenant_id, idempotency_key),
+            ).fetchone()
+        if row is None:
+            return None
+        return self.get_schedule(row["id"], tenant_id)
+
     def list_schedules(
         self,
         tenant_id: str,
@@ -3438,14 +3750,36 @@ class ControlPlaneStore:
         return [self._schedule_record(row) for row in rows]
 
     def cancel_schedule(
-        self, schedule_id: str, tenant_id: str, principal_id: str
+        self,
+        schedule_id: str,
+        tenant_id: str,
+        principal_id: str,
+        idempotency_key: Optional[str] = None,
     ) -> Dict[str, Any]:
         now = _timestamp(_utcnow())
+        if idempotency_key is not None:
+            self._validate_idempotency_key(idempotency_key)
+        request_digest = self._idempotency_digest(
+            {"schedule_id": schedule_id, "principal_id": principal_id}
+        )
         with self._lock:
             connection = self._conn()
             connection.execute("BEGIN IMMEDIATE")
+            transaction_active = True
             try:
                 self._validate_principal_locked(connection, tenant_id, principal_id)
+                if idempotency_key is not None:
+                    replay = self._idempotency_response_locked(
+                        connection,
+                        tenant_id,
+                        "schedule.cancel",
+                        idempotency_key,
+                        request_digest,
+                    )
+                    if replay is not None:
+                        connection.execute("COMMIT")
+                        transaction_active = False
+                        return replay
                 schedule = connection.execute(
                     "SELECT * FROM schedules WHERE id = ?", (schedule_id,)
                 ).fetchone()
@@ -3454,15 +3788,29 @@ class ControlPlaneStore:
                 if schedule["tenant_id"] != tenant_id:
                     raise ScopeViolation("schedule is outside tenant scope")
                 if schedule["status"] == "cancelled":
+                    response = self._schedule_record(schedule)
+                    if idempotency_key is not None:
+                        self._record_idempotency_response_locked(
+                            connection,
+                            tenant_id,
+                            "schedule.cancel",
+                            idempotency_key,
+                            request_digest,
+                            response,
+                            now,
+                        )
                     connection.execute("COMMIT")
-                    return self._schedule_record(schedule)
+                    transaction_active = False
+                    return response
                 if schedule["status"] in {"completed", "failed"}:
                     raise ConflictError("schedule is already terminal")
-                connection.execute(
+                updated = connection.execute(
                     "UPDATE schedules SET status = 'cancelled', cancelled_at = ?, updated_at = ? "
                     "WHERE id = ? AND tenant_id = ? AND status IN ('active', 'running')",
                     (now, now, schedule_id, tenant_id),
                 )
+                if updated.rowcount != 1:
+                    raise ConflictError("schedule state changed during cancellation")
                 running_runs = connection.execute(
                     "SELECT id FROM task_runs WHERE schedule_id = ? AND tenant_id = ? "
                     "AND status = 'running'",
@@ -3525,10 +3873,25 @@ class ControlPlaneStore:
                     "SELECT * FROM schedules WHERE id = ? AND tenant_id = ?",
                     (schedule_id, tenant_id),
                 ).fetchone()
+                if current is None:
+                    raise RuntimeError("schedule cancellation was not persisted")
+                response = self._schedule_record(current)
+                if idempotency_key is not None:
+                    self._record_idempotency_response_locked(
+                        connection,
+                        tenant_id,
+                        "schedule.cancel",
+                        idempotency_key,
+                        request_digest,
+                        response,
+                        now,
+                    )
                 connection.execute("COMMIT")
-                return self._schedule_record(current)
+                transaction_active = False
+                return response
             except Exception:
-                connection.execute("ROLLBACK")
+                if transaction_active:
+                    connection.execute("ROLLBACK")
                 raise
 
     def _task_run_by_id_locked(
@@ -3981,19 +4344,38 @@ class ControlPlaneStore:
                                     tenant_id,
                                 ),
                             )
+                recurring_schedule = schedule is not None and schedule["kind"] == "interval"
                 if effective_status == "succeeded":
-                    connection.execute(
-                        "UPDATE tasks SET status = 'completed', completed_at = ?, updated_at = ?, "
-                        "lease_owner = NULL, lease_token = NULL, lease_until = NULL "
-                        "WHERE id = ? AND tenant_id = ? AND status IN ('queued', 'running', 'retry')",
-                        (now, now, row["task_id"], tenant_id),
-                    )
+                    if recurring_schedule:
+                        connection.execute(
+                            "UPDATE tasks SET status = 'queued', completed_at = NULL, updated_at = ?, "
+                            "lease_owner = NULL, lease_token = NULL, lease_until = NULL "
+                            "WHERE id = ? AND tenant_id = ? AND status IN "
+                            "('queued', 'running', 'retry', 'completed')",
+                            (now, row["task_id"], tenant_id),
+                        )
+                    else:
+                        connection.execute(
+                            "UPDATE tasks SET status = 'completed', completed_at = ?, updated_at = ?, "
+                            "lease_owner = NULL, lease_token = NULL, lease_until = NULL "
+                            "WHERE id = ? AND tenant_id = ? AND status IN ('queued', 'running', 'retry')",
+                            (now, now, row["task_id"], tenant_id),
+                        )
                 elif effective_status == "dead_lettered":
-                    connection.execute(
-                        "UPDATE tasks SET status = 'failed', updated_at = ? "
-                        "WHERE id = ? AND tenant_id = ? AND status IN ('queued', 'running', 'retry')",
-                        (now, row["task_id"], tenant_id),
-                    )
+                    if recurring_schedule:
+                        connection.execute(
+                            "UPDATE tasks SET status = 'queued', completed_at = NULL, updated_at = ?, "
+                            "lease_owner = NULL, lease_token = NULL, lease_until = NULL "
+                            "WHERE id = ? AND tenant_id = ? AND status IN "
+                            "('queued', 'running', 'retry', 'completed')",
+                            (now, row["task_id"], tenant_id),
+                        )
+                    else:
+                        connection.execute(
+                            "UPDATE tasks SET status = 'failed', updated_at = ? "
+                            "WHERE id = ? AND tenant_id = ? AND status IN ('queued', 'running', 'retry')",
+                            (now, row["task_id"], tenant_id),
+                        )
                 elif row["schedule_id"] is None and effective_status == "retry":
                     connection.execute(
                         "UPDATE tasks SET status = 'retry', lease_owner = NULL, lease_token = NULL, "
@@ -4033,7 +4415,7 @@ class ControlPlaneStore:
                     now=now,
                     event_id=event_id,
                 )
-                if effective_status == "succeeded":
+                if effective_status == "succeeded" and not recurring_schedule:
                     goal = connection.execute(
                         "SELECT id, status FROM goals WHERE id = ? AND tenant_id = ?",
                         (row["goal_id"], tenant_id),
@@ -4478,9 +4860,13 @@ class ControlPlaneStore:
             raise ValueError("invalid sequence event cursor or limit")
         with self._lock:
             rows = self._conn().execute(
-                "SELECT * FROM events WHERE tenant_id = ? AND aggregate_kind IN ('sequence', 'sequence_run') "
-                "AND aggregate_id IN (?, ?) AND sequence > ? ORDER BY sequence ASC LIMIT ?",
-                (tenant_id, sequence_id, sequence_id, after, limit),
+                "SELECT * FROM events WHERE tenant_id = ? AND ("
+                "(aggregate_kind = 'sequence' AND aggregate_id = ?) OR "
+                "(aggregate_kind = 'sequence_run' AND aggregate_id IN ("
+                "SELECT id FROM sequence_runs WHERE tenant_id = ? AND sequence_id = ?"
+                "))"
+                ") AND sequence > ? ORDER BY sequence ASC LIMIT ?",
+                (tenant_id, sequence_id, tenant_id, sequence_id, after, limit),
             ).fetchall()
         return [
             {
@@ -5699,21 +6085,70 @@ class ControlPlaneStore:
         }
 
     def cancel_run(
-        self, run_id: str, tenant_id: str, principal_id: str
+        self,
+        run_id: str,
+        tenant_id: str,
+        principal_id: str,
+        idempotency_key: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Cancel before dispatch, or request cancellation for an active lease."""
         now = _timestamp(_utcnow())
+        if idempotency_key is not None:
+            self._validate_idempotency_key(idempotency_key)
+        request_digest = self._idempotency_digest(
+            {"run_id": run_id, "principal_id": principal_id}
+        )
         with self._lock:
             connection = self._conn()
             connection.execute("BEGIN IMMEDIATE")
+            transaction_active = True
             try:
                 self._validate_principal_locked(connection, tenant_id, principal_id)
+                if idempotency_key is not None:
+                    replay = self._idempotency_response_locked(
+                        connection,
+                        tenant_id,
+                        "run.cancel",
+                        idempotency_key,
+                        request_digest,
+                    )
+                    if replay is not None:
+                        connection.execute("COMMIT")
+                        transaction_active = False
+                        return replay
                 run, action = self._action_and_run_locked(connection, run_id, tenant_id)
-                if run["status"] in {"succeeded", "failed", "cancelled", "unknown"}:
+                if run["status"] in {"succeeded", "failed", "unknown"}:
                     raise ConflictError("run is not cancellable in its current state")
-                if run["status"] == "cancel_requested":
+                if run["status"] == "cancelled":
+                    response = self.get_run(run_id, tenant_id)
+                    if idempotency_key is not None:
+                        self._record_idempotency_response_locked(
+                            connection,
+                            tenant_id,
+                            "run.cancel",
+                            idempotency_key,
+                            request_digest,
+                            response,
+                            now,
+                        )
                     connection.execute("COMMIT")
-                    return self.get_run(run_id, tenant_id)
+                    transaction_active = False
+                    return response
+                if run["status"] == "cancel_requested":
+                    response = self.get_run(run_id, tenant_id)
+                    if idempotency_key is not None:
+                        self._record_idempotency_response_locked(
+                            connection,
+                            tenant_id,
+                            "run.cancel",
+                            idempotency_key,
+                            request_digest,
+                            response,
+                            now,
+                        )
+                    connection.execute("COMMIT")
+                    transaction_active = False
+                    return response
                 if action["status"] in {"queued", "retry", "waiting_approval"}:
                     connection.execute(
                         "UPDATE runs SET status = 'cancelled', finished_at = ?, cancel_requested = 0 "
@@ -5765,11 +6200,24 @@ class ControlPlaneStore:
                     now=now,
                     event_id=event_id,
                 )
+                response = self.get_run(run_id, tenant_id)
+                if idempotency_key is not None:
+                    self._record_idempotency_response_locked(
+                        connection,
+                        tenant_id,
+                        "run.cancel",
+                        idempotency_key,
+                        request_digest,
+                        response,
+                        now,
+                    )
                 connection.execute("COMMIT")
+                transaction_active = False
             except Exception:
-                connection.execute("ROLLBACK")
+                if transaction_active:
+                    connection.execute("ROLLBACK")
                 raise
-        return self.get_run(run_id, tenant_id)
+        return response
 
     def get_run_by_idempotency(self, tenant_id: str, idempotency_key: str) -> Optional[Dict[str, Any]]:
         with self._lock:
