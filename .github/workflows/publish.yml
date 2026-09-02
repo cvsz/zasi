@@ -37,7 +37,7 @@ jobs:
         run: pip install build
 
       - name: Build bundled cockpit before packaging
-        run: npm ci --ignore-scripts && npm run build
+        run: npm ci --ignore-scripts && npm run typecheck && npm run build
 
       - name: Build distribution packages (wheel + sdist)
         run: python3 -m build

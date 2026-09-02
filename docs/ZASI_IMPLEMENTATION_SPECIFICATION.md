@@ -102,7 +102,7 @@ There must be one authoritative runtime entry point after Phase P0. The followin
 | src/api_server.py | Separate legacy HTTP server, generated dashboard HTML, hardcoded token default, binds all interfaces | Quarantine; no production startup path |
 | main.py | Starts the legacy server on the same nominal port | Replace with one lifecycle command and readiness handshake |
 | Electron main process | Spawns Python and loads localhost after a fixed delay | Use process supervision, readiness polling, origin restrictions, and clean shutdown |
-| web/static/app.jsx | React 18 and React Router v6 cockpit shell | Make the Vite bundle authoritative; remove CDN runtime dependencies |
+| web/static/app.tsx + web/static/app.jsx | React 19 and React Router v7 cockpit with a strict TypeScript root entrypoint and preserved reviewed JSX compatibility module | Keep the Vite bundle authoritative; complete application-source conversion incrementally without deleting the compatibility module |
 | web/static/app.js | Legacy dashboard with direct HTML insertion and GET mutation calls | Quarantine and delete only after compatibility tests and operator sign-off |
 | CLI and research modules | Directly expose simulation, self-evolution, sandbox, and hardware-shaped APIs | Convert to adapters with explicit disabled or simulation profiles |
 
@@ -359,7 +359,7 @@ The target stack is deliberately conservative and portable:
 | Persistence | SQLAlchemy or equivalent repository layer with migrations; SQLite local, PostgreSQL production |
 | Events | Durable event store plus outbox; SSE first, WebSocket only where bidirectional behavior is required |
 | Queue | Durable worker queue for external actions and long-running jobs |
-| UI | TypeScript React 18 bundle built by Vite; no production CDN runtime |
+| UI | React 19 / React Router 7 bundle built by Vite from a strict TypeScript entrypoint; no production CDN runtime |
 | Desktop | Electron shell with a supervised child process and readiness handshake |
 | Adapters | Explicit interfaces for model, MCP, web, CAD, vision, voice, hardware, and research workers |
 | Observability | Structured logs, metrics, traces, correlation IDs, and redaction middleware |
@@ -1702,19 +1702,20 @@ preserved and is not part of the implementation claim.
 | Focused control-plane/security suite (`tests.test_control_plane_core`, `tests.test_control_plane_broker`, `tests.test_control_plane_api`, `tests.test_security_hardening`, `tests.test_egress_security`) | Passed, including memory-hard API-key verification and TLS 1.2 floor tests | Local governed/security regression |
 | `python3 -m unittest tests.test_api -q` | 8 legacy compatibility tests passed, including retired webhook and truthful legacy OpenAPI assertions | Local migration-surface regression |
 | `python3 -m compileall -q backend src scripts tests main.py` | Passed | Local syntax check |
-| `node tests/test_components.js` | Passed | Local bundle/source safety assertions |
+| `node tests/test_components.js` | Passed; verifies React 19/Router 7 pins, typed entrypoint ownership, local scripts, and governed route declarations | Local bundle/source safety assertions |
+| `npm run typecheck` | Passed with TypeScript 7 strict settings for the production entrypoint | Local frontend type safety |
 | `node --check electron/main.js` | Passed | Local Electron syntax check |
 | `npm run build` | Vite production bundle passed; emitted a chunk-size advisory | Local frontend build |
 | `python3 -m build` | Source distribution and wheel build passed | Local package build |
 | `ZASI_DATABASE_BACKEND=postgresql` with `PostgresControlPlaneStore` against the shared cluster | Schema 7 initialization, integrity check, authenticated session, memory write/delete, readiness, and custom-format backup catalog smoke passed | Local PostgreSQL integration |
 | `ZASI_REDIS_URL` with `RedisRuntime` against the shared ACL user | Authenticated ping, atomic namespaced rate-limit, and ASGI request smoke passed; unauthenticated default access returns `NOAUTH` | Local Redis integration |
 | Private `.env` service credential shape | Mode `600`; `zasi` PostgreSQL/Redis URLs and `PGPASSWORD`/`REDIS_PASSWORD` contain operator-supplied high-entropy hex material; the value is ignored by Git and absent from tracked source | Local secret-handling inspection |
-| `npm audit --omit=dev --json` | No high/critical findings; two moderate React Router findings remain and the automated fix requires a major v7 migration | Local dependency audit |
+| `npm audit --omit=dev --json` | 0 info/low/moderate/high/critical findings after the React Router 7.18.3 upgrade | Local dependency audit |
 | `docker compose config` | Passed with explicit local API key/CORS inputs | Local configuration rendering |
 | ASGI smoke: session bootstrap, authenticated OpenAPI, header-based SSE resume, `/health/live`, `/health/ready`, `/`, and an unknown API route | Session `201`; authenticated OpenAPI `200`; SSE resume `200` with `stream.end`; liveness/readiness/root `200`; unknown API route returned JSON 404 | Local HTTP smoke |
 | `docker build --pull -t zasi:architecture-implementation .` | Passed for the implementation branch | Local container build |
 | Hardened container smoke | `/health/ready` returned `ready`; UID `10001:10001`, read-only rootfs, all capabilities dropped, and no-new-privileges verified; external egress and physical actuation reported disabled | Local runtime/container evidence |
-| `python3 scripts/generate_sbom.py --output dist/zasi-sbom.cdx.json --resolve-installed` | CycloneDX 1.5 SBOM generated with 344 components and deterministic serial | Local supply-chain evidence |
+| `python3 scripts/generate_sbom.py --output dist/zasi-sbom.cdx.json --resolve-installed` | CycloneDX 1.5 SBOM generated with 367 components and deterministic serial | Local supply-chain evidence |
 | `sha256sum --check dist/SHA256SUMS` and GPG verification of wheel, sdist, and SBOM signatures | Passed with the configured cvsz signing identity | Local artifact integrity evidence |
 | PR #29 hosted checks for commit `edcb357` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12, lint, distribution, and Docker checks passed; PR package publication skipped | Hosted CI evidence for the pushed runtime/CI implementation |
 | GitHub Issue #18 | Remains `OPEN`; latest PR/evidence comment recorded at [#issuecomment-5504168389](https://github.com/cvsz/zasi/issues/18#issuecomment-5504168389) | External roadmap status, not release approval |
@@ -1739,7 +1740,7 @@ the acceptance criteria in [#9](https://github.com/cvsz/zasi/issues/9) through
 | [#11 / P2](https://github.com/cvsz/zasi/issues/11) | Partial, local | Typed intents/plans, deterministic risk policy, exact-digest approval records, evidence provenance, and governed MCP calls exist. Full R0–R5 capability inventory, production verification procedures, and complete claim-to-evidence coverage remain open. |
 | [#12 / P3](https://github.com/cvsz/zasi/issues/12) | Partial, local | Transactional events/outbox, leased claims, authenticated SSE replay, cursor validation, retention gaps, and snapshot resync exist. A production worker, 10,000-event performance evidence, backpressure policy, and multi-process delivery proof remain open. |
 | [#13 / P4](https://github.com/cvsz/zasi/issues/13) | Partial, reference-only | Stable tool registry, request digests, run idempotency, approval gating, fail-closed dynamic execution, and trusted handlers exist. External action workers, reconciliation of unknown side effects, durable cancellation/timeout workers, and certified sandbox evidence remain open. |
-| [#14 / P5](https://github.com/cvsz/zasi/issues/14) | Partial, React 18 JavaScript | Dependencies are bundled and locked, the cockpit uses authenticated v2 transport, safe rendering, CSP, and reconnect/resync state. React 19 + TypeScript, full accessibility/performance evidence, and broad event-driven workspace coverage remain open. |
+| [#14 / P5](https://github.com/cvsz/zasi/issues/14) | Partial, React 19 / Router 7 with TypeScript entrypoint | Dependencies are bundled and locked, the cockpit uses authenticated v2 transport, safe rendering, CSP, reconnect/resync state, and a strict TypeScript root entrypoint. The reviewed application body remains a preserved JSX compatibility module; full source conversion, accessibility/performance evidence, and broad event-driven workspace coverage remain open. |
 | [#15 / P6](https://github.com/cvsz/zasi/issues/15) | Not implemented; target only | The repository has intents, plans, sequences, memory items, and unavailable briefings, but not the required durable Goal/Task DAG, scheduler, project memory router, or productivity connectors. |
 | [#16 / P7](https://github.com/cvsz/zasi/issues/16) | Unavailable by design | Artifact quarantine and provenance contracts exist; real CAD/STEP, vision, STT/TTS, anti-replay speaker verification, and hardware integration are not enabled. |
 | [#17 / P8](https://github.com/cvsz/zasi/issues/17) | Partial packaging hardening; NO-GO | Workflows, non-root container configuration, installer backup behavior, lockfiles, local signed wheel/sdist/SBOM/checksum evidence, hosted CodeQL, and container builds exist. Dedicated vulnerability/container scan evidence, hosted release provenance, staging canary, rollback observation, and independent verification remain open. |

@@ -38,6 +38,7 @@ jobs:
       - name: Build bundled cockpit
         run: |
           npm ci --ignore-scripts
+          npm run typecheck
           npm run build
 
       - name: Upload static cockpit artifact

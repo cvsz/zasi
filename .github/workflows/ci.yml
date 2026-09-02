@@ -25,7 +25,7 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: "20" }
       - name: Install and build bundled cockpit
-        run: npm ci --ignore-scripts && npm run build
+        run: npm ci --ignore-scripts && npm run typecheck && npm run build
       - name: Install dependencies
         run: pip install '.[dev]' build coverage
       - name: Run unit tests
@@ -52,7 +52,7 @@ jobs:
       - uses: actions/setup-node@v7
         with: { node-version: "20" }
       - name: Build bundled cockpit before packaging
-        run: npm ci --ignore-scripts && npm run build
+        run: npm ci --ignore-scripts && npm run typecheck && npm run build
       - run: pip install '.[dev]' build
       - name: Build wheel and sdist
         run: python3 -m build

@@ -6,6 +6,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [Unreleased]
+### Changed
+- Upgraded the bundled cockpit dependency baseline to React 19.2.8 and React Router 7.18.3, removing the two previously reported moderate Router advisories.
+- Added a strict TypeScript 7 entrypoint/typecheck while preserving `web/static/app.jsx` as an explicit reviewed compatibility module.
+
 ## [32.0.0] - 2026-09-01
 ### Added
 - **Subsystems #169–#176 (Hyper-Cosmology & Singularity Milestone)**:

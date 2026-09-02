@@ -7,7 +7,6 @@ import React, {
     useRef,
     useState,
 } from 'react';
-import { createRoot } from 'react-dom/client';
 import {
     BrowserRouter,
     NavLink,
@@ -517,4 +516,5 @@ function App() {
     return <ThemeProvider><ToastProvider><AuthProvider><BrowserRouter><AuthenticatedApp /></BrowserRouter></AuthProvider></ToastProvider></ThemeProvider>;
 }
 
-createRoot(document.getElementById('root')).render(<App />);
+// Kept as a reviewed compatibility module while app.tsx owns the typed entrypoint.
+export default App;

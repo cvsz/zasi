@@ -4,10 +4,10 @@
 [![PyPI](https://img.shields.io/pypi/v/zasi.svg?logo=pypi&logoColor=white&color=3775A9)](https://pypi.org/project/zasi/)
 [![PyPI Downloads](https://img.shields.io/pypi/dm/zasi.svg?color=blue)](https://pypi.org/project/zasi/)
 [![npm](https://img.shields.io/npm/v/zasi-cockpit.svg?logo=npm&logoColor=white&color=CB3837)](https://www.npmjs.com/package/zasi-cockpit)
-[![Subsystems](https://img.shields.io/badge/subsystems-176%20Online-green.svg)](docs/SUBSYSTEMS_REFERENCE.md)
+[![Subsystems](https://img.shields.io/badge/subsystems-historical%20catalog-gray.svg)](docs/SUBSYSTEMS_REFERENCE.md)
 [![Tests](https://img.shields.io/badge/tests-225%20passing-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.14-blue.svg)](https://python.org)
-[![React](https://img.shields.io/badge/frontend-React%2018%20%2B%20React%20Router%20v6-61dafb.svg)](web/)
+[![React](https://img.shields.io/badge/frontend-React%2019%20%2B%20TypeScript%20%2B%20React%20Router%20v7-61dafb.svg)](web/)
 [![Discussions](https://img.shields.io/badge/community-Discussions-orange.svg)](https://github.com/cvsz/zasi/discussions)
 [![License](https://img.shields.io/badge/license-MIT-purple.svg)](LICENSE)
 
@@ -19,7 +19,9 @@
 # ZASI — governed J.A.R.V.I.S. control-plane reference platform
 
 ZASI is a local-first, authenticated control-plane reference implementation
-with a React 18 cockpit. Its safe path is:
+with a React 19 cockpit. The typed `web/static/app.tsx` entrypoint owns the
+runtime mount and preserves the reviewed `app.jsx` module as a compatibility
+boundary. Its safe path is:
 
 ```text
 authenticated session -> scoped observation -> typed intent -> policy
@@ -87,6 +89,7 @@ python3 -m unittest discover -s tests -q
 PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q
 python3 -m unittest tests.test_control_plane_core tests.test_control_plane_broker tests.test_control_plane_api tests.test_security_hardening tests.test_egress_security -q
 node tests/test_components.js
+npm run typecheck
 npm run build
 python3 -m build
 ```

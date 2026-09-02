@@ -1,12 +1,13 @@
 {
   "name": "zasi-cockpit",
   "version": "32.0.0",
-  "description": "ZASI J.A.R.V.I.S. governed control-plane cockpit — React 18 + React Router v6",
+  "description": "ZASI J.A.R.V.I.S. governed control-plane cockpit — React 19 + React Router v7 + TypeScript entrypoint",
   "main": "electron/main.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build --config vite.config.js",
     "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
     "electron": "electron electron/main.js",
     "electron-build": "electron-builder --linux --mac --win",
     "test": "node tests/test_components.js"
@@ -14,12 +15,15 @@
   "devDependencies": {
     "electron": "44.1.0",
     "electron-builder": "26.15.3",
-    "vite": "8.2.2"
+    "vite": "8.2.2",
+    "typescript": "7.0.2",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5"
   },
   "dependencies": {
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
-    "react-router-dom": "6.30.6",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "react-router-dom": "7.18.3",
     "three": "0.179.1"
   },
   "build": {

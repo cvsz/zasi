@@ -20,7 +20,7 @@ Specify any First-Order SMT bounds, quantum circuit representations, or theoreti
 - [ ] Quantum Computation & QEC Code
 - [ ] Real Physical Hardware Interface (#129–#136)
 - [ ] Omniversal Cognitive Apex Prime
-- [ ] React 18 / Three.js Command Cockpit
+- [ ] React 19 / TypeScript / Three.js Command Cockpit
 - [ ] Model Context Protocol (MCP) Tools
 
 **Additional Context**
