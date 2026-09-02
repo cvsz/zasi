@@ -151,6 +151,33 @@ class EgressSecurityTests(unittest.TestCase):
         finally:
             self.assertTrue(resolver_done.wait(1))
 
+    def test_broker_passes_absolute_deadline_to_dns_validation(self):
+        policy = EgressPolicy(
+            allowed_hosts=frozenset({"public.example"}),
+            total_timeout_sec=0.08,
+        )
+        broker = EgressBroker(policy)
+        destination = ResolvedDestination(
+            url="https://public.example/hook",
+            scheme="https",
+            hostname="public.example",
+            port=443,
+            request_target="/hook",
+            addresses=((socket.AF_INET, ("93.184.216.34", 443)),),
+        )
+        with patch.object(egress_module, "validate_destination", return_value=destination) as validate:
+            with patch.object(
+                broker,
+                "_connect",
+                side_effect=EgressRequestFailed("stop after validation"),
+            ):
+                with self.assertRaises(EgressRequestFailed):
+                    broker.post_json("https://public.example/hook", {}, "idem-1")
+
+        self.assertIn("deadline", validate.call_args.kwargs)
+        self.assertNotIn("timeout_sec", validate.call_args.kwargs)
+        self.assertIsInstance(validate.call_args.kwargs["deadline"], float)
+
     def test_resolver_slot_contention_shares_one_absolute_deadline(self):
         class FakeClock:
             now = 100.0

@@ -67,7 +67,8 @@ def _resolve_with_timeout(
     resolver: Resolver,
     hostname: str,
     port: int,
-    timeout_sec: float,
+    timeout_sec: Optional[float] = None,
+    deadline: Optional[float] = None,
 ):
     """Run potentially blocking name resolution behind a bounded deadline.
 
@@ -76,17 +77,26 @@ def _resolve_with_timeout(
     the semaphore bounds the number of unresolved calls retained in the
     process after a timeout.
     """
-    try:
-        timeout = float(timeout_sec)
-    except (TypeError, ValueError) as exc:
-        raise EgressRequestFailed("outbound request timeout is invalid") from exc
-    if not math.isfinite(timeout) or timeout <= 0:
-        raise EgressRequestFailed("outbound request exceeded total timeout")
-    deadline = time.monotonic() + timeout
-    slot_wait = deadline - time.monotonic()
+    if deadline is None:
+        try:
+            timeout = float(timeout_sec)
+        except (TypeError, ValueError) as exc:
+            raise EgressRequestFailed("outbound request timeout is invalid") from exc
+        if not math.isfinite(timeout) or timeout <= 0:
+            raise EgressRequestFailed("outbound request exceeded total timeout")
+        absolute_deadline = time.monotonic() + timeout
+    else:
+        try:
+            absolute_deadline = float(deadline)
+        except (TypeError, ValueError) as exc:
+            raise EgressRequestFailed("outbound request deadline is invalid") from exc
+        if not math.isfinite(absolute_deadline):
+            raise EgressRequestFailed("outbound request deadline is invalid")
+
+    slot_wait = absolute_deadline - time.monotonic()
     if slot_wait <= 0 or not _resolver_slots.acquire(timeout=slot_wait):
         raise EgressRequestFailed("outbound DNS resolver capacity is exhausted")
-    remaining = deadline - time.monotonic()
+    remaining = absolute_deadline - time.monotonic()
     if remaining <= 0:
         _resolver_slots.release()
         raise EgressRequestFailed("outbound DNS resolution exceeded total timeout")
@@ -112,7 +122,7 @@ def _resolve_with_timeout(
         _resolver_slots.release()
         raise
     try:
-        remaining = deadline - time.monotonic()
+        remaining = absolute_deadline - time.monotonic()
         if remaining <= 0:
             raise queue.Empty
         succeeded, value = result_queue.get(timeout=remaining)
@@ -194,6 +204,7 @@ def validate_destination(
     policy: EgressPolicy,
     resolver: Optional[Resolver] = None,
     timeout_sec: Optional[float] = None,
+    deadline: Optional[float] = None,
 ) -> ResolvedDestination:
     parsed, hostname, port = _parts(url, policy)
     resolve = resolver or _default_resolver
@@ -202,7 +213,8 @@ def validate_destination(
             resolve,
             hostname,
             port,
-            policy.total_timeout_sec if timeout_sec is None else timeout_sec,
+            timeout_sec=policy.total_timeout_sec if timeout_sec is None else timeout_sec,
+            deadline=deadline,
         )
     except EgressRequestFailed:
         raise
@@ -240,6 +252,7 @@ def validate_redirect(
     policy: EgressPolicy,
     resolver: Optional[Resolver] = None,
     timeout_sec: Optional[float] = None,
+    deadline: Optional[float] = None,
 ) -> ResolvedDestination:
     if not policy.allow_redirects:
         raise EgressDenied("redirects are disabled by egress policy")
@@ -250,6 +263,7 @@ def validate_redirect(
         policy,
         resolver=resolver,
         timeout_sec=timeout_sec,
+        deadline=deadline,
     )
 
 
@@ -277,7 +291,7 @@ class EgressBroker:
             url,
             self.policy,
             resolver=self.resolver,
-            timeout_sec=_remaining_timeout(deadline),
+            deadline=deadline,
         )
         sock = self._connect(destination, deadline=deadline)
         try:
