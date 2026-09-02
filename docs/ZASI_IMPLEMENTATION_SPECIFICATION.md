@@ -1833,10 +1833,16 @@ permission hardening is in signed commit
 `d169fa9b9e54ed0bf5263baa8e9bd36db5b05f59`.
 The current release/container/SBOM packaging hardening is in signed commit
 `3fa2b2fbccb5e7ede3b3dc71f72c2114ee763616`.
-The packaged Electron runtime and build-boundary hardening is in signed commit
-`179863f11adfcfd7acd00cde93760e8da751b850`; source mode remains supported,
-while packaged mode requires real per-platform virtual environments and
-externalized application resources.
+The initial packaged Electron runtime and build-boundary hardening is in signed
+commit `179863f11adfcfd7acd00cde93760e8da751b850`; source mode remains
+supported, while packaged mode requires real per-platform virtual environments
+and externalized application resources. The P1 review repairs for writable
+packaged state, runtime-home canonicalization, and cross-platform home
+separators are in signed commit `fadae5f950ebaa121feb2e45c568a04e30378d91`
+and `898ddf360f61ea9434b533e65f13fbdda1759b46`; PR [#35](https://github.com/cvsz/zasi/pull/35)
+merged the exact head `898ddf360f61ea9434b533e65f13fbdda1759b46` into main at
+`2332ada8c30914f0051add591c15d3aba1cd1c81` after all required hosted checks
+passed.
 The release-publication and schema-preserving backup hardening was merged by
 PR [#31](https://github.com/cvsz/zasi/pull/31), in signed commits
 `e972295` and `84e4f99`; the protected RACER and J.A.R.V.I.S. reference files
@@ -1903,6 +1909,8 @@ implementation claim.
 | PR #29 hosted checks for exact merged head `c713a19be0aee6b7ab4bc0719238c6cc6b9ad50f` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12 with the isolated dependency audit, React/TypeScript validation, distribution, Docker image, and Docker build checks passed; PR package publication skipped. | Historical hosted CI evidence; not release approval |
 | PR #31 hosted checks for exact merged head `7bc520ec3f01d8461ebd1a370a932bb2ca94267a` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12, React/TypeScript validation, distribution, Docker image, and Docker build checks passed; PR-only GHCR publication was skipped. | Current merged hosted CI evidence; not release approval |
 | PR #32 hosted checks for exact merged head `7a47917fd865b1a1ce4816e75761d9e70cdf2715` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12, React/TypeScript validation, distribution, Docker image, and Docker build checks passed; the `actions: read` release-permission regression was included. | Current merged hosted CI evidence; not release approval |
+| PR #34 hosted checks for exact merged head `77a7dfaa5f141e7aa36ddc13e5cba38efa6655b3` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12, React/TypeScript validation, distribution, Docker image, and Docker build checks passed; PR #34 merged at `9431f9024863dec29c382a957cf9aecad029a9b8`. | Current merged hosted CI evidence; packaged artifact still requires real per-platform runtimes |
+| PR #35 hosted checks for exact merged head `898ddf360f61ea9434b533e65f13fbdda1759b46` | CodeQL actions/JavaScript-TypeScript/Python, Python 3.11/3.12, React/TypeScript validation, distribution, Docker image, and Docker build checks passed; the P1 packaged-state, canonical-home, symlink-containment, and Windows-separator repairs merged at `2332ada8c30914f0051add591c15d3aba1cd1c81`. | Current merged hosted CI evidence; packaged artifact still requires real per-platform runtimes |
 | GitHub Issue #18 | Remains `OPEN`; current status comments are maintained in the [roadmap thread](https://github.com/cvsz/zasi/issues/18) | External roadmap status, not release approval |
 
 The `ResourceWarning` regression test is intentionally retained. The original
