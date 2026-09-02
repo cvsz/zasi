@@ -71,11 +71,20 @@ class OutboxWorker:
 
         self.stop_event.set()
 
+    def _handle_item(self, item: dict[str, object]) -> None:
+        """Invoke the handler with bounded worker identity metadata."""
+
+        if self.handler is None:
+            return
+        enriched_item = dict(item)
+        enriched_item["worker_id"] = self.worker_id
+        self.handler(enriched_item)
+
     def run_once(self) -> DispatchReport:
         """Claim and process one bounded batch of durable outbox rows."""
 
         return self.dispatcher.dispatch_once(
-            handler=self.handler,
+            handler=self._handle_item if self.handler is not None else None,
             limit=self.batch_size,
         )
 

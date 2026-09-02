@@ -60,6 +60,25 @@ class OutboxWorkerTests(unittest.TestCase):
         self.assertEqual(report.retried, 0)
         self.assertEqual(len(delivered), 1)
 
+    def test_handler_receives_the_bounded_worker_identifier(self):
+        self._append_event()
+        stop_event = threading.Event()
+        observed = []
+
+        def handler(item):
+            observed.append(item["worker_id"])
+            stop_event.set()
+
+        report = OutboxWorker(
+            self.store,
+            handler=handler,
+            stop_event=stop_event,
+            worker_id="worker-observability",
+        ).run_forever()
+
+        self.assertEqual(report.delivered, 1)
+        self.assertEqual(observed, ["worker-observability"])
+
     def test_unknown_destination_without_a_handler_is_retried_not_acknowledged(self):
         self._append_event()
         outbox_id = self.store.list_outbox()[0]["id"]
