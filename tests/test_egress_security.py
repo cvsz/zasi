@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 from src.control_plane.egress import (
     EgressDenied,
     EgressBroker,
+    EgressRequestFailed,
     EgressPolicy,
     ResolvedDestination,
     _secure_tls_context,
@@ -103,6 +104,34 @@ class EgressSecurityTests(unittest.TestCase):
         with patch("src.control_plane.egress.socket.socket", return_value=fake_socket):
             broker._connect(destination, deadline=time.monotonic() + 0.25)
         self.assertLessEqual(fake_socket.settimeout.call_args.args[0], 0.25)
+
+    def test_dns_resolution_is_bounded_by_total_timeout(self):
+        def slow_resolver(host, port):
+            time.sleep(0.1)
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port))]
+
+        policy = EgressPolicy(
+            allowed_hosts=frozenset({"public.example"}),
+            total_timeout_sec=0.01,
+        )
+        with patch("src.control_plane.egress._default_resolver", side_effect=slow_resolver):
+            with self.assertRaises(EgressRequestFailed):
+                validate_destination("https://public.example/hook", policy)
+
+    def test_broker_does_not_connect_after_dns_deadline(self):
+        def slow_resolver(host, port):
+            time.sleep(0.1)
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port))]
+
+        policy = EgressPolicy(
+            allowed_hosts=frozenset({"public.example"}),
+            total_timeout_sec=0.01,
+        )
+        broker = EgressBroker(policy)
+        with patch("src.control_plane.egress._default_resolver", side_effect=slow_resolver):
+            with patch.object(broker, "_connect", side_effect=AssertionError("connect must not run")):
+                with self.assertRaises(EgressRequestFailed):
+                    broker.post_json("https://public.example/hook", {}, "idem-1")
 
 
 if __name__ == "__main__":

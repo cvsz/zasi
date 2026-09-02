@@ -342,6 +342,7 @@ Requirements:
 - Egress requests MUST use an explicit destination policy.
 - URL validation MUST resolve and check both IPv4 and IPv6 addresses, reject loopback, link-local, multicast, documentation, private, and cloud metadata ranges, and re-check the connected peer.
 - DNS rebinding MUST be mitigated by resolving and connecting under one policy-controlled operation.
+- DNS resolution MUST be bounded by the request's total deadline; resolver calls that outlive the deadline MUST NOT block the request or process shutdown, and unresolved calls MUST be constrained by a fixed concurrency budget.
 - Redirects MUST be rejected by default; each allowed redirect MUST be revalidated.
 - Requests MUST have method, content-type, payload, response-size, connection, and total-time limits.
 - Authorization headers, cookies, tokens, and sensitive payload fields MUST be redacted before logging.
@@ -1073,6 +1074,7 @@ The egress broker MUST:
 
 - accept only an explicit destination policy or approved connector grant;
 - resolve IPv4 and IPv6 and reject disallowed ranges;
+- bound DNS resolution by the same total request deadline with a fixed resolver concurrency budget;
 - connect to the policy-checked peer;
 - reject redirects unless each hop is revalidated;
 - set bounded connect, read, total, and response-size limits;
@@ -1874,6 +1876,7 @@ implementation claim.
 | `python3 -m compileall -q backend src scripts tests main.py` | Passed | Local syntax check |
 | `python3 -m unittest tests.test_encrypted_backup -q` | 11 passed, including AES-256-GCM tamper and wrong-key rejection, atomic mode-600 files, missing-source rejection, no-clobber restore, older-schema preservation, and SQLite restore integrity | Local encrypted backup/restore regression |
 | `python3 -m unittest tests.test_control_plane_api.ControlPlaneAPITests.test_intent_plan_and_scoped_event_replay_are_read_only_until_run -q` | Passed; an approved plan records the resolved tool version and execution rejects registry-version drift with a bounded conflict | Local plan-integrity regression |
+| `PYTHONPATH=. python3 -m unittest tests.test_egress_security -v` | 8 tests passed; dual-stack SSRF rejection, redirect policy, TLS floor, connect deadline, DNS-resolution deadline, and no-connect-after-resolution-timeout behavior were verified | Local egress security regression |
 | `python3 -m unittest tests.test_sbom tests.test_installer -v` | 5 tests passed; SBOM npm-coordinate deduplication, selected Python extras, deterministic output, and fresh installer build-output selection are covered | Local packaging regression |
 | `node tests/test_components.js` | Passed; verifies React 19/Router 7 pins, typed entrypoint ownership, local scripts, and governed route declarations | Local bundle/source safety assertions |
 | `npm test` | Passed; frontend structural checks plus source-runtime, packaged-runtime, Windows runtime-layout, packaged-startup state-path, symlink-escape, and relocatability fail-closed tests | Local cockpit/Electron boundary regression |

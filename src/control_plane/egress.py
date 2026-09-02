@@ -4,8 +4,10 @@ from dataclasses import dataclass
 import http.client
 import ipaddress
 import json
+import queue
 import socket
 import ssl
+import threading
 import time
 from typing import Callable, FrozenSet, List, Optional, Tuple
 from urllib.parse import SplitResult, urljoin, urlsplit
@@ -20,6 +22,8 @@ class EgressRequestFailed(RuntimeError):
 
 
 Resolver = Callable[[str, int], List[Tuple[int, int, int, str, tuple]]]
+_MAX_CONCURRENT_RESOLVERS = 4
+_resolver_slots = threading.BoundedSemaphore(_MAX_CONCURRENT_RESOLVERS)
 
 
 @dataclass(frozen=True)
@@ -56,6 +60,57 @@ def _default_resolver(hostname: str, port: int):
         port,
         type=socket.SOCK_STREAM,
     )
+
+
+def _resolve_with_timeout(
+    resolver: Resolver,
+    hostname: str,
+    port: int,
+    timeout_sec: float,
+):
+    """Run potentially blocking name resolution behind a bounded deadline.
+
+    The standard resolver has no portable per-call timeout. Daemon threads keep
+    a stuck libc resolver from blocking the request or process shutdown, while
+    the semaphore bounds the number of unresolved calls retained in the
+    process after a timeout.
+    """
+    try:
+        timeout = float(timeout_sec)
+    except (TypeError, ValueError) as exc:
+        raise EgressRequestFailed("outbound request timeout is invalid") from exc
+    if timeout <= 0:
+        raise EgressRequestFailed("outbound request exceeded total timeout")
+    if not _resolver_slots.acquire(timeout=timeout):
+        raise EgressRequestFailed("outbound DNS resolver capacity is exhausted")
+
+    result_queue = queue.Queue(maxsize=1)
+
+    def resolve_in_thread():
+        try:
+            result_queue.put((True, resolver(hostname, port)))
+        except Exception as exc:
+            result_queue.put((False, exc))
+        finally:
+            _resolver_slots.release()
+
+    thread = threading.Thread(
+        target=resolve_in_thread,
+        name="zasi-egress-resolver",
+        daemon=True,
+    )
+    try:
+        thread.start()
+    except Exception:
+        _resolver_slots.release()
+        raise
+    try:
+        succeeded, value = result_queue.get(timeout=timeout)
+    except queue.Empty as exc:
+        raise EgressRequestFailed("outbound DNS resolution exceeded total timeout") from exc
+    if succeeded:
+        return value
+    raise value
 
 
 def _secure_tls_context() -> ssl.SSLContext:
@@ -128,11 +183,19 @@ def validate_destination(
     url: str,
     policy: EgressPolicy,
     resolver: Optional[Resolver] = None,
+    timeout_sec: Optional[float] = None,
 ) -> ResolvedDestination:
     parsed, hostname, port = _parts(url, policy)
     resolve = resolver or _default_resolver
     try:
-        records = resolve(hostname, port)
+        records = _resolve_with_timeout(
+            resolve,
+            hostname,
+            port,
+            policy.total_timeout_sec if timeout_sec is None else timeout_sec,
+        )
+    except EgressRequestFailed:
+        raise
     except Exception as exc:
         raise EgressDenied("destination DNS resolution failed") from exc
     addresses = []
@@ -166,12 +229,18 @@ def validate_redirect(
     location: str,
     policy: EgressPolicy,
     resolver: Optional[Resolver] = None,
+    timeout_sec: Optional[float] = None,
 ) -> ResolvedDestination:
     if not policy.allow_redirects:
         raise EgressDenied("redirects are disabled by egress policy")
     if not isinstance(location, str) or len(location) > 2048:
         raise EgressDenied("redirect location is invalid")
-    return validate_destination(urljoin(current_url, location), policy, resolver=resolver)
+    return validate_destination(
+        urljoin(current_url, location),
+        policy,
+        resolver=resolver,
+        timeout_sec=timeout_sec,
+    )
 
 
 class EgressBroker:
@@ -194,7 +263,12 @@ class EgressBroker:
         if len(body) > self.policy.max_payload_bytes:
             raise EgressDenied("outbound payload exceeds policy limit")
         deadline = time.monotonic() + self.policy.total_timeout_sec
-        destination = validate_destination(url, self.policy, resolver=self.resolver)
+        destination = validate_destination(
+            url,
+            self.policy,
+            resolver=self.resolver,
+            timeout_sec=_remaining_timeout(deadline),
+        )
         sock = self._connect(destination, deadline=deadline)
         try:
             sock.settimeout(_remaining_timeout(deadline))
