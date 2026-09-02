@@ -13,6 +13,7 @@ import base64
 import binascii
 import json
 import os
+import sqlite3
 from dataclasses import asdict
 from pathlib import Path
 import shutil
@@ -30,12 +31,11 @@ if __package__ in {None, ""}:
 from src.control_plane.backup import (
     BackupError,
     BackupMetadata,
-    decrypt_file,
     encrypt_file,
     open_sealed,
 )
 from src.control_plane.postgres_storage import PostgresControlPlaneStore
-from src.control_plane.storage import ControlPlaneStore
+from src.control_plane.storage import _prepare_private_sqlite_path
 
 
 def _read_backup_key() -> bytes:
@@ -70,33 +70,110 @@ def _metadata_report(metadata: BackupMetadata, **extra: Any) -> str:
     return json.dumps(report, sort_keys=True)
 
 
-def _source_for_backend(
-    backend: str, source: Optional[str], database_url: Optional[str]
-):
-    if backend == "sqlite":
-        path = source or os.environ.get("ZASI_DATABASE_PATH", "")
-        if not path:
-            raise BackupError("SQLite backup requires --source or ZASI_DATABASE_PATH")
-        source_path = Path(path).expanduser().resolve()
-        if not source_path.is_file():
-            raise BackupError("SQLite source must be an existing regular file")
-        store = ControlPlaneStore(str(source_path))
-        try:
-            store.initialize()
-        except Exception as exc:
-            store.close()
-            raise BackupError("SQLite source is unavailable") from exc
-        return store
+def _sqlite_source_path(source: Optional[str]) -> Path:
+    path = source or os.environ.get("ZASI_DATABASE_PATH", "")
+    if not path:
+        raise BackupError("SQLite backup requires --source or ZASI_DATABASE_PATH")
+    source_path = Path(path).expanduser()
+    if not source_path.is_file() or source_path.is_symlink():
+        raise BackupError("SQLite source must be an existing regular file")
+    return source_path
+
+
+def _postgres_database_url(database_url: Optional[str]) -> str:
     url = database_url or os.environ.get("ZASI_DATABASE_URL", "")
     if not url or not url.startswith(("postgresql://", "postgres://")):
         raise BackupError("PostgreSQL backup requires a PostgreSQL database URL")
-    store = PostgresControlPlaneStore(url)
+    return url
+
+
+def _open_sqlite_readonly(path: Path) -> sqlite3.Connection:
+    """Open an existing SQLite file without running application migrations."""
+    absolute_path = os.path.abspath(os.fspath(path))
+    if os.path.realpath(absolute_path) != absolute_path:
+        raise BackupError("SQLite path must not contain symlinks")
     try:
-        store.initialize()
-    except Exception as exc:
-        store.close()
+        _prepare_private_sqlite_path(absolute_path)
+        uri = f"file:{quote(absolute_path, safe='/')}?mode=ro"
+        return sqlite3.connect(uri, uri=True, isolation_level=None)
+    except BackupError:
+        raise
+    except (OSError, sqlite3.Error) as exc:
+        raise BackupError("SQLite source is unavailable") from exc
+
+
+def _read_sqlite_schema_version(path: Path) -> int:
+    connection = _open_sqlite_readonly(path)
+    try:
+        try:
+            row = connection.execute(
+                "SELECT value FROM schema_meta WHERE key = 'schema_version'"
+            ).fetchone()
+        except sqlite3.Error as exc:
+            raise BackupError("SQLite schema metadata is unavailable") from exc
+        if row is None:
+            raise BackupError("SQLite schema metadata is unavailable")
+        try:
+            schema_version = int(row[0])
+        except (TypeError, ValueError) as exc:
+            raise BackupError("SQLite schema metadata is invalid") from exc
+        if schema_version < 1:
+            raise BackupError("SQLite schema metadata is invalid")
+        return schema_version
+    finally:
+        connection.close()
+
+
+def _backup_sqlite(source_path: Path, destination: Path) -> None:
+    """Copy a SQLite snapshot without opening it through the migrating store."""
+    if destination.exists():
+        raise BackupError("SQLite backup target already exists")
+    source = _open_sqlite_readonly(source_path)
+    target: Optional[sqlite3.Connection] = None
+    try:
+        try:
+            target = sqlite3.connect(str(destination), isolation_level=None)
+            source.backup(target)
+        except sqlite3.Error as exc:
+            raise BackupError("SQLite backup failed") from exc
+    finally:
+        source.close()
+        if target is not None:
+            target.close()
+    destination.chmod(0o600)
+
+
+def _read_postgresql_schema_version(database_url: str) -> int:
+    """Read PostgreSQL metadata without running the application's DDL path."""
+    try:
+        import psycopg
+
+        connection = psycopg.connect(
+            database_url,
+            autocommit=True,
+            connect_timeout=5,
+            application_name="zasi-backup-metadata",
+        )
+    except (ImportError, OSError) as exc:
         raise BackupError("PostgreSQL source is unavailable") from exc
-    return store
+    try:
+        try:
+            row = connection.execute(
+                "SELECT value FROM schema_meta WHERE key = 'schema_version'"
+            ).fetchone()
+        except Exception as exc:
+            raise BackupError("PostgreSQL schema metadata is unavailable") from exc
+        if row is None:
+            raise BackupError("PostgreSQL schema metadata is unavailable")
+        try:
+            schema_version = int(row[0])
+        except (TypeError, ValueError) as exc:
+            raise BackupError("PostgreSQL schema metadata is invalid") from exc
+        if schema_version < 1:
+            raise BackupError("PostgreSQL schema metadata is invalid")
+        return schema_version
+    finally:
+        connection.close()
 
 
 def create_backup(args: argparse.Namespace) -> int:
@@ -107,15 +184,23 @@ def create_backup(args: argparse.Namespace) -> int:
         raw_path = Path(directory) / (
             "control-plane.dump" if args.backend == "postgresql" else "control-plane.db"
         )
-        store = _source_for_backend(args.backend, args.source, args.database_url)
         try:
-            try:
-                schema_version = store.schema_version()
-                store.backup_to(str(raw_path))
-            except Exception as exc:
-                raise BackupError("database backup failed") from exc
-        finally:
-            store.close()
+            if args.backend == "sqlite":
+                source_path = _sqlite_source_path(args.source)
+                schema_version = _read_sqlite_schema_version(source_path)
+                _backup_sqlite(source_path, raw_path)
+            else:
+                database_url = _postgres_database_url(args.database_url)
+                schema_version = _read_postgresql_schema_version(database_url)
+                store = PostgresControlPlaneStore(database_url)
+                try:
+                    store.backup_to(str(raw_path))
+                finally:
+                    store.close()
+        except BackupError:
+            raise
+        except Exception as exc:
+            raise BackupError("database backup failed") from exc
         metadata = encrypt_file(
             raw_path,
             destination,
@@ -128,22 +213,25 @@ def create_backup(args: argparse.Namespace) -> int:
 
 
 def _validate_sqlite(raw_path: Path, expected_schema_version: int) -> None:
-    store = ControlPlaneStore(str(raw_path))
+    connection = _open_sqlite_readonly(raw_path)
     try:
         try:
-            store.initialize()
-            if store.schema_version() != expected_schema_version:
+            schema_row = connection.execute(
+                "SELECT value FROM schema_meta WHERE key = 'schema_version'"
+            ).fetchone()
+            if schema_row is None or int(schema_row[0]) != expected_schema_version:
                 raise BackupError(
                     "SQLite backup schema version does not match its envelope"
                 )
-            if not store.integrity_check():
+            integrity_row = connection.execute("PRAGMA integrity_check").fetchone()
+            if integrity_row is None or integrity_row[0] != "ok":
                 raise BackupError("SQLite backup integrity check failed")
         except BackupError:
             raise
-        except Exception as exc:
+        except (TypeError, ValueError, sqlite3.Error) as exc:
             raise BackupError("SQLite backup validation failed") from exc
     finally:
-        store.close()
+        connection.close()
 
 
 def _validate_postgresql_archive(raw_path: Path) -> None:

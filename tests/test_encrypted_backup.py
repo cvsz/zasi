@@ -1,6 +1,7 @@
 import hashlib
 import base64
 import os
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -191,6 +192,79 @@ class EncryptedBackupTests(unittest.TestCase):
             )
             self.assertIsNotNone(tenant)
             restored_store.close()
+
+    def test_backup_and_validation_preserve_an_older_sqlite_schema(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "legacy.db"
+            encrypted = root / "legacy-backup.zasi"
+            connection = sqlite3.connect(source)
+            try:
+                connection.execute(
+                    "CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+                )
+                connection.execute(
+                    "INSERT INTO schema_meta(key, value) VALUES('schema_version', '10')"
+                )
+                connection.commit()
+            finally:
+                connection.close()
+            source.chmod(0o600)
+
+            environment = os.environ.copy()
+            environment["ZASI_BACKUP_KEY_B64"] = base64.b64encode(self.KEY).decode(
+                "ascii"
+            )
+            script = (
+                Path(__file__).resolve().parents[1]
+                / "scripts"
+                / "backup_control_plane.py"
+            )
+
+            create = subprocess.run(
+                [
+                    sys.executable,
+                    str(script),
+                    "create",
+                    "--backend",
+                    "sqlite",
+                    "--source",
+                    str(source),
+                    "--destination",
+                    str(encrypted),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+            self.assertEqual(create.returncode, 0, create.stderr)
+            metadata, _ = open_sealed(encrypted.read_bytes(), self.KEY)
+            self.assertEqual(metadata.schema_version, 10)
+
+            validate = subprocess.run(
+                [
+                    sys.executable,
+                    str(script),
+                    "validate",
+                    "--backup",
+                    str(encrypted),
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                env=environment,
+            )
+            self.assertEqual(validate.returncode, 0, validate.stderr)
+
+            connection = sqlite3.connect(source)
+            try:
+                row = connection.execute(
+                    "SELECT value FROM schema_meta WHERE key = 'schema_version'"
+                ).fetchone()
+            finally:
+                connection.close()
+            self.assertEqual(row[0], "10")
 
     def test_backup_cli_fails_closed_without_injected_key(self):
         environment = os.environ.copy()
