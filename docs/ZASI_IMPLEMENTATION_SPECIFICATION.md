@@ -1799,7 +1799,7 @@ unverified deployment gates. The core PostgreSQL/Redis, CI, cockpit, and
 encrypted-backup hardening is recorded through signed code commit `49bba1c`,
 with the scheduler fixture, bounded outbox worker, protected release signing,
 and durable action-worker follow-up in signed commits `25ad5f3`, `1c1dd62`,
-`7ba35f9`, `eaf4c15`, `17e3771`, and `3e61e9a`. PR
+`7ba35f9`, `eaf4c15`, `17e3771`, `3e61e9a`, and `71db73a`. PR
 [#29](https://github.com/cvsz/zasi/pull/29) passed hosted
 checks for exact pushed verification head `e19d4de7e0d7d0e47745e0cf0982ab5b4806798a`,
 which includes the bounded outbox worker, release-signing gate, and evidence
@@ -1811,8 +1811,8 @@ implementation claim.
 
 | Command or inspection | Observed result | Evidence class |
 |---|---|---|
-| `python3 -m unittest discover -s tests -q` | 284 tests passed, 2 optional live-service checks skipped | Local functional regression |
-| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 284 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
+| `python3 -m unittest discover -s tests -q` | 285 tests passed, 2 optional live-service checks skipped | Local functional regression |
+| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 285 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
 | Focused control-plane/security suite (`tests.test_control_plane_core`, `tests.test_control_plane_broker`, `tests.test_control_plane_api`, `tests.test_security_hardening`, `tests.test_egress_security`) | Passed, including memory-hard API-key verification and TLS 1.2 floor tests | Local governed/security regression |
 | Focused outbox worker suite (`tests.test_outbox_worker tests.test_control_plane_core`) | 20 tests passed; bounded polling, interruptible shutdown, retry/dead-letter preservation, configuration fail-closed behavior, and worker identifier validation covered | Local outbox worker regression |
 | `PYTHONPATH=. python3 -m unittest tests.test_release_signing -v` | 4 tests passed; artifact selection/checksum determinism and protected release workflow requirements covered | Local release-signing regression |
