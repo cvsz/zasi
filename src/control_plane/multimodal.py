@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import io
 import math
 import re
 import struct
@@ -18,6 +19,9 @@ from typing import Any, Dict, Iterable, List, Sequence, Tuple
 
 MAX_ARTIFACT_BYTES = 16 * 1024 * 1024
 MAX_GEOMETRY_RECORDS = 2_000_000
+MAX_TOPOLOGY_RECORDS = 2_000_000
+MAX_OBJ_VERTICES = min(MAX_GEOMETRY_RECORDS, MAX_ARTIFACT_BYTES // 64)
+MAX_OBJ_RECORDS = MAX_OBJ_VERTICES * 2
 MAX_IMAGE_DIMENSION = 32_768
 MAX_DECODED_IMAGE_BYTES = 64 * 1024 * 1024
 
@@ -25,6 +29,11 @@ _NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?"
 _NUMBER_RE = re.compile(rf"^{_NUMBER}$")
 _STEP_POINT_RE = re.compile(
     r"\bCARTESIAN_POINT\s*\(\s*'(?:[^']|'')*'\s*,\s*\(\s*([^)]*?)\s*\)\s*\)",
+    re.IGNORECASE,
+)
+_STEP_TOPOLOGY_RE = re.compile(
+    r"\b(?:(?P<edge>(?:ORIENTED_)?EDGE\s*\()|"
+    r"(?P<face>(?:ADVANCED_FACE|FACE_SURFACE|ORIENTED_FACE)\s*\())",
     re.IGNORECASE,
 )
 _STEP_UNIT_RE = re.compile(
@@ -94,12 +103,15 @@ def _bounds(points: Iterable[Tuple[float, float, float]]) -> Dict[str, Dict[str,
         axis: max(point[index] for point in values)
         for index, axis in enumerate(("x", "y", "z"))
     }
+    dimensions = {
+        axis: maximum[axis] - minimum[axis] for axis in ("x", "y", "z")
+    }
+    if not all(math.isfinite(value) for value in dimensions.values()):
+        raise ArtifactFormatError("geometry bounding-box dimensions are not finite")
     return {
         "minimum": minimum,
         "maximum": maximum,
-        "dimensions": {
-            axis: maximum[axis] - minimum[axis] for axis in ("x", "y", "z")
-        },
+        "dimensions": dimensions,
     }
 
 
@@ -135,6 +147,19 @@ def _unit_name(prefix: str, unit: str) -> str:
     }.get(prefix.upper(), "unknown")
 
 
+def _step_topology_counts(text: str) -> Tuple[int, int]:
+    edge_count = 0
+    face_count = 0
+    for match in _STEP_TOPOLOGY_RE.finditer(text):
+        if match.group("edge") is not None:
+            edge_count += 1
+        else:
+            face_count += 1
+        if edge_count + face_count > MAX_TOPOLOGY_RECORDS:
+            raise ArtifactFormatError("STEP topology record limit exceeded")
+    return edge_count, face_count
+
+
 def _step(data: bytes) -> Dict[str, Any]:
     try:
         text = data.decode("ascii")
@@ -142,24 +167,44 @@ def _step(data: bytes) -> Dict[str, Any]:
         raise ArtifactFormatError("STEP content must be ASCII") from exc
     clean_text = re.sub(r"/\*.*?\*/", "", text, flags=re.DOTALL)
     normalized = clean_text.lstrip("\ufeff \t\r\n")
-    upper_text = normalized.upper()
-    if (
-        not normalized.startswith("ISO-10303-21;")
-        or "HEADER;" not in upper_text
-        or "DATA;" not in upper_text
-        or "ENDSEC;" not in upper_text
-        or "END-ISO-10303-21;" not in upper_text
-    ):
+    if not normalized.upper().startswith("ISO-10303-21;"):
         raise ArtifactFormatError("STEP exchange structure is invalid")
+    def step_marker(name: str, start: int = 0) -> Tuple[int, int] | None:
+        match = re.search(
+            rf"(?:\A|[;\r\n])\s*{name}\s*;",
+            clean_text[start:],
+            re.IGNORECASE,
+        )
+        if match is None:
+            return None
+        return start + match.start(), start + match.end()
+
+    header_match = step_marker("HEADER")
+    if header_match is None:
+        raise ArtifactFormatError("STEP header section is missing")
+    header_end = step_marker("ENDSEC", header_match[1])
+    if header_end is None:
+        raise ArtifactFormatError("STEP header section is incomplete")
+    data_match = step_marker("DATA", header_end[1])
+    if data_match is None:
+        raise ArtifactFormatError("STEP data section is missing")
+    data_end = step_marker("ENDSEC", data_match[1])
+    if data_end is None:
+        raise ArtifactFormatError("STEP data section is incomplete")
+    end_iso = step_marker("END-ISO-10303-21", data_end[1])
+    if end_iso is None:
+        raise ArtifactFormatError("STEP exchange terminator is missing")
+    data_text = clean_text[data_match[1] : data_end[0]]
     points: List[Tuple[float, float, float]] = []
-    for match in _STEP_POINT_RE.finditer(clean_text):
+    for match in _STEP_POINT_RE.finditer(data_text):
         if len(points) >= MAX_GEOMETRY_RECORDS:
             raise ArtifactFormatError("STEP geometry record limit exceeded")
         points.append(_coordinates(match.group(1).split(",")))
     if not points:
         raise ArtifactFormatError("STEP contains no CARTESIAN_POINT geometry")
-    unit_match = _STEP_UNIT_RE.search(clean_text)
+    unit_match = _STEP_UNIT_RE.search(data_text)
     units = _unit_name(unit_match.group(1), unit_match.group(2)) if unit_match else "unknown"
+    edge_count, face_count = _step_topology_counts(data_text)
     return {
         "format": "STEP",
         "parser": "zasi.step.stdlib",
@@ -167,10 +212,8 @@ def _step(data: bytes) -> Dict[str, Any]:
         "geometry_status": "measured",
         "units": units,
         "vertex_count": len(points),
-        "edge_count": len(re.findall(r"\b(?:ORIENTED_)?EDGE\s*\(", clean_text, re.IGNORECASE)),
-        "face_count": len(
-            re.findall(r"\b(?:ADVANCED_FACE|FACE_SURFACE|ORIENTED_FACE)\s*\(", clean_text, re.IGNORECASE)
-        ),
+        "edge_count": edge_count,
+        "face_count": face_count,
         "triangle_count": None,
         "bounding_box": _bounds(points),
         "analysis": {"fea": "not_run", "thermal": "not_run"},
@@ -296,26 +339,41 @@ def _obj(data: bytes) -> Dict[str, Any]:
         raise ArtifactFormatError("OBJ content must be UTF-8") from exc
     points: List[Tuple[float, float, float]] = []
     face_count = 0
-    for line_number, line in enumerate(text.splitlines(), 1):
-        if line_number > MAX_GEOMETRY_RECORDS:
-            raise ArtifactFormatError("OBJ record limit exceeded")
-        fields = line.strip().split()
-        if not fields or fields[0].startswith("#"):
-            continue
-        if fields[0] == "v":
-            points.append(_coordinates(fields[1:]))
-        elif fields[0] == "f":
-            if len(fields) < 4:
-                raise ArtifactFormatError("OBJ face must contain at least three vertices")
-            for reference in fields[1:]:
-                index = reference.split("/", 1)[0]
-                try:
-                    vertex_index = int(index)
-                except ValueError as exc:
-                    raise ArtifactFormatError("OBJ face contains an invalid vertex index") from exc
-                if vertex_index == 0 or abs(vertex_index) > len(points):
-                    raise ArtifactFormatError("OBJ face references a missing vertex")
-            face_count += 1
+    with io.StringIO(text) as stream:
+        for line_number, line in enumerate(stream, 1):
+            if line_number > MAX_OBJ_RECORDS:
+                raise ArtifactFormatError("OBJ record limit exceeded")
+            fields = line.strip().split()
+            if not fields or fields[0].startswith("#"):
+                continue
+            if fields[0] == "v":
+                if len(points) >= MAX_OBJ_VERTICES:
+                    raise ArtifactFormatError("OBJ vertex limit exceeded")
+                if len(fields) not in {4, 5}:
+                    raise ArtifactFormatError("OBJ vertex must contain three coordinates and an optional w")
+                point = _coordinates(fields[1:4])
+                if len(fields) == 5:
+                    weight = _finite_coordinate(fields[4])
+                    if weight == 0:
+                        raise ArtifactFormatError("OBJ homogeneous coordinate cannot be zero")
+                    point = tuple(value / weight for value in point)  # type: ignore[assignment]
+                    if not all(math.isfinite(value) for value in point):
+                        raise ArtifactFormatError("OBJ homogeneous coordinate overflows")
+                points.append(point)
+            elif fields[0] == "f":
+                if len(fields) < 4:
+                    raise ArtifactFormatError("OBJ face must contain at least three vertices")
+                if face_count >= MAX_OBJ_VERTICES:
+                    raise ArtifactFormatError("OBJ face limit exceeded")
+                for reference in fields[1:]:
+                    index = reference.split("/", 1)[0]
+                    try:
+                        vertex_index = int(index)
+                    except ValueError as exc:
+                        raise ArtifactFormatError("OBJ face contains an invalid vertex index") from exc
+                    if vertex_index == 0 or abs(vertex_index) > len(points):
+                        raise ArtifactFormatError("OBJ face references a missing vertex")
+                face_count += 1
     if not points:
         raise ArtifactFormatError("OBJ contains no vertices")
     return {
@@ -364,24 +422,57 @@ def parse_cad_artifact(data: bytes, media_type: str) -> Dict[str, Any]:
 def _png_dimensions_and_digest(data: bytes) -> Tuple[Dict[str, int], str]:
     if len(data) < 33 or not data.startswith(b"\x89PNG\r\n\x1a\n"):
         raise ArtifactFormatError("PNG signature is invalid")
-    if data[12:16] != b"IHDR":
+    first_size = struct.unpack_from(">I", data, 8)[0]
+    if first_size != 13 or data[12:16] != b"IHDR":
         raise ArtifactFormatError("PNG IHDR chunk is missing")
+    first_crc = struct.unpack_from(">I", data, 29)[0]
+    if (zlib.crc32(data[12:29]) & 0xFFFFFFFF) != first_crc:
+        raise ArtifactFormatError("PNG IHDR CRC is invalid")
     width, height, bit_depth, color_type, compression, filtering, interlace = struct.unpack(
         ">IIBBBBB", data[16:29]
     )
     if not 1 <= width <= MAX_IMAGE_DIMENSION or not 1 <= height <= MAX_IMAGE_DIMENSION:
         raise ArtifactFormatError("PNG dimensions are outside the safe bound")
-    if bit_depth == 0 or compression != 0 or filtering != 0 or interlace not in {0, 1}:
+    allowed_bit_depths = {
+        0: {1, 2, 4, 8, 16},
+        2: {8, 16},
+        3: {1, 2, 4, 8},
+        4: {8, 16},
+        6: {8, 16},
+    }
+    if (
+        bit_depth not in allowed_bit_depths.get(color_type, set())
+        or compression != 0
+        or filtering != 0
+        or interlace not in {0, 1}
+    ):
         raise ArtifactFormatError("PNG encoding is unsupported")
     channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}.get(color_type)
     if channels is None:
         raise ArtifactFormatError("PNG color type is unsupported")
     row_bytes = (width * bit_depth * channels + 7) // 8
-    expected_decoded_size = (row_bytes + 1) * height
+    if interlace == 0:
+        expected_decoded_size = (row_bytes + 1) * height
+    else:
+        expected_decoded_size = 0
+        for start_x, start_y, step_x, step_y in (
+            (0, 0, 8, 8),
+            (4, 0, 8, 8),
+            (0, 4, 4, 8),
+            (2, 0, 4, 4),
+            (0, 2, 2, 4),
+            (1, 0, 2, 2),
+            (0, 1, 1, 2),
+        ):
+            pass_width = (width - start_x + step_x - 1) // step_x if width > start_x else 0
+            pass_height = (height - start_y + step_y - 1) // step_y if height > start_y else 0
+            pass_row_bytes = (pass_width * bit_depth * channels + 7) // 8
+            expected_decoded_size += (pass_row_bytes + 1) * pass_height
     if expected_decoded_size > MAX_DECODED_IMAGE_BYTES:
         raise ArtifactFormatError("PNG decoded image exceeds the safe memory bound")
     idat = bytearray()
     offset = 8
+    seen_ihdr = False
     seen_iend = False
     while offset + 12 <= len(data):
         size = struct.unpack_from(">I", data, offset)[0]
@@ -390,13 +481,23 @@ def _png_dimensions_and_digest(data: bytes) -> Tuple[Dict[str, int], str]:
             raise ArtifactFormatError("PNG chunk exceeds artifact bounds")
         kind = data[offset + 4 : offset + 8]
         payload = data[offset + 8 : offset + 8 + size]
+        stored_crc = struct.unpack_from(">I", data, end - 4)[0]
+        if (zlib.crc32(kind + payload) & 0xFFFFFFFF) != stored_crc:
+            raise ArtifactFormatError("PNG chunk CRC is invalid")
+        if kind == b"IHDR":
+            if seen_ihdr or offset != 8:
+                raise ArtifactFormatError("PNG IHDR chunk is duplicated or misplaced")
+            seen_ihdr = True
         if kind == b"IDAT":
             idat.extend(payload)
         if kind == b"IEND":
+            if size != 0:
+                raise ArtifactFormatError("PNG IEND chunk is invalid")
             seen_iend = True
+            offset = end
             break
         offset = end
-    if not idat or not seen_iend:
+    if not seen_ihdr or not idat or not seen_iend or offset != len(data):
         raise ArtifactFormatError("PNG image data is incomplete")
     try:
         decompressor = zlib.decompressobj()
@@ -408,8 +509,7 @@ def _png_dimensions_and_digest(data: bytes) -> Tuple[Dict[str, int], str]:
         or not decompressor.eof
         or decompressor.unconsumed_tail
         or decompressor.unused_data
-        or interlace == 0
-        and len(decoded) != expected_decoded_size
+        or len(decoded) != expected_decoded_size
     ):
         raise ArtifactFormatError("PNG decoded image is incomplete or exceeds the safe bound")
     return {"width": width, "height": height}, hashlib.sha256(decoded).hexdigest()
@@ -509,19 +609,24 @@ def analyze_image_artifact(data: bytes, media_type: str) -> Dict[str, Any]:
     elif normalized_type == "image/jpeg" or data.startswith(b"\xff\xd8"):
         image_format = "JPEG"
         dimensions = _jpeg_dimensions(data)
-        pixel_digest = hashlib.sha256(data).hexdigest()
+        pixel_digest = None
     else:
         raise ArtifactFormatError("image media type is not supported by the reference adapter")
     return {
         "format": image_format,
         "dimensions": dimensions,
         "content_digest": artifact_digest(data),
-        "pixel_digest": "sha256:" + pixel_digest,
+        "pixel_digest": None,
+        "decoded_payload_digest": (
+            "sha256:" + pixel_digest if image_format == "PNG" else None
+        ),
+        "encoded_content_digest": artifact_digest(data),
         "semantic_model": "not_configured",
         "labels": [],
         "confidence": None,
         "disclosure": (
-            "The supplied image bytes were decoded for format, dimensions, and content fingerprints. "
-            "No semantic vision model is configured; labels and confidence are unavailable."
+            "The supplied image bytes were structurally validated for format and dimensions. "
+            "PNG decompressed payload and encoded-content fingerprints are recorded; JPEG pixels "
+            "were not decoded. No semantic vision model is configured; labels and confidence are unavailable."
         ),
     }

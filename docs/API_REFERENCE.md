@@ -58,12 +58,15 @@ cursor is accepted only for migration compatibility.
   manufacturing safety remain `not_run` or unavailable. The only accepted
   `analysis_kind` is `geometry`; unsupported solver kinds return a typed `422`
   error rather than creating verified evidence.
-- `POST /api/v2/vision/analyze` decodes supplied PNG/JPEG structure and content
-  fingerprints. It returns `verified` structural observation with
+- `POST /api/v2/vision/analyze` structurally validates supplied PNG/JPEG bytes
+  and records content fingerprints. It returns `verified` structural observation with
   `semantic_model: not_configured`; semantic labels and confidence remain
   unavailable until an independently evaluated model adapter is configured.
   The only accepted `analysis_kind` is `metadata`; semantic requests return a
-  typed `422` error.
+  typed `422` error. `encoded_content_digest` identifies the source bytes;
+  `decoded_payload_digest` is available for bounded PNG scanline payloads, and
+  `pixel_digest` remains `null` because JPEG pixels are not decoded by the
+  reference adapter.
 - `GET /api/v2/vision/{analysis_id}` retrieves the tenant-scoped immutable
   vision evidence record only when its evidence kind and adapter provenance
   identify the image-metadata procedure. The CAD retrieval route applies the

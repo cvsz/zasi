@@ -139,7 +139,7 @@ storage with pairing idempotency, typed intents/plans, deterministic risk policy
 approvals, brokered trusted handlers, immutable evidence, audit/event/outbox
 transactions, tenant-cursored SSE replay/resync, durable rate limits, bounded
 artifact quarantine with digest-checked content retrieval, source-backed
-STEP/STL/OBJ geometry observation, PNG/JPEG structural image observation,
+STEP/STL/OBJ geometry observation, PNG/JPEG structurally validated image observation,
 dual-stack egress validation helpers, CSP-safe bundled frontend delivery,
 supervised Electron startup, and a bounded durable Goal/Task DAG with
 dependency gating, worker leases, idempotent task creation, and atomic
@@ -1236,11 +1236,14 @@ as CAD output.
 
 Every analysis result MUST identify source artifact digest, model/adapter version, preprocessing, timestamp, confidence as a non-authoritative signal, and limitations. Visual similarity or competitor analysis is advisory unless independently sourced and verified.
 
-The current reference image adapter decodes actual PNG/JPEG structure and
-content fingerprints. It records dimensions and source-derived fingerprints
-with `semantic_model: not_configured`; it emits no semantic labels or
-confidence. The API accepts only the server-defined `metadata` analysis kind;
-semantic requests are rejected before evidence creation. Vision retrieval
+The current reference image adapter structurally validates actual PNG/JPEG bytes
+and records source-derived fingerprints with `semantic_model: not_configured`;
+it emits no semantic labels or
+confidence. `encoded_content_digest` identifies the source bytes,
+`decoded_payload_digest` is limited to bounded PNG scanline payloads, and
+`pixel_digest` is explicitly `null` because the reference adapter does not
+decode JPEG pixels. The API accepts only the server-defined `metadata` analysis
+kind; semantic requests are rejected before evidence creation. Vision retrieval
 checks the observation kind and `zasi.image-metadata` adapter identity. A future
 detector must identify its model, preprocessing, and independent evaluation
 before semantic results can be exposed.
@@ -1703,6 +1706,7 @@ Validation:
 - malformed artifact and source digest tests;
 - source-backed STEP geometry and image fingerprint tests;
 - bounded PNG decompression, complete JPEG marker, ASCII STL structure, and SI-prefix tests;
+- PNG CRC/bit-depth/Adam7 validation, finite geometry bounds, bounded topology/OBJ memory, and OBJ homogeneous-coordinate tests;
 - authorized mesh-content retrieval and tamper rejection tests;
 - OBJ upload reachability, unsupported analysis-kind rejection, typed evidence-route filtering, and viewer unmount cancellation tests;
 - stale/missing evidence tests;
@@ -1949,9 +1953,9 @@ implementation claim.
 
 | Command or inspection | Observed result | Evidence class |
 |---|---|---|
-| `python3 -m unittest discover -s tests -q` | 345 tests passed, 2 optional live-service checks skipped; current-tree run completed with `OK` | Local functional regression |
-| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 345 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
-| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest tests.test_multimodal_adapters -v` | 18 tests passed; source-backed STEP/STL/OBJ measurement, binary-STL offsets, SI-prefix handling, ASCII-STL structure, bounded PNG decompression, complete JPEG marker structure, PNG input dependence, authorized OBJ/STEP content retrieval, digest tamper rejection, unsupported analysis-kind rejection, typed evidence-route filtering, and vision evidence retrieval were verified | Local multimodal artifact regression |
+| `python3 -m unittest discover -s tests -q` | 350 tests passed, 2 optional live-service checks skipped; current-tree run completed with `OK` | Local functional regression |
+| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 350 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
+| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest tests.test_multimodal_adapters -v` | 23 tests passed; source-backed STEP/STL/OBJ measurement, ordered DATA-section parsing, binary-STL offsets, SI-prefix handling, finite bounds, ASCII-STL structure, bounded PNG decompression/CRC/bit-depth/Adam7 validation, complete JPEG marker structure, explicit encoded-vs-decoded image digests, authorized OBJ/STEP content retrieval, digest tamper rejection, unsupported analysis-kind rejection, typed evidence-route filtering, and vision evidence retrieval were verified | Local multimodal artifact regression |
 | Focused control-plane/security suite (`tests.test_control_plane_core`, `tests.test_control_plane_broker`, `tests.test_control_plane_api`, `tests.test_security_hardening`, `tests.test_egress_security`) | Passed, including memory-hard API-key verification and TLS 1.2 floor tests | Local governed/security regression |
 | Focused outbox worker suite (`tests.test_outbox_worker tests.test_control_plane_core`) | 28 tests passed; bounded polling, interruptible shutdown, retry/dead-letter preservation, expired-lease reclaim, conditional-claim race handling, configuration fail-closed behavior, and worker identifier validation covered | Local outbox worker regression |
 | `PYTHONPATH=. python3 -m unittest tests.test_release_signing -v` | 5 tests passed; artifact selection/checksum determinism, signed-bundle publication, and protected release workflow requirements covered | Local release-signing regression |

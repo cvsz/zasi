@@ -106,6 +106,38 @@ END-ISO-10303-21;
 
         self.assertEqual(result["units"], "pm")
 
+    def test_step_geometry_is_read_only_from_the_ordered_data_section(self):
+        from src.control_plane.multimodal import ArtifactFormatError, parse_cad_artifact
+
+        header_only_point = b"""ISO-10303-21;
+HEADER;
+#1=CARTESIAN_POINT('header',(1.,2.,3.));
+ENDSEC;
+DATA;
+ENDSEC;
+END-ISO-10303-21;
+"""
+
+        with self.assertRaises(ArtifactFormatError):
+            parse_cad_artifact(header_only_point, "application/step")
+
+    def test_step_topology_and_derived_dimensions_are_bounded(self):
+        import src.control_plane.multimodal as multimodal
+
+        topology = STEP_FIXTURE.replace(
+            b"#5=ADVANCED_FACE('',(),$);",
+            b"#5=EDGE('',(),$);#6=EDGE('',(),$);#7=EDGE('',(),$);",
+        )
+        with patch.object(multimodal, "MAX_TOPOLOGY_RECORDS", 2):
+            with self.assertRaises(multimodal.ArtifactFormatError):
+                multimodal.parse_cad_artifact(topology, "application/step")
+
+        overflowing = STEP_FIXTURE.replace(
+            b"(0.,0.,0.)", b"(-1e308,0.,0.)"
+        ).replace(b"(25.,10.,5.)", b"(1e308,10.,5.)")
+        with self.assertRaises(multimodal.ArtifactFormatError):
+            multimodal.parse_cad_artifact(overflowing, "application/step")
+
     def test_mesh_parsers_measure_actual_stl_and_obj_vertices(self):
         from src.control_plane.multimodal import parse_cad_artifact
 
@@ -166,6 +198,23 @@ endsolid test
         with self.assertRaises(ArtifactFormatError):
             parse_cad_artifact(vertex_lines_without_facets, "model/stl")
 
+    def test_obj_accepts_and_normalizes_an_optional_homogeneous_coordinate(self):
+        from src.control_plane.multimodal import parse_cad_artifact
+
+        obj = b"v 0 0 0 2\nv 2 0 0 2\nv 0 4 0 2\nf 1 2 3\n"
+
+        result = parse_cad_artifact(obj, "model/obj")
+
+        self.assertEqual(result["bounding_box"]["dimensions"], {"x": 1.0, "y": 2.0, "z": 0.0})
+
+    def test_obj_vertex_materialization_has_a_memory_derived_bound(self):
+        import src.control_plane.multimodal as multimodal
+
+        obj = b"v 0 0 0\nv 1 0 0\nv 0 1 0\n"
+        with patch.object(multimodal, "MAX_OBJ_VERTICES", 2):
+            with self.assertRaises(multimodal.ArtifactFormatError):
+                multimodal.parse_cad_artifact(obj, "model/obj")
+
     def test_image_observation_changes_with_actual_png_input(self):
         try:
             from src.control_plane.multimodal import analyze_image_artifact
@@ -181,7 +230,8 @@ endsolid test
         self.assertEqual(red_result["dimensions"], {"width": 2, "height": 1})
         self.assertEqual(red_result["semantic_model"], "not_configured")
         self.assertNotEqual(red_result["content_digest"], blue_result["content_digest"])
-        self.assertNotEqual(red_result["pixel_digest"], blue_result["pixel_digest"])
+        self.assertNotEqual(red_result["decoded_payload_digest"], blue_result["decoded_payload_digest"])
+        self.assertIsNone(red_result["pixel_digest"])
 
     def test_png_decoder_rejects_dimensions_that_exceed_decoded_memory_bound(self):
         from src.control_plane.multimodal import ArtifactFormatError, analyze_image_artifact
@@ -247,6 +297,34 @@ endsolid test
             with self.assertRaises(multimodal.ArtifactFormatError):
                 multimodal.analyze_image_artifact(oversized_stream, "image/png")
 
+    def test_png_rejects_invalid_crc_bit_depth_and_interlaced_payload_length(self):
+        from src.control_plane.multimodal import ArtifactFormatError, analyze_image_artifact
+
+        def chunk(kind: bytes, payload: bytes, crc: int | None = None) -> bytes:
+            return (
+                struct.pack(">I", len(payload))
+                + kind
+                + payload
+                + struct.pack(">I", zlib.crc32(kind + payload) & 0xFFFFFFFF if crc is None else crc)
+            )
+
+        invalid_bit_depth = (
+            b"\x89PNG\r\n\x1a\n"
+            + chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 1, 2, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(b"\x00\x00"))
+            + chunk(b"IEND", b"")
+        )
+        invalid_crc = png_fixture(1, 1, b"\xff\x00\x00")[:-1] + bytes([png_fixture(1, 1, b"\xff\x00\x00")[-1] ^ 0x01])
+        invalid_adam7_payload = (
+            b"\x89PNG\r\n\x1a\n"
+            + chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 0, 0, 0, 1))
+            + chunk(b"IDAT", zlib.compress(b"\x00"))
+            + chunk(b"IEND", b"")
+        )
+        for image in (invalid_bit_depth, invalid_crc, invalid_adam7_payload):
+            with self.assertRaises(ArtifactFormatError):
+                analyze_image_artifact(image, "image/png")
+
     def test_jpeg_requires_scan_data_and_end_marker(self):
         from src.control_plane.multimodal import ArtifactFormatError, analyze_image_artifact
 
@@ -271,6 +349,8 @@ endsolid test
         result = analyze_image_artifact(complete_structure, "image/jpeg")
         self.assertEqual(result["format"], "JPEG")
         self.assertEqual(result["dimensions"], {"width": 1, "height": 1})
+        self.assertIsNone(result["pixel_digest"])
+        self.assertEqual(result["encoded_content_digest"], result["content_digest"])
 
 
 class MultimodalApiTests(unittest.IsolatedAsyncioTestCase):
