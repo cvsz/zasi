@@ -52,12 +52,14 @@ cursor is accepted only for migration compatibility.
   an attachment with `X-ZASI-Artifact-Digest`; the recorded digest is checked
   again immediately before serving.
 - `POST /api/v2/cad/analyze` reads the quarantined bytes through the bounded
-  STEP/STL/OBJ source parser. Successful results are `verified` only for
-  measured source geometry (format, vertices/faces/triangles, units when
-  declared, and bounding box). FEA, thermal analysis, materials, mass, and
-  manufacturing safety remain `not_run` or unavailable. The only accepted
-  `analysis_kind` is `geometry`; unsupported solver kinds return a typed `422`
-  error rather than creating verified evidence.
+  STEP/STL/OBJ/glTF 2.0 source parser. glTF accepts GLB or JSON with embedded
+  base64 buffers; external buffer URIs are rejected and never fetched.
+  Successful results are `verified` only for measured source geometry (format,
+  vertices/faces/triangles, units when declared, and mesh-local bounding box).
+  FEA, thermal analysis, materials, mass, and manufacturing safety remain
+  `not_run` or unavailable. The only accepted `analysis_kind` is `geometry`;
+  unsupported solver kinds return a typed `422` error rather than creating
+  verified evidence.
 - `POST /api/v2/vision/analyze` structurally validates supplied PNG/JPEG bytes
   and records content fingerprints. It returns `verified` structural observation with
   `semantic_model: not_configured`; semantic labels and confidence remain

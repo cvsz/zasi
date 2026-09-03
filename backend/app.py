@@ -658,6 +658,8 @@ def create_app(
                     "model/iges",
                     "model/stl",
                     "model/obj",
+                    "model/gltf+json",
+                    "model/gltf-binary",
                     "image/png",
                     "image/jpeg",
                     "audio/wav",
@@ -1816,6 +1818,8 @@ def create_app(
             "model/iges",
             "model/stl",
             "model/obj",
+            "model/gltf+json",
+            "model/gltf-binary",
             "image/png",
             "image/jpeg",
             "audio/wav",
@@ -2070,7 +2074,13 @@ def create_app(
                 context,
                 evidence_kind="calculation",
                 adapter_ids=frozenset(
-                    {"zasi.cad.stdlib", "zasi.step.stdlib", "zasi.stl.stdlib", "zasi.obj.stdlib"}
+                    {
+                        "zasi.cad.stdlib",
+                        "zasi.step.stdlib",
+                        "zasi.stl.stdlib",
+                        "zasi.obj.stdlib",
+                        "zasi.gltf.stdlib",
+                    }
                 ),
             )
         except NotFoundError:

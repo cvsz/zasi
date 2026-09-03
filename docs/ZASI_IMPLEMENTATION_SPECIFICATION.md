@@ -139,7 +139,7 @@ storage with pairing idempotency, typed intents/plans, deterministic risk policy
 approvals, brokered trusted handlers, immutable evidence, audit/event/outbox
 transactions, tenant-cursored SSE replay/resync, durable rate limits, bounded
 artifact quarantine with digest-checked content retrieval, source-backed
-STEP/STL/OBJ geometry observation, PNG/JPEG structurally validated image observation,
+STEP/STL/OBJ/glTF 2.0 geometry observation, PNG/JPEG structurally validated image observation,
 dual-stack egress validation helpers, CSP-safe bundled frontend delivery,
 supervised Electron startup, and a bounded durable Goal/Task DAG with
 dependency gating, worker leases, idempotent task creation, and atomic
@@ -1212,7 +1212,9 @@ CAD processing pipeline:
 
 1. Authenticate upload and enforce size/type limits.
 2. Store artifact in quarantine with digest.
-3. Parse only supported STEP, STL, and OBJ formats with a versioned bounded parser.
+3. Parse only supported STEP, STL, OBJ, and glTF 2.0 formats with versioned
+   bounded parsers. glTF accepts GLB or JSON with embedded base64 buffers only;
+   external buffer URIs are rejected and never fetched.
 4. Reject malformed, oversized, or unsupported geometry.
 5. Compute derived geometry values with a named method and units when the source declares them.
 6. If stress or safety analysis is requested, invoke an approved solver adapter.
@@ -1221,16 +1223,18 @@ CAD processing pipeline:
 
 Caller-provided mass, stress, verification, or “approved” fields are inputs to review, not evidence.
 
-The current reference adapter measures source geometry from actual STEP/STL/OBJ
-bytes and records the source digest, parser version, vertex/face/triangle
-counts, and bounding box. `verified` applies only to that parser procedure;
-FEA, thermal, material, mass, manufacturing, and safety claims remain
-`not_run` or unavailable. Malformed or digest-mismatched quarantine content is
-rejected and never converted into geometry evidence. The API accepts only the
-server-defined `geometry` analysis kind; unsupported solver kinds are rejected
-before evidence creation. Typed CAD retrieval also checks the evidence kind and
-parser adapter identity, so an unrelated action evidence ID cannot be presented
-as CAD output.
+The current reference adapter measures source geometry from actual
+STEP/STL/OBJ/glTF 2.0 bytes and records the source digest, parser version,
+vertex/face/triangle counts, and bounding box. glTF bounds are explicitly
+mesh-local; node transforms, sparse accessors, materials, morph targets, and
+external buffers are not applied or fetched. `verified` applies only to the
+named parser procedure; FEA, thermal, material, mass, manufacturing, and
+safety claims remain `not_run` or unavailable. Malformed or digest-mismatched
+quarantine content is rejected and never converted into geometry evidence. The
+API accepts only the server-defined `geometry` analysis kind; unsupported solver
+kinds are rejected before evidence creation. Typed CAD retrieval also checks
+the evidence kind and parser adapter identity, so an unrelated action evidence
+ID cannot be presented as CAD output.
 
 ### 16.4 Vision and visual analysis
 
@@ -1697,7 +1701,7 @@ Outputs:
 
 - voice input with explicit auth signal;
 - source-backed briefing;
-- bounded source-backed CAD parser and artifact-content route;
+- bounded source-backed STEP/STL/OBJ/glTF CAD parser and artifact-content route;
 - structural image provenance with semantic-model disclosure;
 - simulation-only humanoid and mobile pairing.
 
@@ -1708,6 +1712,7 @@ Validation:
 - bounded PNG decompression, complete JPEG marker, ASCII STL structure, and SI-prefix tests;
 - PNG CRC/bit-depth/Adam7 validation, finite geometry bounds, bounded topology/OBJ memory, and OBJ homogeneous-coordinate tests;
 - bounded OBJ face-reference tokenization, valid Adam7 empty-pass sizing and filter bytes, JPEG frame/SOS component binding, STEP entity assignment, and rejected-evidence-ID envelope tests;
+- valid GLB header/chunk and accessor-bound tests, actual POSITION/index measurement for GLB and embedded-buffer JSON glTF, external-buffer rejection, missing-BIN rejection, oversized JSON-integer normalization, and exact base64 data-URI validation;
 - authorized mesh-content retrieval and tamper rejection tests;
 - OBJ upload reachability, unsupported analysis-kind rejection, typed evidence-route filtering, and viewer unmount cancellation tests;
 - stale/missing evidence tests;
@@ -1954,9 +1959,9 @@ implementation claim.
 
 | Command or inspection | Observed result | Evidence class |
 |---|---|---|
-| `python3 -m unittest discover -s tests -q` | 353 tests passed, 2 optional live-service checks skipped; current-tree run completed with `OK` | Local functional regression |
-| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 353 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
-| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest tests.test_multimodal_adapters -v` | 26 tests passed; source-backed STEP/STL/OBJ measurement, ordered DATA-section and assigned-entity parsing, binary-STL offsets, SI-prefix handling, finite bounds, ASCII-STL structure, bounded OBJ tokenization and face references, bounded PNG decompression/CRC/bit-depth/Adam7/filter validation, complete JPEG marker and frame/SOS component validation, explicit encoded-vs-decoded image digests, authorized OBJ/STEP content retrieval, digest tamper rejection, rejected-evidence-ID retrieval, unsupported analysis-kind rejection, typed evidence-route filtering, and vision evidence retrieval were verified | Local multimodal artifact regression |
+| `python3 -m unittest discover -s tests -q` | 360 tests passed, 2 optional live-service checks skipped; current-tree run completed with `OK` | Local functional regression |
+| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 360 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
+| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest tests.test_multimodal_adapters -q` | 33 tests passed; source-backed STEP/STL/OBJ/glTF 2.0 measurement, GLB and embedded-buffer JSON glTF chunk/accessor bounds, actual POSITION/index bytes, external-buffer rejection, missing-BIN rejection, oversized JSON-integer normalization, exact base64 data-URI validation, ordered DATA-section and assigned-entity parsing, binary-STL offsets, SI-prefix handling, finite bounds, ASCII-STL structure, bounded OBJ tokenization and face references, bounded PNG decompression/CRC/bit-depth/Adam7/filter validation, complete JPEG marker and frame/SOS component validation, explicit encoded-vs-decoded image digests, authorized mesh retrieval, digest tamper rejection, rejected-evidence-ID retrieval, unsupported analysis-kind rejection, typed evidence-route filtering, and vision evidence retrieval were verified | Local multimodal artifact regression |
 | Focused control-plane/security suite (`tests.test_control_plane_core`, `tests.test_control_plane_broker`, `tests.test_control_plane_api`, `tests.test_security_hardening`, `tests.test_egress_security`) | Passed, including memory-hard API-key verification and TLS 1.2 floor tests | Local governed/security regression |
 | Focused outbox worker suite (`tests.test_outbox_worker tests.test_control_plane_core`) | 28 tests passed; bounded polling, interruptible shutdown, retry/dead-letter preservation, expired-lease reclaim, conditional-claim race handling, configuration fail-closed behavior, and worker identifier validation covered | Local outbox worker regression |
 | `PYTHONPATH=. python3 -m unittest tests.test_release_signing -v` | 5 tests passed; artifact selection/checksum determinism, signed-bundle publication, and protected release workflow requirements covered | Local release-signing regression |
@@ -2034,7 +2039,7 @@ the acceptance criteria in [#9](https://github.com/cvsz/zasi/issues/9) through
 | [#13 / P4](https://github.com/cvsz/zasi/issues/13) | Partial, durable reference worker | Stable tool registry, request digests, run idempotency, approval gating, immutable queued payloads, worker leases/tokens, atomic evidence/events, bounded local retry, timeout/cancellation/unknown semantics, explicit authenticated reconciliation, and the R0/R1 `zasi-action-worker` path exist. Certified isolation, higher-risk worker deployment, external-side-effect proof, multi-process recovery, and production worker evidence remain open. |
 | [#14 / P5](https://github.com/cvsz/zasi/issues/14) | Partial, React 19 / Router 7 with checked TypeScript source | Dependencies are bundled and locked, the cockpit uses authenticated v2 transport, safe rendering, CSP, reconnect/resync state, and a strict TypeScript root entrypoint; the cockpit source is now checked in `cockpit.tsx` and `app.jsx` is only a compatibility export. Accessibility/performance evidence and broad event-driven workspace coverage remain open. |
 | [#15 / P6](https://github.com/cvsz/zasi/issues/15) | Partial, local durable orchestration/reference connectors | SQLite/PostgreSQL goals, tasks, schedules, task runs, project-scoped memory, source-backed briefings, connector health, and a fail-closed packaged Electron runtime contract exist. A continuously deployed production worker, real GitHub/email/calendar/files adapters, semantic retrieval, external-source freshness, complete per-platform runtime bundles, and independent multi-process evidence remain open. |
-| [#16 / P7](https://github.com/cvsz/zasi/issues/16) | Partial, local source-observation adapters | Artifact quarantine now feeds bounded source-backed STEP/STL/OBJ geometry parsing, authorized mesh bytes, and PNG/JPEG structural fingerprints with immutable evidence. Semantic vision, IGES/glTF conversion, FEA/thermal solvers, STT/TTS, anti-replay speaker verification, and hardware integration remain unenabled. |
+| [#16 / P7](https://github.com/cvsz/zasi/issues/16) | Partial, local source-observation adapters | Artifact quarantine now feeds bounded source-backed STEP/STL/OBJ/glTF 2.0 geometry parsing, authorized mesh bytes, and PNG/JPEG structural fingerprints with immutable evidence. glTF is limited to GLB or embedded base64 JSON buffers; semantic vision, IGES conversion, FEA/thermal solvers, STT/TTS, anti-replay speaker verification, and hardware integration remain unenabled. |
 | [#17 / P8](https://github.com/cvsz/zasi/issues/17) | Partial packaging and encrypted-backup hardening; NO-GO | Workflows, non-root container configuration, installer backup behavior, lockfiles, AES-GCM backup/restore mechanics, project-only Python/npm dependency audits, local signed wheel/sdist/SBOM/checksum evidence, a bounded local rollback rehearsal, a fail-closed protected-environment release-signing workflow, hosted CodeQL, and container builds exist. Dedicated source/container scanner provenance, managed retention/key rotation, hosted release provenance from an exercised tag, staging canary, production rollback observation, and independent verification remain open. |
 | [#18 roadmap](https://github.com/cvsz/zasi/issues/18) | Open roadmap | The phase order and release gates are captured here; issue completion must not be inferred from local test output. |
 
