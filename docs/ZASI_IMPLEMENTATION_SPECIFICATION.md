@@ -138,9 +138,11 @@ hashed session credentials, tenant-scoped repositories, device challenge
 storage with pairing idempotency, typed intents/plans, deterministic risk policy, exact-digest
 approvals, brokered trusted handlers, immutable evidence, audit/event/outbox
 transactions, tenant-cursored SSE replay/resync, durable rate limits, bounded
-artifact quarantine, dual-stack egress validation helpers, CSP-safe bundled
-frontend delivery, supervised Electron startup, and a bounded durable Goal/Task
-DAG with dependency gating, worker leases, idempotent task creation, and atomic
+artifact quarantine with digest-checked content retrieval, source-backed
+STEP/STL/OBJ geometry observation, PNG/JPEG structural image observation,
+dual-stack egress validation helpers, CSP-safe bundled frontend delivery,
+supervised Electron startup, and a bounded durable Goal/Task DAG with
+dependency gating, worker leases, idempotent task creation, and atomic
 completion events. The one enabled runtime
 tool is the local system-status observation; its evidence is `verified` by a
 named local readiness procedure and is not a claim about the historical
@@ -908,9 +910,11 @@ MCP discovery is read-only. MCP tool execution uses the same tool broker, capabi
 | Method | Route | Risk | Behavior |
 |---|---|---|---|
 | POST | /api/v2/artifacts | R1 | Upload bounded, typed artifact to quarantine |
+| GET | /api/v2/artifacts/{id}/content | R0 | Return tenant-authorized quarantined bytes after digest verification |
 | POST | /api/v2/cad/analyze | R1 | Parse and analyze an authorized artifact with provenance |
 | GET | /api/v2/cad/{analysis_id} | R0 | Retrieve analysis and disclosure |
 | POST | /api/v2/vision/analyze | R1 | Analyze an image or frame with source digest |
+| GET | /api/v2/vision/{analysis_id} | R0 | Retrieve vision evidence and disclosure |
 | POST | /api/v2/mobile/pair | R2 | Start one-time mobile device pairing |
 | POST | /api/v2/mobile/{device_id}/approve | R2 | Approve a pairing challenge |
 | GET | /api/v2/devices/{device_id}/telemetry | R0 | Retrieve authorized device telemetry |
@@ -1208,18 +1212,31 @@ CAD processing pipeline:
 
 1. Authenticate upload and enforce size/type limits.
 2. Store artifact in quarantine with digest.
-3. Parse only supported formats with a versioned parser.
+3. Parse only supported STEP, STL, and OBJ formats with a versioned bounded parser.
 4. Reject malformed, oversized, or unsupported geometry.
-5. Compute derived values with a named method and units.
+5. Compute derived geometry values with a named method and units when the source declares them.
 6. If stress or safety analysis is requested, invoke an approved solver adapter.
 7. Store evidence and disclosure.
 8. Permit download or downstream action only when policy allows.
 
 Caller-provided mass, stress, verification, or “approved” fields are inputs to review, not evidence.
 
+The current reference adapter measures source geometry from actual STEP/STL/OBJ
+bytes and records the source digest, parser version, vertex/face/triangle
+counts, and bounding box. `verified` applies only to that parser procedure;
+FEA, thermal, material, mass, manufacturing, and safety claims remain
+`not_run` or unavailable. Malformed or digest-mismatched quarantine content is
+rejected and never converted into geometry evidence.
+
 ### 16.4 Vision and visual analysis
 
 Every analysis result MUST identify source artifact digest, model/adapter version, preprocessing, timestamp, confidence as a non-authoritative signal, and limitations. Visual similarity or competitor analysis is advisory unless independently sourced and verified.
+
+The current reference image adapter decodes actual PNG/JPEG structure and
+content fingerprints. It records dimensions and source-derived fingerprints
+with `semantic_model: not_configured`; it emits no semantic labels or
+confidence. A future detector must identify its model, preprocessing, and
+independent evaluation before semantic results can be exposed.
 
 ### 16.5 Humanoid and hardware
 
@@ -1670,13 +1687,15 @@ Outputs:
 
 - voice input with explicit auth signal;
 - source-backed briefing;
-- quarantined CAD parser;
-- vision provenance;
+- bounded source-backed CAD parser and artifact-content route;
+- structural image provenance with semantic-model disclosure;
 - simulation-only humanoid and mobile pairing.
 
 Validation:
 
 - malformed artifact and source digest tests;
+- source-backed STEP geometry and image fingerprint tests;
+- authorized mesh-content retrieval and tamper rejection tests;
 - stale/missing evidence tests;
 - mobile challenge expiration and revoke tests.
 
@@ -1921,8 +1940,9 @@ implementation claim.
 
 | Command or inspection | Observed result | Evidence class |
 |---|---|---|
-| `python3 -m unittest discover -s tests -q` | 327 tests passed, 2 optional live-service checks skipped; current-tree run completed with `OK` | Local functional regression |
-| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 327 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
+| `python3 -m unittest discover -s tests -q` | 337 tests passed, 2 optional live-service checks skipped; current-tree run completed with `OK` | Local functional regression |
+| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 337 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
+| `PYTHONPATH=. python3 -m unittest tests.test_multimodal_adapters -v` | 10 tests passed; source-backed STEP/STL/OBJ measurement, binary-STL offsets, STEP comment/section validation, PNG input dependence and decoded-image memory bounds, authorized content retrieval, digest tamper rejection, and vision evidence retrieval were verified | Local multimodal artifact regression |
 | Focused control-plane/security suite (`tests.test_control_plane_core`, `tests.test_control_plane_broker`, `tests.test_control_plane_api`, `tests.test_security_hardening`, `tests.test_egress_security`) | Passed, including memory-hard API-key verification and TLS 1.2 floor tests | Local governed/security regression |
 | Focused outbox worker suite (`tests.test_outbox_worker tests.test_control_plane_core`) | 28 tests passed; bounded polling, interruptible shutdown, retry/dead-letter preservation, expired-lease reclaim, conditional-claim race handling, configuration fail-closed behavior, and worker identifier validation covered | Local outbox worker regression |
 | `PYTHONPATH=. python3 -m unittest tests.test_release_signing -v` | 5 tests passed; artifact selection/checksum determinism, signed-bundle publication, and protected release workflow requirements covered | Local release-signing regression |
@@ -1936,7 +1956,7 @@ implementation claim.
 | `python3 -m unittest tests.test_workflow_permissions -v` | 1 test passed; every GitHub Actions workflow declares a top-level `contents: read` baseline, including CodeQL | Local CI permission regression |
 | `PYTHONPATH=. python3 -m unittest tests.test_egress_security -v` | 10 tests passed; dual-stack SSRF rejection, redirect policy, TLS floor, connect deadline, bounded DNS resolution, resolver contention, absolute-deadline forwarding, and no-connect-after-resolution-timeout behavior were verified | Local egress security regression |
 | `python3 -m unittest tests.test_sbom tests.test_installer -v` | 5 tests passed; SBOM npm-coordinate deduplication, selected Python extras, deterministic output, and fresh installer build-output selection are covered | Local packaging regression |
-| `node tests/test_components.js` | Passed; verifies React 19/Router 7 pins, typed entrypoint ownership, local scripts, and governed route declarations | Local bundle/source safety assertions |
+| `node tests/test_components.js` | Passed; verifies React 19/Router 7 pins, typed entrypoint ownership, local scripts, governed route declarations, Engineering artifact workspace, and source-backed mesh loaders | Local bundle/source safety assertions |
 | `npm test` | Passed; frontend structural checks plus source-runtime, packaged-runtime, Windows runtime-layout, packaged-startup state-path, symlink-escape, and relocatability fail-closed tests | Local cockpit/Electron boundary regression |
 | `npm run electron-build` without `ZASI_ELECTRON_RUNTIME_ROOT` | Exited before artifact creation with the explicit per-platform runtime requirement | Local packaged-build fail-closed gate |
 | `npm run typecheck` | Passed with TypeScript 7 strict settings for the production entrypoint | Local frontend type safety |
@@ -1999,7 +2019,7 @@ the acceptance criteria in [#9](https://github.com/cvsz/zasi/issues/9) through
 | [#13 / P4](https://github.com/cvsz/zasi/issues/13) | Partial, durable reference worker | Stable tool registry, request digests, run idempotency, approval gating, immutable queued payloads, worker leases/tokens, atomic evidence/events, bounded local retry, timeout/cancellation/unknown semantics, explicit authenticated reconciliation, and the R0/R1 `zasi-action-worker` path exist. Certified isolation, higher-risk worker deployment, external-side-effect proof, multi-process recovery, and production worker evidence remain open. |
 | [#14 / P5](https://github.com/cvsz/zasi/issues/14) | Partial, React 19 / Router 7 with checked TypeScript source | Dependencies are bundled and locked, the cockpit uses authenticated v2 transport, safe rendering, CSP, reconnect/resync state, and a strict TypeScript root entrypoint; the cockpit source is now checked in `cockpit.tsx` and `app.jsx` is only a compatibility export. Accessibility/performance evidence and broad event-driven workspace coverage remain open. |
 | [#15 / P6](https://github.com/cvsz/zasi/issues/15) | Partial, local durable orchestration/reference connectors | SQLite/PostgreSQL goals, tasks, schedules, task runs, project-scoped memory, source-backed briefings, connector health, and a fail-closed packaged Electron runtime contract exist. A continuously deployed production worker, real GitHub/email/calendar/files adapters, semantic retrieval, external-source freshness, complete per-platform runtime bundles, and independent multi-process evidence remain open. |
-| [#16 / P7](https://github.com/cvsz/zasi/issues/16) | Unavailable by design | Artifact quarantine and provenance contracts exist; real CAD/STEP, vision, STT/TTS, anti-replay speaker verification, and hardware integration are not enabled. |
+| [#16 / P7](https://github.com/cvsz/zasi/issues/16) | Partial, local source-observation adapters | Artifact quarantine now feeds bounded source-backed STEP/STL/OBJ geometry parsing, authorized mesh bytes, and PNG/JPEG structural fingerprints with immutable evidence. Semantic vision, IGES/glTF conversion, FEA/thermal solvers, STT/TTS, anti-replay speaker verification, and hardware integration remain unenabled. |
 | [#17 / P8](https://github.com/cvsz/zasi/issues/17) | Partial packaging and encrypted-backup hardening; NO-GO | Workflows, non-root container configuration, installer backup behavior, lockfiles, AES-GCM backup/restore mechanics, project-only Python/npm dependency audits, local signed wheel/sdist/SBOM/checksum evidence, a bounded local rollback rehearsal, a fail-closed protected-environment release-signing workflow, hosted CodeQL, and container builds exist. Dedicated source/container scanner provenance, managed retention/key rotation, hosted release provenance from an exercised tag, staging canary, production rollback observation, and independent verification remain open. |
 | [#18 roadmap](https://github.com/cvsz/zasi/issues/18) | Open roadmap | The phase order and release gates are captured here; issue completion must not be inferred from local test output. |
 

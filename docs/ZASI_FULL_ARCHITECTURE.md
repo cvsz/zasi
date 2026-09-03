@@ -3,7 +3,7 @@
 > **Repository:** `cvsz/zasi`
 > **Target:** ZASI v33 Autonomous Chief-of-Staff architecture
 > **Current implementation baseline:** ZASI v32.0 governed reference transition
-> **Revision:** 2026-09-02 — implementation-status reconciliation after re-reading `docs/javis` and GitHub issues #9–#18
+> **Revision:** 2026-09-03 — implementation-status reconciliation after re-reading `docs/javis` and GitHub issues #9–#18
 > **Purpose:** End-to-end architecture for the J.A.R.V.I.S. / F.R.I.D.A.Y. / E.D.I.T.H. command system, upgraded into a production-oriented **Autonomous Chief-of-Staff runtime** that combines on-device voice intelligence, local-first execution, goal/task orchestration, evidence-grounded executive briefing, ZASI cognitive planning, formal verification, memory routing, MCP/tool fabric, durable scheduling, distributed services, and a next-generation operational cockpit.
 
 > **Runtime authority:** The design below is a target architecture. The
@@ -69,7 +69,8 @@ This is a source inspection snapshot, not a production-readiness claim. It preve
 |---|---|---|
 | `backend/app.py` | Authoritative FastAPI/ASGI owner with fail-closed session authentication, typed routes, policy/broker dispatch, schema-11 SQLite/PostgreSQL state including durable Goal/Task schedules, task runs, idempotency records, and leased action runs, Redis-backed shared rate limits, durable SSE replay/resync, and bundled cockpit serving. | Current governed reference slice; staging/production remain blocked until managed operations and deployment evidence are supplied. |
 | `backend/server.py` | Legacy standard-library compatibility server remains isolated from the authoritative import path; its historical WebSocket, catalog, chat, and mutation surfaces are not the production owner. | Compatibility/research edge only; do not use it as production evidence. |
-| `web/static/app.tsx` + `web/static/cockpit.tsx` + `web/static/app.jsx` | React 19 + React Router 7 cockpit uses a strict TypeScript root mount and fully checked TypeScript source for the authenticated v2 session, snapshot, capability registry, and SSE event feed. The historical JSX path is a compatibility re-export; the Vite output is the runtime bundle and no CDN runtime is required. | Current cockpit surface for Observe/Assist and governed command presentation; voice, humanoid, engineering visuals, accessibility, and performance evidence remain disclosure-bound. |
+| `web/static/app.tsx` + `web/static/cockpit.tsx` + `web/static/app.jsx` | React 19 + React Router 7 cockpit uses a strict TypeScript root mount and fully checked TypeScript source for the authenticated v2 session, snapshot, capability registry, SSE event feed, and Engineering artifact workspace. The historical JSX path is a compatibility re-export; the Vite output is the runtime bundle and no CDN runtime is required. | Current cockpit surface for Observe/Assist and governed command presentation; browser mesh rendering is limited to source-backed STL/OBJ artifacts, while voice, humanoid, accessibility, and performance evidence remain disclosure-bound. |
+| `src/control_plane/multimodal.py` | Bounded stdlib adapters parse actual STEP/STL/OBJ bytes and decode PNG/JPEG structure/fingerprints after quarantine digest verification. | Local source-observation evidence only: measured geometry and image metadata are exposed with provenance; semantic vision, FEA, thermal, material, mass, manufacturing, STT/TTS, anti-replay biometrics, and hardware remain unenabled. |
 | `src/javis_voice_multimodal.py` | Voice, CAD, visual, and briefing dataclasses remain adapter/fixture contracts. Server-owned verification is required; unavailable and unverified outputs are explicit. | Adapter contract and test fixture source, not evidence of real STT, anti-replay biometrics, CAD parsing, or visual analysis. |
 | SQLite/PostgreSQL state | `ControlPlaneStore` and `PostgresControlPlaneStore` persist tenants, principals, devices, sessions, capabilities, intents, plans, approvals, runs, actions, evidence, audit, events, outbox, idempotency records, rate limits, artifacts, memory, briefings, sequences, schema-11 Goal/Task schedules, task runs, and leased action runs. Redis provides authenticated shared rate-limit coordination. | Local SQLite and shared PostgreSQL/Redis paths are implemented; managed backup, staging, and multi-process deployment evidence remain release gates. |
 | `/api/tick`, `/api/execute/{key}`, `/api/mutate`, `/api/rsi/upgrade` | Compatibility routes are retired with typed 410 responses; no privileged GET path is used by the authoritative app. | Preserve the safe migration response and use v2 typed plans/broker for future capability work. |
@@ -1527,12 +1528,13 @@ independently verified.
 
 | ZASI Surface | Observed current role | Maturity / evidence boundary |
 |---|---|---|
-| React 19 + React Router 7 cockpit | Bundled operator UI with a TypeScript root entrypoint, governed overview, assistive JARVIS, capability, safety, and MCP views | Implemented reference UI with a preserved JSX compatibility body; graph and browser voice helpers are not capability proof. |
+| React 19 + React Router 7 cockpit | Bundled operator UI with a TypeScript root entrypoint, governed overview, assistive JARVIS, Engineering artifact, capability, safety, and MCP views | Implemented reference UI with a preserved JSX compatibility body; graph and browser voice helpers are not capability proof. STL/OBJ mesh rendering uses the authenticated artifact-content route and source digest. |
 | `/api/v2/*` | Authenticated ASGI control-plane contracts | Implemented local reference slice with SQLite persistence, policy, evidence, audit, and SSE replay. |
 | `/api/*` | Python compatibility responses | Read-only disclosures or typed retirement responses; not a side-effect owner. |
 | `/ws` | Historical raw realtime telemetry broadcaster | Not used by the authoritative cockpit; optional governed WebSocket remains a future adapter. |
 | `/api/jarvis/stream` | Compatibility response stream | Adapter/demo boundary; a delayed text stream is not durable run streaming. |
 | SQLite/PostgreSQL state store | Control-plane repository | SQLite local implementation plus PostgreSQL multi-process adapter for sessions, devices, plans, runs, evidence, audit, events, outbox, memory, artifacts, and sequences. |
+| `src/control_plane/multimodal.py` | Bounded source-backed STEP/STL/OBJ geometry and PNG/JPEG structural observation adapters | Local measured/decoded evidence only; no solver, semantic vision model, STT/TTS engine, speaker authentication, or hardware execution is implied. |
 | `src/javis_voice_multimodal.py` | Typed multimodal façade and deterministic fixtures | Simulator/adapter; it is not evidence of real STT, speaker authentication, CAD parsing, or visual model execution. |
 | MCP server/transports | Governed `/api/v2/mcp` adapter | Discovery and enabled read-only calls use the same registry, policy, idempotency, audit, and evidence path. |
 | symbolic verifier / memory hypergraph / sandbox modules | Repository subsystem surfaces | Module-level evidence only; capability status must be proven per source-to-sink execution path. |
@@ -1544,8 +1546,9 @@ independently verified.
 The implementation order remains **contract first, then vertical slice**: the
 authenticated session, durable event stream, truth-labelled cockpit, brokered
 read-only action path, durable orchestration, PostgreSQL/Redis service path, and
-unavailable multimodal adapters are now represented in the reference slice;
-managed production operations and certified hardware remain release gates.
+bounded source-observation multimodal adapters are now represented in the
+reference slice; semantic model execution, managed production operations, and
+certified hardware remain release gates.
 
 ---
 
@@ -1745,8 +1748,8 @@ REPORTS WHAT ACTUALLY HAPPENED
 | P1 | Add APEX-inspired orb/reasoning UX using original ZASI branding |
 | P1 | Add durable schedules, recurring jobs and deferred work |
 | P2 | Add real productivity connectors such as GitHub, email, calendar and files |
-| P2 | Add real screenshot / visual intelligence pipeline |
-| P2 | Add real CAD/STEP ingestion and 3D viewer pipeline |
+| P2 | Add a separately evaluated semantic screenshot / visual intelligence pipeline |
+| P2 | Extend bounded CAD ingestion with IGES/glTF conversion and a certified parser/solver adapter |
 | P3 | Add production STT/TTS and optional speaker verification |
 | P3 | Add multi-agent delegation with budget, policy and convergence controls |
 

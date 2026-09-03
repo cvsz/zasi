@@ -55,6 +55,15 @@ assert(cockpitTsx.includes('JarvisPage'), 'typed cockpit must declare JarvisPage
 assert(cockpitTsx.includes('SubsystemsPage'), 'typed cockpit must declare SubsystemsPage');
 assert(cockpitTsx.includes('CockpitPage'), 'typed cockpit must declare CockpitPage');
 assert(cockpitTsx.includes('MCPPage'), 'typed cockpit must declare MCPPage');
+assert(cockpitTsx.includes('EngineeringPage'), 'typed cockpit must declare EngineeringPage');
+assert(cockpitTsx.includes('MeshViewer'), 'engineering view must declare the source-backed mesh viewer');
+assert(cockpitTsx.includes("/api/v2/artifacts"), 'engineering view must upload through the governed artifact route');
+assert(cockpitTsx.includes("/api/v2/cad/analyze"), 'engineering view must dispatch governed CAD analysis');
+assert(cockpitTsx.includes("/api/v2/vision/analyze"), 'engineering view must dispatch governed vision analysis');
+assert(cockpitTsx.includes("/api/v2/artifacts/${artifact.artifact_id}/content"), 'mesh viewer must retrieve authorized artifact content');
+assert(cockpitTsx.includes("three/examples/jsm/loaders/STLLoader.js"), 'mesh viewer must use the bundled STL loader');
+assert(cockpitTsx.includes("three/examples/jsm/loaders/OBJLoader.js"), 'mesh viewer must use the bundled OBJ loader');
+assert(cockpitTsx.includes('source digest'), 'engineering view must disclose the source digest');
 
 assert(cockpitTsx.includes('HypergraphCanvas'), 'typed cockpit must declare Three.js HypergraphCanvas');
 assert(cockpitTsx.includes('useTelemetry'), 'typed cockpit must declare useTelemetry hook');

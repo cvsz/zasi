@@ -12,13 +12,14 @@ import asyncio
 import hashlib
 import json
 import os
+from pathlib import Path
 from typing import Any, AsyncGenerator, AsyncIterator, Dict, FrozenSet, Iterator, Optional, Sequence, Union
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
@@ -32,6 +33,13 @@ from src.control_plane.connectors import ConnectorRegistry
 from src.control_plane.execution import ActionBroker, ToolDefinition, ToolRegistry
 from src.control_plane.events import OutboxDispatcher
 from src.control_plane.identity import hash_token, issue_id, issue_token, optional_bearer
+from src.control_plane.multimodal import (
+    ArtifactFormatError,
+    ArtifactIntegrityError,
+    analyze_image_artifact,
+    parse_cad_artifact,
+    verify_artifact_digest,
+)
 from src.control_plane.policy import PolicyEngine
 from src.control_plane.redis_runtime import RedisRuntime
 from src.control_plane.storage import (
@@ -348,6 +356,33 @@ def _scope_digest(context: AuthContext) -> str:
     return "sha256:" + hashlib.sha256(scope_material.encode("utf-8")).hexdigest()
 
 
+def _read_quarantined_artifact(request: Request, artifact: Dict[str, Any]) -> bytes:
+    """Read a tenant-authorized artifact without exposing or trusting its path."""
+    storage_ref = artifact.get("storage_ref")
+    if not isinstance(storage_ref, str) or not storage_ref or "/" in storage_ref or "\\" in storage_ref:
+        raise NotFoundError("artifact storage reference not found")
+    directory = Path(request.app.state.artifact_directory).resolve()
+    path = (directory / f"{storage_ref}.bin").resolve()
+    if path.parent != directory or not path.is_file():
+        raise NotFoundError("artifact content not found")
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except (FileNotFoundError, OSError) as exc:
+        raise NotFoundError("artifact content not found") from exc
+    try:
+        with os.fdopen(descriptor, "rb") as artifact_file:
+            descriptor = -1
+            data = artifact_file.read(16 * 1024 * 1024 + 1)
+    finally:
+        if descriptor != -1:
+            os.close(descriptor)
+    if len(data) > 16 * 1024 * 1024:
+        raise ArtifactIntegrityError("artifact content exceeds the safe bound")
+    verify_artifact_digest(data, str(artifact.get("digest", "")))
+    return data
+
+
 async def _read_body_limited(request: Request, limit: int) -> bytes:
     """Read and cache an ASGI body while enforcing the limit per chunk."""
     cached = getattr(request, "_body", None)
@@ -618,8 +653,11 @@ def create_app(
                 allowed_upload_types = {
                     "application/octet-stream",
                     "application/step",
+                    "application/iges",
                     "model/step",
+                    "model/iges",
                     "model/stl",
+                    "model/obj",
                     "image/png",
                     "image/jpeg",
                     "audio/wav",
@@ -1844,6 +1882,99 @@ def create_app(
                 detail={"code": "NOT_FOUND", "message": "Artifact not found."},
             )
 
+    @app.get("/api/v2/artifacts/{artifact_id}/content")
+    async def get_artifact_content(
+        artifact_id: str,
+        request: Request,
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "evidence:read", "Artifact content visibility is not permitted.")
+        try:
+            artifact = request.app.state.store.get_artifact(
+                artifact_id, context.tenant_id
+            )
+            content = _read_quarantined_artifact(request, artifact)
+        except NotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Artifact content not found."},
+            )
+        except ArtifactIntegrityError:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "ARTIFACT_INTEGRITY_MISMATCH",
+                    "message": "Artifact content no longer matches its recorded digest.",
+                },
+            )
+        return Response(
+            content=content,
+            media_type=artifact["media_type"],
+            headers={
+                "Cache-Control": "no-store",
+                "Content-Disposition": 'attachment; filename="artifact.bin"',
+                "X-ZASI-Artifact-Digest": artifact["digest"],
+            },
+        )
+
+    async def _analysis_artifact(
+        artifact_id: str,
+        request: Request,
+        context: AuthContext,
+    ) -> tuple[Dict[str, Any], bytes]:
+        try:
+            artifact = request.app.state.store.get_artifact(
+                artifact_id, context.tenant_id
+            )
+            content = _read_quarantined_artifact(request, artifact)
+            return artifact, content
+        except NotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Artifact not found."},
+            )
+        except ArtifactIntegrityError:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "ARTIFACT_INTEGRITY_MISMATCH",
+                    "message": "Artifact content no longer matches its recorded digest.",
+                },
+            )
+
+    def _rejected_analysis(
+        request: Request,
+        context: AuthContext,
+        artifact_id: str,
+        analysis_kind: str,
+        adapter_id: str,
+        artifact_digest_value: str,
+        error_code: str,
+    ) -> str:
+        evidence_id = issue_id("ev")
+        request.app.state.store.create_evidence(
+            evidence_id=evidence_id,
+            tenant_id=context.tenant_id,
+            principal_id=context.principal_id,
+            kind="analysis",
+            status="rejected",
+            provenance={
+                "adapter_id": adapter_id,
+                "adapter_version": "1.0.0",
+                "origin": "local",
+                "input_digest": artifact_digest_value,
+                "method_ref": f"procedure.{adapter_id}.v1",
+                "disclosure": "The quarantined artifact was rejected by the source parser; no capability result was produced.",
+            },
+            result={
+                "analysis_kind": analysis_kind,
+                "status": "rejected",
+                "error_code": error_code,
+            },
+            artifact_ref=artifact_id,
+        )
+        return evidence_id
+
     @app.post("/api/v2/cad/analyze", status_code=201)
     async def analyze_cad(
         payload: ArtifactAnalysisRequest,
@@ -1851,14 +1982,28 @@ def create_app(
         context: AuthContext = Depends(_context_from_request),
     ):
         require_scope(context, "analysis:write", "CAD analysis is not permitted.")
+        artifact, content = await _analysis_artifact(
+            payload.artifact_id, request, context
+        )
         try:
-            artifact = request.app.state.store.get_artifact(
-                payload.artifact_id, context.tenant_id
+            parsed = parse_cad_artifact(content, artifact["media_type"])
+        except ArtifactFormatError:
+            evidence_id = _rejected_analysis(
+                request,
+                context,
+                payload.artifact_id,
+                payload.analysis_kind,
+                "zasi.cad.stdlib",
+                artifact["digest"],
+                "INVALID_CAD_ARTIFACT",
             )
-        except NotFoundError:
             raise HTTPException(
-                status_code=404,
-                detail={"code": "NOT_FOUND", "message": "Artifact not found."},
+                status_code=422,
+                detail={
+                    "code": "INVALID_CAD_ARTIFACT",
+                    "message": "Artifact could not be parsed as supported CAD geometry.",
+                    "evidence_id": evidence_id,
+                },
             )
         evidence_id = issue_id("ev")
         evidence = request.app.state.store.create_evidence(
@@ -1866,21 +2011,16 @@ def create_app(
             tenant_id=context.tenant_id,
             principal_id=context.principal_id,
             kind="calculation",
-            status="unavailable",
+            status="verified",
             provenance={
-                "adapter_id": "cad-parser",
-                "adapter_version": "unavailable",
+                "adapter_id": parsed["parser"],
+                "adapter_version": parsed["parser_version"],
                 "origin": "local",
                 "input_digest": artifact["digest"],
                 "method_ref": "procedure.cad.parse-and-analyze.v1",
-                "disclosure": "No supported CAD parser or solver is enabled in the reference profile.",
+                "disclosure": parsed["disclosure"],
             },
-            result={
-                "analysis_kind": payload.analysis_kind,
-                "parser_status": "unavailable",
-                "geometry_status": "not_analyzed",
-                "stress_status": "not_analyzed",
-            },
+            result={"analysis_kind": payload.analysis_kind, **parsed},
             artifact_ref=payload.artifact_id,
         )
         return {"analysis_id": evidence_id, "evidence": evidence}
@@ -1899,6 +2039,20 @@ def create_app(
                 detail={"code": "NOT_FOUND", "message": "CAD analysis not found."},
             )
 
+    @app.get("/api/v2/vision/{analysis_id}")
+    async def get_vision_analysis(
+        analysis_id: str,
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "evidence:read", "Vision evidence visibility is not permitted.")
+        try:
+            return app.state.store.get_evidence(analysis_id, context.tenant_id)
+        except NotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Vision analysis not found."},
+            )
+
     @app.post("/api/v2/vision/analyze", status_code=201)
     async def analyze_vision(
         payload: VisionAnalysisRequest,
@@ -1906,14 +2060,28 @@ def create_app(
         context: AuthContext = Depends(_context_from_request),
     ):
         require_scope(context, "analysis:write", "Vision analysis is not permitted.")
+        artifact, content = await _analysis_artifact(
+            payload.artifact_id, request, context
+        )
         try:
-            artifact = request.app.state.store.get_artifact(
-                payload.artifact_id, context.tenant_id
+            parsed = analyze_image_artifact(content, artifact["media_type"])
+        except ArtifactFormatError:
+            evidence_id = _rejected_analysis(
+                request,
+                context,
+                payload.artifact_id,
+                payload.analysis_kind,
+                "zasi.image-metadata",
+                artifact["digest"],
+                "INVALID_IMAGE_ARTIFACT",
             )
-        except NotFoundError:
             raise HTTPException(
-                status_code=404,
-                detail={"code": "NOT_FOUND", "message": "Artifact not found."},
+                status_code=422,
+                detail={
+                    "code": "INVALID_IMAGE_ARTIFACT",
+                    "message": "Artifact could not be decoded as a supported image.",
+                    "evidence_id": evidence_id,
+                },
             )
         evidence_id = issue_id("ev")
         evidence = request.app.state.store.create_evidence(
@@ -1921,21 +2089,16 @@ def create_app(
             tenant_id=context.tenant_id,
             principal_id=context.principal_id,
             kind="observation",
-            status="unavailable",
+            status="verified",
             provenance={
-                "adapter_id": "vision-analyzer",
-                "adapter_version": "unavailable",
+                "adapter_id": "zasi.image-metadata",
+                "adapter_version": "1.0.0",
                 "origin": "local",
                 "input_digest": artifact["digest"],
                 "method_ref": "procedure.vision.analyze.v1",
-                "disclosure": "No vision model adapter is enabled; confidence and labels are unavailable.",
+                "disclosure": parsed["disclosure"],
             },
-            result={
-                "analysis_kind": payload.analysis_kind,
-                "labels": [],
-                "confidence": None,
-                "status": "unavailable",
-            },
+            result={"analysis_kind": payload.analysis_kind, **parsed},
             artifact_ref=payload.artifact_id,
         )
         return {"analysis_id": evidence_id, "evidence": evidence}
