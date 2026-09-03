@@ -121,6 +121,17 @@ END-ISO-10303-21;
         with self.assertRaises(ArtifactFormatError):
             parse_cad_artifact(header_only_point, "application/step")
 
+        fake_entity_text = b"""ISO-10303-21;
+HEADER;
+ENDSEC;
+DATA;
+THIS IS NOT AN ENTITY CARTESIAN_POINT('fake',(1.,2.,3.));
+ENDSEC;
+END-ISO-10303-21;
+"""
+        with self.assertRaises(ArtifactFormatError):
+            parse_cad_artifact(fake_entity_text, "application/step")
+
     def test_step_topology_and_derived_dimensions_are_bounded(self):
         import src.control_plane.multimodal as multimodal
 
@@ -212,6 +223,14 @@ endsolid test
 
         obj = b"v 0 0 0\nv 1 0 0\nv 0 1 0\n"
         with patch.object(multimodal, "MAX_OBJ_VERTICES", 2):
+            with self.assertRaises(multimodal.ArtifactFormatError):
+                multimodal.parse_cad_artifact(obj, "model/obj")
+
+    def test_obj_face_references_are_bounded_before_validation(self):
+        import src.control_plane.multimodal as multimodal
+
+        obj = b"v 0 0 0\nf 1 1 1 1\n"
+        with patch.object(multimodal, "MAX_OBJ_FACE_REFERENCES", 3):
             with self.assertRaises(multimodal.ArtifactFormatError):
                 multimodal.parse_cad_artifact(obj, "model/obj")
 
@@ -325,6 +344,30 @@ endsolid test
             with self.assertRaises(ArtifactFormatError):
                 analyze_image_artifact(image, "image/png")
 
+    def test_png_accepts_valid_narrow_adam7_and_rejects_invalid_filter_bytes(self):
+        from src.control_plane.multimodal import ArtifactFormatError, analyze_image_artifact
+
+        def chunk(kind: bytes, payload: bytes) -> bytes:
+            return (
+                struct.pack(">I", len(payload))
+                + kind
+                + payload
+                + struct.pack(">I", zlib.crc32(kind + payload) & 0xFFFFFFFF)
+            )
+
+        def adam7(payload: bytes) -> bytes:
+            return (
+                b"\x89PNG\r\n\x1a\n"
+                + chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 0, 0, 0, 1))
+                + chunk(b"IDAT", zlib.compress(payload))
+                + chunk(b"IEND", b"")
+            )
+
+        result = analyze_image_artifact(adam7(b"\x00\x00"), "image/png")
+        self.assertEqual(result["dimensions"], {"width": 1, "height": 1})
+        with self.assertRaises(ArtifactFormatError):
+            analyze_image_artifact(adam7(b"\x05\x00"), "image/png")
+
     def test_jpeg_requires_scan_data_and_end_marker(self):
         from src.control_plane.multimodal import ArtifactFormatError, analyze_image_artifact
 
@@ -351,6 +394,17 @@ endsolid test
         self.assertEqual(result["dimensions"], {"width": 1, "height": 1})
         self.assertIsNone(result["pixel_digest"])
         self.assertEqual(result["encoded_content_digest"], result["content_digest"])
+
+        mismatched_scan_component = (
+            frame_only
+            + b"\xff\xda"
+            + struct.pack(">H", 8)
+            + b"\x01\x02\x00\x00\x3f\x00"
+            + b"\x00"
+            + b"\xff\xd9"
+        )
+        with self.assertRaises(ArtifactFormatError):
+            analyze_image_artifact(mismatched_scan_component, "image/jpeg")
 
 
 class MultimodalApiTests(unittest.IsolatedAsyncioTestCase):
@@ -433,6 +487,25 @@ class MultimodalApiTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(analysis.status_code, 409)
             self.assertEqual(analysis.json()["error"]["code"], "ARTIFACT_INTEGRITY_MISMATCH")
+
+    async def test_rejected_analysis_returns_its_persisted_evidence_id(self):
+        async with self.client() as (client, headers):
+            artifact = await client.post(
+                "/api/v2/artifacts",
+                content=b"not a STEP exchange",
+                headers={**headers, "Content-Type": "application/step"},
+            )
+            self.assertEqual(artifact.status_code, 201)
+            analysis = await client.post(
+                "/api/v2/cad/analyze",
+                json={"artifact_id": artifact.json()["artifact_id"]},
+                headers=headers,
+            )
+            self.assertEqual(analysis.status_code, 422)
+            evidence_id = analysis.json()["error"]["details"]["evidence_id"]
+            rejected = await client.get(f"/api/v2/evidence/{evidence_id}", headers=headers)
+            self.assertEqual(rejected.status_code, 200)
+            self.assertEqual(rejected.json()["status"], "rejected")
 
     async def test_obj_upload_reaches_quarantine_and_analysis(self):
         obj = b"v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"

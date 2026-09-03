@@ -22,13 +22,14 @@ MAX_GEOMETRY_RECORDS = 2_000_000
 MAX_TOPOLOGY_RECORDS = 2_000_000
 MAX_OBJ_VERTICES = min(MAX_GEOMETRY_RECORDS, MAX_ARTIFACT_BYTES // 64)
 MAX_OBJ_RECORDS = MAX_OBJ_VERTICES * 2
+MAX_OBJ_FACE_REFERENCES = MAX_OBJ_VERTICES
 MAX_IMAGE_DIMENSION = 32_768
 MAX_DECODED_IMAGE_BYTES = 64 * 1024 * 1024
 
 _NUMBER = r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?"
 _NUMBER_RE = re.compile(rf"^{_NUMBER}$")
 _STEP_POINT_RE = re.compile(
-    r"\bCARTESIAN_POINT\s*\(\s*'(?:[^']|'')*'\s*,\s*\(\s*([^)]*?)\s*\)\s*\)",
+    r"(?:\A|[;\r\n])\s*#\d+\s*=\s*CARTESIAN_POINT\s*\(\s*'(?:[^']|'')*'\s*,\s*\(\s*([^)]*?)\s*\)\s*\)\s*;",
     re.IGNORECASE,
 )
 _STEP_TOPOLOGY_RE = re.compile(
@@ -43,6 +44,16 @@ _STEP_UNIT_RE = re.compile(
 _STL_VERTEX_RE = re.compile(
     rf"^\s*vertex\s+({_NUMBER})\s+({_NUMBER})\s+({_NUMBER})\s*$",
     re.IGNORECASE,
+)
+_OBJ_FIELD_RE = re.compile(r"\S+")
+_ADAM7_PASSES = (
+    (0, 0, 8, 8),
+    (4, 0, 8, 8),
+    (0, 4, 4, 8),
+    (2, 0, 4, 4),
+    (0, 2, 2, 4),
+    (1, 0, 2, 2),
+    (0, 1, 1, 2),
 )
 
 
@@ -332,6 +343,14 @@ def _stl(data: bytes) -> Dict[str, Any]:
     }
 
 
+def _obj_tokens(line: str) -> Iterable[str]:
+    for match in _OBJ_FIELD_RE.finditer(line):
+        token = match.group(0)
+        if token.startswith("#"):
+            return
+        yield token
+
+
 def _obj(data: bytes) -> Dict[str, Any]:
     try:
         text = data.decode("utf-8")
@@ -343,29 +362,43 @@ def _obj(data: bytes) -> Dict[str, Any]:
         for line_number, line in enumerate(stream, 1):
             if line_number > MAX_OBJ_RECORDS:
                 raise ArtifactFormatError("OBJ record limit exceeded")
-            fields = line.strip().split()
-            if not fields or fields[0].startswith("#"):
+            tokens = iter(_obj_tokens(line))
+            try:
+                directive = next(tokens)
+            except StopIteration:
                 continue
-            if fields[0] == "v":
+            if directive == "v":
                 if len(points) >= MAX_OBJ_VERTICES:
                     raise ArtifactFormatError("OBJ vertex limit exceeded")
-                if len(fields) not in {4, 5}:
+                values: List[str] = []
+                for _ in range(5):
+                    try:
+                        values.append(next(tokens))
+                    except StopIteration:
+                        break
+                if len(values) not in {3, 4}:
                     raise ArtifactFormatError("OBJ vertex must contain three coordinates and an optional w")
-                point = _coordinates(fields[1:4])
-                if len(fields) == 5:
-                    weight = _finite_coordinate(fields[4])
+                point = _coordinates(values[:3])
+                if len(values) == 4:
+                    weight = _finite_coordinate(values[3])
                     if weight == 0:
                         raise ArtifactFormatError("OBJ homogeneous coordinate cannot be zero")
                     point = tuple(value / weight for value in point)  # type: ignore[assignment]
                     if not all(math.isfinite(value) for value in point):
                         raise ArtifactFormatError("OBJ homogeneous coordinate overflows")
                 points.append(point)
-            elif fields[0] == "f":
-                if len(fields) < 4:
-                    raise ArtifactFormatError("OBJ face must contain at least three vertices")
-                if face_count >= MAX_OBJ_VERTICES:
-                    raise ArtifactFormatError("OBJ face limit exceeded")
-                for reference in fields[1:]:
+                try:
+                    next(tokens)
+                except StopIteration:
+                    pass
+                else:
+                    raise ArtifactFormatError("OBJ vertex contains too many values")
+            elif directive == "f":
+                reference_count = 0
+                for reference in tokens:
+                    reference_count += 1
+                    if reference_count > MAX_OBJ_FACE_REFERENCES:
+                        raise ArtifactFormatError("OBJ face reference limit exceeded")
                     index = reference.split("/", 1)[0]
                     try:
                         vertex_index = int(index)
@@ -373,6 +406,10 @@ def _obj(data: bytes) -> Dict[str, Any]:
                         raise ArtifactFormatError("OBJ face contains an invalid vertex index") from exc
                     if vertex_index == 0 or abs(vertex_index) > len(points):
                         raise ArtifactFormatError("OBJ face references a missing vertex")
+                if reference_count < 3:
+                    raise ArtifactFormatError("OBJ face must contain at least three vertices")
+                if face_count >= MAX_OBJ_VERTICES:
+                    raise ArtifactFormatError("OBJ face limit exceeded")
                 face_count += 1
     if not points:
         raise ArtifactFormatError("OBJ contains no vertices")
@@ -419,6 +456,33 @@ def parse_cad_artifact(data: bytes, media_type: str) -> Dict[str, Any]:
     raise ArtifactFormatError("CAD media type is not supported by the reference parser")
 
 
+def _png_scanline_layout(
+    width: int, height: int, bit_depth: int, channels: int, interlace: int
+) -> List[Tuple[int, int]]:
+    row_bytes = (width * bit_depth * channels + 7) // 8
+    if interlace == 0:
+        return [(row_bytes, height)]
+    layout: List[Tuple[int, int]] = []
+    for start_x, start_y, step_x, step_y in _ADAM7_PASSES:
+        pass_width = (width - start_x + step_x - 1) // step_x if width > start_x else 0
+        pass_height = (height - start_y + step_y - 1) // step_y if height > start_y else 0
+        if pass_width and pass_height:
+            pass_row_bytes = (pass_width * bit_depth * channels + 7) // 8
+            layout.append((pass_row_bytes, pass_height))
+    return layout
+
+
+def _validate_png_filter_bytes(decoded: bytes, layout: Sequence[Tuple[int, int]]) -> None:
+    offset = 0
+    for row_bytes, row_count in layout:
+        for _ in range(row_count):
+            if offset >= len(decoded) or decoded[offset] > 4:
+                raise ArtifactFormatError("PNG scanline filter is invalid")
+            offset += row_bytes + 1
+    if offset != len(decoded):
+        raise ArtifactFormatError("PNG scanline layout is invalid")
+
+
 def _png_dimensions_and_digest(data: bytes) -> Tuple[Dict[str, int], str]:
     if len(data) < 33 or not data.startswith(b"\x89PNG\r\n\x1a\n"):
         raise ArtifactFormatError("PNG signature is invalid")
@@ -450,24 +514,10 @@ def _png_dimensions_and_digest(data: bytes) -> Tuple[Dict[str, int], str]:
     channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}.get(color_type)
     if channels is None:
         raise ArtifactFormatError("PNG color type is unsupported")
-    row_bytes = (width * bit_depth * channels + 7) // 8
-    if interlace == 0:
-        expected_decoded_size = (row_bytes + 1) * height
-    else:
-        expected_decoded_size = 0
-        for start_x, start_y, step_x, step_y in (
-            (0, 0, 8, 8),
-            (4, 0, 8, 8),
-            (0, 4, 4, 8),
-            (2, 0, 4, 4),
-            (0, 2, 2, 4),
-            (1, 0, 2, 2),
-            (0, 1, 1, 2),
-        ):
-            pass_width = (width - start_x + step_x - 1) // step_x if width > start_x else 0
-            pass_height = (height - start_y + step_y - 1) // step_y if height > start_y else 0
-            pass_row_bytes = (pass_width * bit_depth * channels + 7) // 8
-            expected_decoded_size += (pass_row_bytes + 1) * pass_height
+    scanline_layout = _png_scanline_layout(width, height, bit_depth, channels, interlace)
+    expected_decoded_size = sum(
+        (row_bytes + 1) * row_count for row_bytes, row_count in scanline_layout
+    )
     if expected_decoded_size > MAX_DECODED_IMAGE_BYTES:
         raise ArtifactFormatError("PNG decoded image exceeds the safe memory bound")
     idat = bytearray()
@@ -512,6 +562,7 @@ def _png_dimensions_and_digest(data: bytes) -> Tuple[Dict[str, int], str]:
         or len(decoded) != expected_decoded_size
     ):
         raise ArtifactFormatError("PNG decoded image is incomplete or exceeds the safe bound")
+    _validate_png_filter_bytes(decoded, scanline_layout)
     return {"width": width, "height": height}, hashlib.sha256(decoded).hexdigest()
 
 
@@ -521,6 +572,7 @@ def _jpeg_dimensions(data: bytes) -> Dict[str, int]:
     offset = 2
     sof_markers = set(range(0xC0, 0xC4)) | set(range(0xC5, 0xC8)) | set(range(0xC9, 0xCC)) | set(range(0xCD, 0xD0))
     dimensions: Dict[str, int] | None = None
+    frame_component_ids: frozenset[int] | None = None
     in_scan = False
     saw_scan = False
     saw_scan_data = False
@@ -576,17 +628,29 @@ def _jpeg_dimensions(data: bytes) -> Dict[str, int]:
             components = data[offset + 7]
             if components < 1 or components > 4 or segment_length != 8 + 3 * components:
                 raise ArtifactFormatError("JPEG frame component table is invalid")
+            component_ids = [data[offset + 8 + 3 * index] for index in range(components)]
+            if any(component_id == 0 for component_id in component_ids) or len(set(component_ids)) != components:
+                raise ArtifactFormatError("JPEG frame component identifiers are invalid")
             if not 1 <= width <= MAX_IMAGE_DIMENSION or not 1 <= height <= MAX_IMAGE_DIMENSION:
                 raise ArtifactFormatError("JPEG dimensions are outside the safe bound")
             if dimensions is not None:
                 raise ArtifactFormatError("JPEG contains multiple frame headers")
             dimensions = {"width": width, "height": height}
+            frame_component_ids = frozenset(component_ids)
         elif marker == 0xDA:
-            if dimensions is None or segment_length < 8:
+            if dimensions is None or frame_component_ids is None or segment_length < 8:
                 raise ArtifactFormatError("JPEG scan header is incomplete")
             scan_components = data[offset + 2]
             if scan_components < 1 or scan_components > 4 or segment_length != 6 + 2 * scan_components:
                 raise ArtifactFormatError("JPEG scan component table is invalid")
+            scan_component_ids = [
+                data[offset + 3 + 2 * index] for index in range(scan_components)
+            ]
+            if (
+                len(set(scan_component_ids)) != scan_components
+                or any(component_id not in frame_component_ids for component_id in scan_component_ids)
+            ):
+                raise ArtifactFormatError("JPEG scan references an undeclared frame component")
             saw_scan = True
             saw_scan_data = False
             in_scan = True

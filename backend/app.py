@@ -2033,7 +2033,7 @@ def create_app(
                 detail={
                     "code": "INVALID_CAD_ARTIFACT",
                     "message": "Artifact could not be parsed as supported CAD geometry.",
-                    "evidence_id": evidence_id,
+                    "details": {"evidence_id": evidence_id},
                 },
             )
         evidence_id = issue_id("ev")
@@ -2136,7 +2136,7 @@ def create_app(
                 detail={
                     "code": "INVALID_IMAGE_ARTIFACT",
                     "message": "Artifact could not be decoded as a supported image.",
-                    "evidence_id": evidence_id,
+                    "details": {"evidence_id": evidence_id},
                 },
             )
         evidence_id = issue_id("ev")
