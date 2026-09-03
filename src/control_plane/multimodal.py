@@ -13,7 +13,7 @@ import math
 import re
 import struct
 import zlib
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Sequence, Tuple
 
 
 MAX_ARTIFACT_BYTES = 16 * 1024 * 1024
@@ -107,14 +107,32 @@ def _unit_name(prefix: str, unit: str) -> str:
     if unit.upper() != "METRE":
         return "unknown"
     return {
+        "QUECTO": "qm",
+        "RONTO": "rm",
+        "YOCTO": "ym",
+        "ZEPTO": "zm",
+        "ATTO": "am",
+        "FEMTO": "fm",
+        "PICO": "pm",
         "MILLI": "mm",
         "CENTI": "cm",
         "DECI": "dm",
         "MICRO": "um",
         "NANO": "nm",
+        "DECA": "dam",
+        "HECTO": "hm",
         "KILO": "km",
+        "MEGA": "Mm",
+        "GIGA": "Gm",
+        "TERA": "Tm",
+        "PETA": "Pm",
+        "EXA": "Em",
+        "ZETTA": "Zm",
+        "YOTTA": "Ym",
+        "RONNA": "Rm",
+        "QUETTA": "Qm",
         "NONE": "m",
-    }.get(prefix.upper(), "m")
+    }.get(prefix.upper(), "unknown")
 
 
 def _step(data: bytes) -> Dict[str, Any]:
@@ -189,15 +207,65 @@ def _stl(data: bytes) -> Dict[str, Any]:
             text = data.decode("ascii")
         except UnicodeDecodeError as exc:
             raise ArtifactFormatError("STL is neither valid binary nor ASCII content") from exc
+        saw_solid = False
+        saw_endsolid = False
+        in_facet = False
+        in_loop = False
+        facet_points: List[Tuple[float, float, float]] = []
         for line in text.splitlines():
-            match = _STL_VERTEX_RE.match(line)
-            if match:
-                if len(points) >= MAX_GEOMETRY_RECORDS * 3:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            lowered = stripped.lower()
+            if lowered == "solid" or lowered.startswith("solid "):
+                if saw_solid or in_facet or saw_endsolid:
+                    raise ArtifactFormatError("ASCII STL solid header is invalid")
+                saw_solid = True
+                continue
+            if lowered == "endsolid" or lowered.startswith("endsolid "):
+                if not saw_solid or in_facet or in_loop or saw_endsolid:
+                    raise ArtifactFormatError("ASCII STL solid footer is invalid")
+                saw_endsolid = True
+                continue
+            if lowered.startswith("facet normal "):
+                if not saw_solid or saw_endsolid or in_facet or in_loop:
+                    raise ArtifactFormatError("ASCII STL facet structure is invalid")
+                fields = stripped.split()
+                if len(fields) != 5:
+                    raise ArtifactFormatError("ASCII STL facet normal is invalid")
+                _coordinates(fields[2:])
+                in_facet = True
+                facet_points = []
+                continue
+            if lowered == "outer loop":
+                if not in_facet or in_loop:
+                    raise ArtifactFormatError("ASCII STL loop structure is invalid")
+                in_loop = True
+                continue
+            if lowered == "endloop":
+                if not in_loop or len(facet_points) != 3:
+                    raise ArtifactFormatError("ASCII STL loop must contain three vertices")
+                in_loop = False
+                continue
+            if lowered == "endfacet":
+                if not in_facet or in_loop or len(facet_points) != 3:
+                    raise ArtifactFormatError("ASCII STL facet is incomplete")
+                if triangle_count >= MAX_GEOMETRY_RECORDS:
                     raise ArtifactFormatError("STL geometry record limit exceeded")
-                points.append(_coordinates(match.groups()))
-        if not points or len(points) % 3:
-            raise ArtifactFormatError("ASCII STL must contain complete triangles")
-        triangle_count = len(points) // 3
+                points.extend(facet_points)
+                triangle_count += 1
+                facet_points = []
+                in_facet = False
+                continue
+            match = _STL_VERTEX_RE.match(stripped)
+            if match:
+                if not in_loop or len(facet_points) >= 3:
+                    raise ArtifactFormatError("ASCII STL vertex is outside a complete triangle")
+                facet_points.append(_coordinates(match.groups()))
+                continue
+            raise ArtifactFormatError("ASCII STL structure is invalid")
+        if not saw_solid or not saw_endsolid or in_facet or in_loop or not points:
+            raise ArtifactFormatError("ASCII STL exchange structure is incomplete")
     if not points or triangle_count < 1:
         raise ArtifactFormatError("STL contains no triangles")
     return {
@@ -333,7 +401,6 @@ def _png_dimensions_and_digest(data: bytes) -> Tuple[Dict[str, int], str]:
     try:
         decompressor = zlib.decompressobj()
         decoded = decompressor.decompress(bytes(idat), MAX_DECODED_IMAGE_BYTES + 1)
-        decoded += decompressor.flush()
     except zlib.error as exc:
         raise ArtifactFormatError("PNG image data cannot be decoded") from exc
     if (
@@ -353,32 +420,78 @@ def _jpeg_dimensions(data: bytes) -> Dict[str, int]:
         raise ArtifactFormatError("JPEG signature is invalid")
     offset = 2
     sof_markers = set(range(0xC0, 0xC4)) | set(range(0xC5, 0xC8)) | set(range(0xC9, 0xCC)) | set(range(0xCD, 0xD0))
-    while offset + 3 < len(data):
-        if data[offset] != 0xFF:
+    dimensions: Dict[str, int] | None = None
+    in_scan = False
+    saw_scan = False
+    saw_scan_data = False
+    while offset < len(data):
+        marker: int | None = None
+        if in_scan:
+            while offset < len(data):
+                if data[offset] != 0xFF:
+                    saw_scan_data = True
+                    offset += 1
+                    continue
+                offset += 1
+                while offset < len(data) and data[offset] == 0xFF:
+                    offset += 1
+                if offset >= len(data):
+                    raise ArtifactFormatError("JPEG scan data is incomplete")
+                marker = data[offset]
+                offset += 1
+                if marker == 0x00 or 0xD0 <= marker <= 0xD7:
+                    saw_scan_data = True
+                    continue
+                if marker == 0xD9:
+                    if not saw_scan_data or not saw_scan or dimensions is None:
+                        raise ArtifactFormatError("JPEG scan data is incomplete")
+                    return dimensions
+                in_scan = False
+                break
+            if in_scan:
+                raise ArtifactFormatError("JPEG end marker is missing")
+        else:
+            if data[offset] != 0xFF:
+                raise ArtifactFormatError("JPEG marker structure is invalid")
             offset += 1
-            continue
-        while offset < len(data) and data[offset] == 0xFF:
+            while offset < len(data) and data[offset] == 0xFF:
+                offset += 1
+            if offset >= len(data):
+                raise ArtifactFormatError("JPEG marker is incomplete")
+            marker = data[offset]
             offset += 1
-        if offset >= len(data):
-            break
-        marker = data[offset]
-        offset += 1
-        if marker in {0xD8, 0xD9}:
+        if marker is None or marker in {0x00, 0xD8, 0xD9} or 0xD0 <= marker <= 0xD7:
+            raise ArtifactFormatError("JPEG marker structure is invalid")
+        if marker == 0x01:
             continue
         if offset + 2 > len(data):
-            break
+            raise ArtifactFormatError("JPEG segment length is incomplete")
         segment_length = struct.unpack_from(">H", data, offset)[0]
         if segment_length < 2 or offset + segment_length > len(data):
             raise ArtifactFormatError("JPEG segment exceeds artifact bounds")
         if marker in sof_markers:
-            if segment_length < 7:
+            if segment_length < 8:
                 raise ArtifactFormatError("JPEG frame header is incomplete")
             height, width = struct.unpack_from(">HH", data, offset + 3)
+            components = data[offset + 7]
+            if components < 1 or components > 4 or segment_length != 8 + 3 * components:
+                raise ArtifactFormatError("JPEG frame component table is invalid")
             if not 1 <= width <= MAX_IMAGE_DIMENSION or not 1 <= height <= MAX_IMAGE_DIMENSION:
                 raise ArtifactFormatError("JPEG dimensions are outside the safe bound")
-            return {"width": width, "height": height}
+            if dimensions is not None:
+                raise ArtifactFormatError("JPEG contains multiple frame headers")
+            dimensions = {"width": width, "height": height}
+        elif marker == 0xDA:
+            if dimensions is None or segment_length < 8:
+                raise ArtifactFormatError("JPEG scan header is incomplete")
+            scan_components = data[offset + 2]
+            if scan_components < 1 or scan_components > 4 or segment_length != 6 + 2 * scan_components:
+                raise ArtifactFormatError("JPEG scan component table is invalid")
+            saw_scan = True
+            saw_scan_data = False
+            in_scan = True
         offset += segment_length
-    raise ArtifactFormatError("JPEG frame dimensions are unavailable")
+    raise ArtifactFormatError("JPEG end marker is missing")
 
 
 def analyze_image_artifact(data: bytes, media_type: str) -> Dict[str, Any]:

@@ -64,6 +64,9 @@ assert(cockpitTsx.includes("/api/v2/artifacts/${artifact.artifact_id}/content"),
 assert(cockpitTsx.includes("three/examples/jsm/loaders/STLLoader.js"), 'mesh viewer must use the bundled STL loader');
 assert(cockpitTsx.includes("three/examples/jsm/loaders/OBJLoader.js"), 'mesh viewer must use the bundled OBJ loader');
 assert(cockpitTsx.includes('source digest'), 'engineering view must disclose the source digest');
+assert(cockpitTsx.includes('const abortController = new AbortController()'), 'mesh viewer must cancel in-flight content loads on unmount');
+assert(cockpitTsx.includes('signal: abortController.signal'), 'mesh viewer fetch must receive the unmount abort signal');
+assert(cockpitTsx.includes('abortController.abort()'), 'mesh viewer cleanup must abort asynchronous initialization');
 
 assert(cockpitTsx.includes('HypergraphCanvas'), 'typed cockpit must declare Three.js HypergraphCanvas');
 assert(cockpitTsx.includes('useTelemetry'), 'typed cockpit must declare useTelemetry hook');

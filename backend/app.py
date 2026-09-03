@@ -219,14 +219,14 @@ class ArtifactAnalysisRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     artifact_id: str = Field(min_length=4, max_length=128)
-    analysis_kind: str = Field(default="default", min_length=1, max_length=64)
+    analysis_kind: str = Field(default="geometry", min_length=1, max_length=64)
 
 
 class VisionAnalysisRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     artifact_id: str = Field(min_length=4, max_length=128)
-    analysis_kind: str = Field(default="default", min_length=1, max_length=64)
+    analysis_kind: str = Field(default="metadata", min_length=1, max_length=64)
 
 
 class MCPRequest(BaseModel):
@@ -1811,8 +1811,11 @@ def create_app(
         allowed_media_types = {
             "application/octet-stream",
             "application/step",
+            "application/iges",
             "model/step",
+            "model/iges",
             "model/stl",
+            "model/obj",
             "image/png",
             "image/jpeg",
             "audio/wav",
@@ -1947,6 +1950,7 @@ def create_app(
         context: AuthContext,
         artifact_id: str,
         analysis_kind: str,
+        evidence_kind: str,
         adapter_id: str,
         artifact_digest_value: str,
         error_code: str,
@@ -1956,7 +1960,7 @@ def create_app(
             evidence_id=evidence_id,
             tenant_id=context.tenant_id,
             principal_id=context.principal_id,
-            kind="analysis",
+            kind=evidence_kind,
             status="rejected",
             provenance={
                 "adapter_id": adapter_id,
@@ -1975,6 +1979,24 @@ def create_app(
         )
         return evidence_id
 
+    def _typed_analysis(
+        analysis_id: str,
+        request: Request,
+        context: AuthContext,
+        *,
+        evidence_kind: str,
+        adapter_ids: FrozenSet[str],
+    ) -> Dict[str, Any]:
+        evidence = request.app.state.store.get_evidence(analysis_id, context.tenant_id)
+        provenance = evidence.get("provenance")
+        if (
+            evidence.get("kind") != evidence_kind
+            or not isinstance(provenance, dict)
+            or provenance.get("adapter_id") not in adapter_ids
+        ):
+            raise NotFoundError("typed analysis evidence not found")
+        return evidence
+
     @app.post("/api/v2/cad/analyze", status_code=201)
     async def analyze_cad(
         payload: ArtifactAnalysisRequest,
@@ -1982,6 +2004,14 @@ def create_app(
         context: AuthContext = Depends(_context_from_request),
     ):
         require_scope(context, "analysis:write", "CAD analysis is not permitted.")
+        if payload.analysis_kind != "geometry":
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "UNSUPPORTED_ANALYSIS_KIND",
+                    "message": "Only source geometry measurement is enabled; FEA and thermal analysis are not run.",
+                },
+            )
         artifact, content = await _analysis_artifact(
             payload.artifact_id, request, context
         )
@@ -1993,6 +2023,7 @@ def create_app(
                 context,
                 payload.artifact_id,
                 payload.analysis_kind,
+                "calculation",
                 "zasi.cad.stdlib",
                 artifact["digest"],
                 "INVALID_CAD_ARTIFACT",
@@ -2028,11 +2059,20 @@ def create_app(
     @app.get("/api/v2/cad/{analysis_id}")
     async def get_cad_analysis(
         analysis_id: str,
+        request: Request,
         context: AuthContext = Depends(_context_from_request),
     ):
         require_scope(context, "evidence:read", "CAD evidence visibility is not permitted.")
         try:
-            return app.state.store.get_evidence(analysis_id, context.tenant_id)
+            return _typed_analysis(
+                analysis_id,
+                request,
+                context,
+                evidence_kind="calculation",
+                adapter_ids=frozenset(
+                    {"zasi.cad.stdlib", "zasi.step.stdlib", "zasi.stl.stdlib", "zasi.obj.stdlib"}
+                ),
+            )
         except NotFoundError:
             raise HTTPException(
                 status_code=404,
@@ -2042,11 +2082,18 @@ def create_app(
     @app.get("/api/v2/vision/{analysis_id}")
     async def get_vision_analysis(
         analysis_id: str,
+        request: Request,
         context: AuthContext = Depends(_context_from_request),
     ):
         require_scope(context, "evidence:read", "Vision evidence visibility is not permitted.")
         try:
-            return app.state.store.get_evidence(analysis_id, context.tenant_id)
+            return _typed_analysis(
+                analysis_id,
+                request,
+                context,
+                evidence_kind="observation",
+                adapter_ids=frozenset({"zasi.image-metadata"}),
+            )
         except NotFoundError:
             raise HTTPException(
                 status_code=404,
@@ -2060,6 +2107,14 @@ def create_app(
         context: AuthContext = Depends(_context_from_request),
     ):
         require_scope(context, "analysis:write", "Vision analysis is not permitted.")
+        if payload.analysis_kind != "metadata":
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "UNSUPPORTED_ANALYSIS_KIND",
+                    "message": "Only structural image metadata is enabled; semantic vision is not configured.",
+                },
+            )
         artifact, content = await _analysis_artifact(
             payload.artifact_id, request, context
         )
@@ -2071,6 +2126,7 @@ def create_app(
                 context,
                 payload.artifact_id,
                 payload.analysis_kind,
+                "observation",
                 "zasi.image-metadata",
                 artifact["digest"],
                 "INVALID_IMAGE_ARTIFACT",

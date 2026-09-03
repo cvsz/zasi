@@ -5,6 +5,7 @@ import unittest
 import zlib
 from contextlib import asynccontextmanager
 from pathlib import Path
+from unittest.mock import patch
 
 import httpx
 
@@ -96,6 +97,15 @@ END-ISO-10303-21;
         with self.assertRaises(ArtifactFormatError):
             parse_cad_artifact(incomplete, "application/step")
 
+    def test_step_unknown_si_prefix_is_not_silently_reported_as_metres(self):
+        from src.control_plane.multimodal import parse_cad_artifact
+
+        pico_step = STEP_FIXTURE.replace(b".MILLI.,.METRE.", b".PICO.,.METRE.")
+
+        result = parse_cad_artifact(pico_step, "application/step")
+
+        self.assertEqual(result["units"], "pm")
+
     def test_mesh_parsers_measure_actual_stl_and_obj_vertices(self):
         from src.control_plane.multimodal import parse_cad_artifact
 
@@ -143,6 +153,19 @@ endsolid test
         self.assertEqual(result["triangle_count"], 1)
         self.assertEqual(result["bounding_box"]["dimensions"], {"x": 2.0, "y": 3.0, "z": 0.0})
 
+    def test_ascii_stl_requires_facet_and_loop_structure(self):
+        from src.control_plane.multimodal import ArtifactFormatError, parse_cad_artifact
+
+        vertex_lines_without_facets = b"""solid test
+vertex 0 0 0
+vertex 1 0 0
+vertex 0 1 0
+endsolid test
+"""
+
+        with self.assertRaises(ArtifactFormatError):
+            parse_cad_artifact(vertex_lines_without_facets, "model/stl")
+
     def test_image_observation_changes_with_actual_png_input(self):
         try:
             from src.control_plane.multimodal import analyze_image_artifact
@@ -179,6 +202,75 @@ endsolid test
         )
         with self.assertRaises(ArtifactFormatError):
             analyze_image_artifact(huge, "image/png")
+
+    def test_png_decoder_rejects_output_tail_before_flushing_it(self):
+        import src.control_plane.multimodal as multimodal
+
+        def chunk(kind: bytes, payload: bytes) -> bytes:
+            return (
+                struct.pack(">I", len(payload))
+                + kind
+                + payload
+                + struct.pack(">I", zlib.crc32(kind + payload) & 0xFFFFFFFF)
+            )
+
+        oversized_stream = (
+            b"\x89PNG\r\n\x1a\n"
+            + chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 0, 0, 0, 0))
+            + chunk(b"IDAT", zlib.compress(b"\x00" + b"a" * 100))
+            + chunk(b"IEND", b"")
+        )
+
+        class FlushGuard:
+            def __init__(self, wrapped):
+                self._wrapped = wrapped
+
+            def decompress(self, *args, **kwargs):
+                return self._wrapped.decompress(*args, **kwargs)
+
+            def flush(self, *args, **kwargs):
+                if self._wrapped.unconsumed_tail:
+                    raise AssertionError("flush must not process an unconsumed tail")
+                return self._wrapped.flush(*args, **kwargs)
+
+            def __getattr__(self, name):
+                return getattr(self._wrapped, name)
+
+        real_decompressobj = zlib.decompressobj
+
+        def guarded_decompressobj(*args, **kwargs):
+            return FlushGuard(real_decompressobj(*args, **kwargs))
+
+        with patch.object(multimodal, "MAX_DECODED_IMAGE_BYTES", 8), patch.object(
+            multimodal.zlib, "decompressobj", guarded_decompressobj
+        ):
+            with self.assertRaises(multimodal.ArtifactFormatError):
+                multimodal.analyze_image_artifact(oversized_stream, "image/png")
+
+    def test_jpeg_requires_scan_data_and_end_marker(self):
+        from src.control_plane.multimodal import ArtifactFormatError, analyze_image_artifact
+
+        frame_only = (
+            b"\xff\xd8"
+            + b"\xff\xc0"
+            + struct.pack(">H", 11)
+            + b"\x08\x00\x01\x00\x01\x01\x01\x11\x00"
+        )
+
+        with self.assertRaises(ArtifactFormatError):
+            analyze_image_artifact(frame_only, "image/jpeg")
+
+        complete_structure = (
+            frame_only
+            + b"\xff\xda"
+            + struct.pack(">H", 8)
+            + b"\x01\x01\x00\x00\x3f\x00"
+            + b"\x00"
+            + b"\xff\xd9"
+        )
+        result = analyze_image_artifact(complete_structure, "image/jpeg")
+        self.assertEqual(result["format"], "JPEG")
+        self.assertEqual(result["dimensions"], {"width": 1, "height": 1})
 
 
 class MultimodalApiTests(unittest.IsolatedAsyncioTestCase):
@@ -261,6 +353,71 @@ class MultimodalApiTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(analysis.status_code, 409)
             self.assertEqual(analysis.json()["error"]["code"], "ARTIFACT_INTEGRITY_MISMATCH")
+
+    async def test_obj_upload_reaches_quarantine_and_analysis(self):
+        obj = b"v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n"
+        async with self.client() as (client, headers):
+            artifact = await client.post(
+                "/api/v2/artifacts",
+                content=obj,
+                headers={**headers, "Content-Type": "model/obj"},
+            )
+            self.assertEqual(artifact.status_code, 201)
+            analysis = await client.post(
+                "/api/v2/cad/analyze",
+                json={"artifact_id": artifact.json()["artifact_id"], "analysis_kind": "geometry"},
+                headers=headers,
+            )
+            self.assertEqual(analysis.status_code, 201)
+            self.assertEqual(analysis.json()["evidence"]["result"]["format"], "OBJ")
+
+    async def test_cad_solver_kinds_are_rejected_instead_of_verified(self):
+        async with self.client() as (client, headers):
+            artifact = await client.post(
+                "/api/v2/artifacts",
+                content=STEP_FIXTURE,
+                headers={**headers, "Content-Type": "application/step"},
+            )
+            analysis = await client.post(
+                "/api/v2/cad/analyze",
+                json={"artifact_id": artifact.json()["artifact_id"], "analysis_kind": "fea"},
+                headers=headers,
+            )
+            self.assertEqual(analysis.status_code, 422)
+            self.assertEqual(analysis.json()["error"]["code"], "UNSUPPORTED_ANALYSIS_KIND")
+
+    async def test_typed_analysis_routes_do_not_return_unrelated_evidence(self):
+        async with self.client() as (client, headers):
+            unrelated = self.store.create_evidence(
+                evidence_id="ev_unrelated_multimodal",
+                tenant_id="local",
+                principal_id="local-operator",
+                kind="action_result",
+                status="verified",
+                provenance={"adapter_id": "zasi.tool.registry", "origin": "local"},
+                result={"value": "not an analysis"},
+            )
+            for route in ("cad", "vision"):
+                response = await client.get(
+                    f"/api/v2/{route}/{unrelated['evidence_id']}", headers=headers
+                )
+                self.assertEqual(response.status_code, 404)
+                self.assertEqual(response.json()["error"]["code"], "NOT_FOUND")
+
+    async def test_vision_semantic_kind_is_rejected_until_a_model_is_configured(self):
+        async with self.client() as (client, headers):
+            artifact = await client.post(
+                "/api/v2/artifacts",
+                content=png_fixture(1, 1, b"\xff\x00\x00"),
+                headers={**headers, "Content-Type": "image/png"},
+            )
+            analysis = await client.post(
+                "/api/v2/vision/analyze",
+                json={"artifact_id": artifact.json()["artifact_id"], "analysis_kind": "semantic"},
+                headers=headers,
+            )
+            self.assertEqual(analysis.status_code, 422)
+            self.assertEqual(analysis.json()["error"]["code"], "UNSUPPORTED_ANALYSIS_KIND")
 
     async def test_vision_analysis_records_actual_image_metadata_and_source_digest(self):
         async with self.client() as (client, headers):

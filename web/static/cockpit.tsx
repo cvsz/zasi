@@ -619,9 +619,19 @@ function MeshViewer({ artifact, token }: MeshViewerProps) {
             return undefined;
         }
         let disposed = false;
+        const abortController = new AbortController();
         let disposeRenderer: (() => void) | undefined;
         setStatus('loading');
         setError('');
+        const disposeObject = (object: import('three').Object3D): void => {
+            object.traverse((child) => {
+                const mesh = child as import('three').Mesh;
+                if (!mesh.isMesh) return;
+                mesh.geometry.dispose();
+                if (Array.isArray(mesh.material)) mesh.material.forEach((item) => item.dispose());
+                else mesh.material.dispose();
+            });
+        };
         const initialize = async (): Promise<void> => {
             const THREE = await import('three');
             if (disposed) return;
@@ -630,8 +640,54 @@ function MeshViewer({ artifact, token }: MeshViewerProps) {
             const response = await fetch(`${API_ROOT}/api/v2/artifacts/${artifact.artifact_id}/content`, {
                 headers: { Accept: mediaType, Authorization: `Bearer ${token}` },
                 cache: 'no-store',
+                signal: abortController.signal,
             });
+            if (disposed) return;
             if (!response.ok) throw new Error(`Artifact content unavailable (${response.status})`);
+            let object: import('three').Object3D;
+            if (mediaType === 'model/stl') {
+                const { STLLoader } = await import('three/examples/jsm/loaders/STLLoader.js');
+                if (disposed) return;
+                const source = await response.arrayBuffer();
+                if (disposed) return;
+                const parsedGeometry = new STLLoader().parse(source);
+                if (disposed) {
+                    parsedGeometry.dispose();
+                    return;
+                }
+                parsedGeometry.computeVertexNormals();
+                object = new THREE.Mesh(parsedGeometry, new THREE.MeshStandardMaterial({ color: 0x38bdf8, metalness: 0.15, roughness: 0.55, wireframe: false }));
+            } else {
+                const { OBJLoader } = await import('three/examples/jsm/loaders/OBJLoader.js');
+                if (disposed) return;
+                const loader = new OBJLoader();
+                const source = await response.arrayBuffer();
+                if (disposed) return;
+                object = loader.parse(new TextDecoder().decode(source));
+                if (disposed) {
+                    disposeObject(object);
+                    return;
+                }
+                object.traverse((child) => {
+                    const mesh = child as import('three').Mesh;
+                    if (!mesh.isMesh) return;
+                    if (Array.isArray(mesh.material)) mesh.material.forEach((item) => item.dispose());
+                    else mesh.material.dispose();
+                    mesh.material = new THREE.MeshStandardMaterial({ color: 0x38bdf8, metalness: 0.15, roughness: 0.55 });
+                });
+            }
+            if (disposed) {
+                disposeObject(object);
+                return;
+            }
+            const bounds = new THREE.Box3().setFromObject(object);
+            if (bounds.isEmpty()) {
+                disposeObject(object);
+                throw new Error('Mesh contains no renderable geometry');
+            }
+            const center = bounds.getCenter(new THREE.Vector3());
+            object.position.sub(center);
+            const size = bounds.getSize(new THREE.Vector3());
             const scene = new THREE.Scene();
             const camera = new THREE.PerspectiveCamera(45, Math.max(element.clientWidth, 1) / Math.max(element.clientHeight, 1), 0.01, 100000);
             const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -643,32 +699,6 @@ function MeshViewer({ artifact, token }: MeshViewerProps) {
             keyLight.position.set(3, 5, 8);
             scene.add(keyLight);
             scene.add(new THREE.GridHelper(20, 20, 0x155e75, 0x0f172a));
-
-            let object: import('three').Object3D;
-            let geometry: import('three').BufferGeometry | undefined;
-            let material: import('three').Material | undefined;
-            if (mediaType === 'model/stl') {
-                const { STLLoader } = await import('three/examples/jsm/loaders/STLLoader.js');
-                const parsedGeometry = new STLLoader().parse(await response.arrayBuffer());
-                parsedGeometry.computeVertexNormals();
-                geometry = parsedGeometry;
-                material = new THREE.MeshStandardMaterial({ color: 0x38bdf8, metalness: 0.15, roughness: 0.55, wireframe: false });
-                object = new THREE.Mesh(parsedGeometry, material);
-            } else {
-                const { OBJLoader } = await import('three/examples/jsm/loaders/OBJLoader.js');
-                const loader = new OBJLoader();
-                object = loader.parse(new TextDecoder().decode(await response.arrayBuffer()));
-                object.traverse((child) => {
-                    const mesh = child as import('three').Mesh;
-                    if (!mesh.isMesh) return;
-                    mesh.material = new THREE.MeshStandardMaterial({ color: 0x38bdf8, metalness: 0.15, roughness: 0.55 });
-                });
-            }
-            const bounds = new THREE.Box3().setFromObject(object);
-            if (bounds.isEmpty()) throw new Error('Mesh contains no renderable geometry');
-            const center = bounds.getCenter(new THREE.Vector3());
-            object.position.sub(center);
-            const size = bounds.getSize(new THREE.Vector3());
             camera.position.set(0, 0, Math.max(size.length() * 1.8, 4));
             camera.lookAt(0, 0, 0);
             scene.add(object);
@@ -689,15 +719,7 @@ function MeshViewer({ artifact, token }: MeshViewerProps) {
             disposeRenderer = () => {
                 if (frame !== undefined) cancelAnimationFrame(frame);
                 window.removeEventListener('resize', resize);
-                if (geometry) geometry.dispose();
-                if (material) material.dispose();
-                object.traverse((child) => {
-                    const mesh = child as import('three').Mesh;
-                    if (!mesh.isMesh) return;
-                    mesh.geometry.dispose();
-                    if (Array.isArray(mesh.material)) mesh.material.forEach((item) => item.dispose());
-                    else mesh.material.dispose();
-                });
+                disposeObject(object);
                 renderer.dispose();
                 if (element.contains(renderer.domElement)) element.removeChild(renderer.domElement);
             };
@@ -710,6 +732,7 @@ function MeshViewer({ artifact, token }: MeshViewerProps) {
         });
         return () => {
             disposed = true;
+            abortController.abort();
             disposeRenderer?.();
         };
     }, [artifact.artifact_id, artifact.media_type, token]);
