@@ -48,8 +48,29 @@ cursor is accepted only for migration compatibility.
   profile cannot promote an operator correction to `verified`.
 - `POST /api/v2/artifacts` stores bounded content in quarantine and returns a
   digest; it never exposes a filesystem path.
-- `POST /api/v2/cad/analyze` and `POST /api/v2/vision/analyze` currently create
-  truthful `unavailable` evidence because no parser/model adapter is enabled.
+- `GET /api/v2/artifacts/{id}/content` returns authorized quarantined bytes as
+  an attachment with `X-ZASI-Artifact-Digest`; the recorded digest is checked
+  again immediately before serving.
+- `POST /api/v2/cad/analyze` reads the quarantined bytes through the bounded
+  STEP/STL/OBJ source parser. Successful results are `verified` only for
+  measured source geometry (format, vertices/faces/triangles, units when
+  declared, and bounding box). FEA, thermal analysis, materials, mass, and
+  manufacturing safety remain `not_run` or unavailable. The only accepted
+  `analysis_kind` is `geometry`; unsupported solver kinds return a typed `422`
+  error rather than creating verified evidence.
+- `POST /api/v2/vision/analyze` structurally validates supplied PNG/JPEG bytes
+  and records content fingerprints. It returns `verified` structural observation with
+  `semantic_model: not_configured`; semantic labels and confidence remain
+  unavailable until an independently evaluated model adapter is configured.
+  The only accepted `analysis_kind` is `metadata`; semantic requests return a
+  typed `422` error. `encoded_content_digest` identifies the source bytes;
+  `decoded_payload_digest` is available for bounded PNG scanline payloads, and
+  `pixel_digest` remains `null` because JPEG pixels are not decoded by the
+  reference adapter.
+- `GET /api/v2/vision/{analysis_id}` retrieves the tenant-scoped immutable
+  vision evidence record only when its evidence kind and adapter provenance
+  identify the image-metadata procedure. The CAD retrieval route applies the
+  equivalent kind/provenance filter for CAD parser evidence.
 - `POST /api/v2/mobile/pair` or `POST /api/v2/devices` creates a short-lived
   one-time challenge. `POST /api/v2/mobile/{device_id}/approve` consumes it;
   `POST /api/v2/devices/{device_id}/revoke` invalidates device sessions.

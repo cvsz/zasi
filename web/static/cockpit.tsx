@@ -188,6 +188,26 @@ const api = {
     post<T = JsonRecord>(path: string, token?: string, body?: unknown, headers: Record<string, string> = {}): Promise<T> {
         return this.request<T>(path, { token, method: 'POST', body, headers });
     },
+    async upload<T = JsonRecord>(path: string, token: string, body: BodyInit, contentType: string): Promise<T> {
+        const response = await fetch(`${API_ROOT}${path}`, {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                Authorization: `Bearer ${token}`,
+                'Content-Type': contentType,
+            },
+            body,
+            cache: 'no-store',
+        });
+        let payload: ApiErrorPayload | null = null;
+        try {
+            payload = await response.json() as ApiErrorPayload;
+        } catch {
+            payload = null;
+        }
+        if (!response.ok) throw new ApiError(response, payload);
+        return payload as T;
+    },
 };
 
 interface AuthContextValue {
@@ -533,6 +553,7 @@ function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
         { label: 'Go to Overview', path: '/' },
         { label: 'Open J.A.R.V.I.S. Observe', path: '/jarvis' },
         { label: 'Open Capability Registry', path: '/subsystems' },
+        { label: 'Open Engineering Artifacts', path: '/engineering' },
         { label: 'Open Safety Cockpit', path: '/cockpit' },
         { label: 'Open Governed MCP Console', path: '/mcp' },
     ];
@@ -556,6 +577,216 @@ function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
                     ))}
                 </div>
             </div>
+        </div>
+    );
+}
+
+interface ArtifactRecord extends JsonRecord {
+    artifact_id: string;
+    digest: string;
+    media_type: string;
+    size_bytes: number;
+    status: string;
+}
+
+interface EvidenceRecord extends JsonRecord {
+    evidence_id: string;
+    status: string;
+    provenance?: JsonRecord;
+    result?: JsonRecord;
+    artifact_ref?: string | null;
+}
+
+interface AnalysisResponse extends JsonRecord {
+    analysis_id: string;
+    evidence: EvidenceRecord;
+}
+
+interface MeshViewerProps {
+    artifact: ArtifactRecord;
+    token: string;
+}
+
+function MeshViewer({ artifact, token }: MeshViewerProps) {
+    const mountRef = useRef<HTMLDivElement | null>(null);
+    const [status, setStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading');
+    const [error, setError] = useState('');
+    useEffect(() => {
+        const mediaType = artifact.media_type;
+        if (mediaType !== 'model/stl' && mediaType !== 'model/obj') {
+            setStatus('unavailable');
+            setError('This format is not browser-renderable; measured evidence remains available below.');
+            return undefined;
+        }
+        let disposed = false;
+        const abortController = new AbortController();
+        let disposeRenderer: (() => void) | undefined;
+        setStatus('loading');
+        setError('');
+        const disposeObject = (object: import('three').Object3D): void => {
+            object.traverse((child) => {
+                const mesh = child as import('three').Mesh;
+                if (!mesh.isMesh) return;
+                mesh.geometry.dispose();
+                if (Array.isArray(mesh.material)) mesh.material.forEach((item) => item.dispose());
+                else mesh.material.dispose();
+            });
+        };
+        const initialize = async (): Promise<void> => {
+            const THREE = await import('three');
+            if (disposed) return;
+            const element = mountRef.current;
+            if (!element) throw new Error('Mesh viewer mount is unavailable');
+            const response = await fetch(`${API_ROOT}/api/v2/artifacts/${artifact.artifact_id}/content`, {
+                headers: { Accept: mediaType, Authorization: `Bearer ${token}` },
+                cache: 'no-store',
+                signal: abortController.signal,
+            });
+            if (disposed) return;
+            if (!response.ok) throw new Error(`Artifact content unavailable (${response.status})`);
+            let object: import('three').Object3D;
+            if (mediaType === 'model/stl') {
+                const { STLLoader } = await import('three/examples/jsm/loaders/STLLoader.js');
+                if (disposed) return;
+                const source = await response.arrayBuffer();
+                if (disposed) return;
+                const parsedGeometry = new STLLoader().parse(source);
+                if (disposed) {
+                    parsedGeometry.dispose();
+                    return;
+                }
+                parsedGeometry.computeVertexNormals();
+                object = new THREE.Mesh(parsedGeometry, new THREE.MeshStandardMaterial({ color: 0x38bdf8, metalness: 0.15, roughness: 0.55, wireframe: false }));
+            } else {
+                const { OBJLoader } = await import('three/examples/jsm/loaders/OBJLoader.js');
+                if (disposed) return;
+                const loader = new OBJLoader();
+                const source = await response.arrayBuffer();
+                if (disposed) return;
+                object = loader.parse(new TextDecoder().decode(source));
+                if (disposed) {
+                    disposeObject(object);
+                    return;
+                }
+                object.traverse((child) => {
+                    const mesh = child as import('three').Mesh;
+                    if (!mesh.isMesh) return;
+                    if (Array.isArray(mesh.material)) mesh.material.forEach((item) => item.dispose());
+                    else mesh.material.dispose();
+                    mesh.material = new THREE.MeshStandardMaterial({ color: 0x38bdf8, metalness: 0.15, roughness: 0.55 });
+                });
+            }
+            if (disposed) {
+                disposeObject(object);
+                return;
+            }
+            const bounds = new THREE.Box3().setFromObject(object);
+            if (bounds.isEmpty()) {
+                disposeObject(object);
+                throw new Error('Mesh contains no renderable geometry');
+            }
+            const center = bounds.getCenter(new THREE.Vector3());
+            object.position.sub(center);
+            const size = bounds.getSize(new THREE.Vector3());
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(45, Math.max(element.clientWidth, 1) / Math.max(element.clientHeight, 1), 0.01, 100000);
+            const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(element.clientWidth, element.clientHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+            element.appendChild(renderer.domElement);
+            scene.add(new THREE.AmbientLight(0xffffff, 1.7));
+            const keyLight = new THREE.DirectionalLight(0x67e8f9, 2.2);
+            keyLight.position.set(3, 5, 8);
+            scene.add(keyLight);
+            scene.add(new THREE.GridHelper(20, 20, 0x155e75, 0x0f172a));
+            camera.position.set(0, 0, Math.max(size.length() * 1.8, 4));
+            camera.lookAt(0, 0, 0);
+            scene.add(object);
+            const resize = () => {
+                camera.aspect = Math.max(element.clientWidth, 1) / Math.max(element.clientHeight, 1);
+                camera.updateProjectionMatrix();
+                renderer.setSize(element.clientWidth, element.clientHeight);
+            };
+            let frame: number | undefined;
+            const animate = () => {
+                frame = requestAnimationFrame(animate);
+                object.rotation.y += 0.004;
+                renderer.render(scene, camera);
+            };
+            window.addEventListener('resize', resize);
+            animate();
+            setStatus('ready');
+            disposeRenderer = () => {
+                if (frame !== undefined) cancelAnimationFrame(frame);
+                window.removeEventListener('resize', resize);
+                disposeObject(object);
+                renderer.dispose();
+                if (element.contains(renderer.domElement)) element.removeChild(renderer.domElement);
+            };
+        };
+        void initialize().catch((reason: unknown) => {
+            if (!disposed) {
+                setStatus('unavailable');
+                setError(errorMessage(reason));
+            }
+        });
+        return () => {
+            disposed = true;
+            abortController.abort();
+            disposeRenderer?.();
+        };
+    }, [artifact.artifact_id, artifact.media_type, token]);
+    return <div ref={mountRef} className="artifact-viewer" role="img" aria-label={`Read-only mesh viewer for ${artifact.artifact_id}`}>{status === 'loading' && <span className="muted">Loading source-backed mesh…</span>}{status === 'unavailable' && <span className="muted">{error || 'Mesh viewer unavailable; evidence remains authoritative.'}</span>}{status === 'ready' && <span className="viewer-badge">SOURCE DIGEST VERIFIED</span>}</div>;
+}
+
+function artifactMediaType(file: File): string {
+    const declared = file.type.toLowerCase();
+    if (['application/step', 'model/step', 'model/stl', 'model/obj', 'image/png', 'image/jpeg'].includes(declared)) return declared;
+    const extension = file.name.toLowerCase().split('.').pop() || '';
+    return ({ stp: 'application/step', step: 'application/step', stl: 'model/stl', obj: 'model/obj', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg' } as Record<string, string>)[extension] || 'application/octet-stream';
+}
+
+function EngineeringPage() {
+    const { session } = useAuth();
+    const { addToast } = useToast();
+    const [file, setFile] = useState<File | null>(null);
+    const [artifact, setArtifact] = useState<ArtifactRecord | null>(null);
+    const [evidence, setEvidence] = useState<EvidenceRecord | null>(null);
+    const [pending, setPending] = useState(false);
+    const [error, setError] = useState('');
+    const submit = async (): Promise<void> => {
+        const token = session?.access_token;
+        if (!token || !file) return;
+        setPending(true);
+        setError('');
+        setEvidence(null);
+        const mediaType = artifactMediaType(file);
+        try {
+            const uploaded = await api.upload<ArtifactRecord>('/api/v2/artifacts', token, file, mediaType);
+            setArtifact(uploaded);
+            const image = mediaType === 'image/png' || mediaType === 'image/jpeg';
+            const analyzed = await api.post<AnalysisResponse>(image ? '/api/v2/vision/analyze' : '/api/v2/cad/analyze', token, { artifact_id: uploaded.artifact_id, analysis_kind: image ? 'metadata' : 'geometry' });
+            setEvidence(analyzed.evidence);
+            addToast('Artifact analyzed with source provenance', 'success');
+        } catch (reason: unknown) {
+            setError(errorMessage(reason));
+            addToast('Artifact was rejected or unavailable', 'error');
+        } finally {
+            setPending(false);
+        }
+    };
+    return (
+        <div className="page route-fade">
+            <h2 className="page-title">🧩 Engineering / visual evidence</h2>
+            <div className="notice">Uploads remain quarantined. Geometry facts are measured from source bytes; FEA, thermal safety, semantic labels, and manufacturing claims are not inferred.</div>
+            <div className="card">
+                <div className="card-header">SOURCE ARTIFACT</div>
+                <div className="artifact-upload-row"><input aria-label="Choose CAD or image artifact" type="file" accept=".step,.stp,.stl,.obj,.png,.jpg,.jpeg" onChange={(event) => { setFile(event.target.files?.[0] ?? null); setError(''); }} /><button className="btn primary" disabled={!file || pending} onClick={submit}>{pending ? 'ANALYZING…' : 'UPLOAD + ANALYZE'}</button></div>
+                {error && <p className="error-text" role="alert">{error}</p>}
+                {artifact && <div className="artifact-meta"><StatusBadge status={artifact.status}>{artifact.status}</StatusBadge><span>{artifact.media_type}</span><span>{artifact.size_bytes} bytes</span><span>source digest: <code>{artifact.digest}</code></span></div>}
+            </div>
+            {artifact && (artifact.media_type === 'model/stl' || artifact.media_type === 'model/obj') && session?.access_token && <div className="card"><div className="card-header">READ-ONLY MESH VIEWER</div><MeshViewer artifact={artifact} token={session.access_token} /></div>}
+            {evidence && <div className="card"><div className="card-header">IMMUTABLE ANALYSIS EVIDENCE · {evidence.evidence_id}</div><div className="state-row"><StatusBadge status={evidence.status}>{evidence.status}</StatusBadge><span className="muted">artifact: {evidence.artifact_ref || '—'}</span></div><p className="disclosure">{displayValue(evidence.provenance?.disclosure, 'Adapter disclosure unavailable.')}</p><pre className="code-out" aria-label="Analysis result">{JSON.stringify(evidence.result, null, 2)}</pre></div>}
         </div>
     );
 }
@@ -735,6 +966,7 @@ function MCPPage() {
 const NAV: NavigationLink[] = [
     { to: '/', label: '⚡ Overview', end: true },
     { to: '/jarvis', label: '🤖 J.A.R.V.I.S.' },
+    { to: '/engineering', label: '🧩 Engineering' },
     { to: '/subsystems', label: '🔬 Registry' },
     { to: '/cockpit', label: '🛡 Safety' },
     { to: '/mcp', label: '🔌 MCP' },
@@ -751,7 +983,7 @@ function Shell() {
 function AuthenticatedApp() {
     const { session } = useAuth();
     if (!session) return <LoginPage />;
-    return <Routes><Route path="/" element={<Shell />}><Route index element={<OverviewPage />} /><Route path="jarvis" element={<JarvisPage />} /><Route path="subsystems" element={<SubsystemsPage />} /><Route path="cockpit" element={<CockpitPage />} /><Route path="mcp" element={<MCPPage />} /></Route></Routes>;
+    return <Routes><Route path="/" element={<Shell />}><Route index element={<OverviewPage />} /><Route path="jarvis" element={<JarvisPage />} /><Route path="engineering" element={<EngineeringPage />} /><Route path="subsystems" element={<SubsystemsPage />} /><Route path="cockpit" element={<CockpitPage />} /><Route path="mcp" element={<MCPPage />} /></Route></Routes>;
 }
 
 function App() {

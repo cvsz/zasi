@@ -684,7 +684,7 @@ class ControlPlaneAPITests(unittest.IsolatedAsyncioTestCase):
                 conflicting_revoke.json()["error"]["code"], "IDEMPOTENCY_CONFLICT"
             )
 
-    async def test_sequences_and_unavailable_analysis_are_governed(self):
+    async def test_sequences_and_source_backed_analysis_are_governed(self):
         async with self.client() as client:
             session_response = await client.post(
                 "/api/v2/sessions", json={"api_key": "test-bootstrap-secret"}
@@ -781,7 +781,12 @@ class ControlPlaneAPITests(unittest.IsolatedAsyncioTestCase):
 
             artifact = await client.post(
                 "/api/v2/artifacts",
-                content=b"cad fixture",
+                content=(
+                    b"ISO-10303-21;\nHEADER;\nENDSEC;\nDATA;\n"
+                    b"#1=CARTESIAN_POINT('P0',(0.,0.,0.));\n"
+                    b"#2=CARTESIAN_POINT('P1',(1.,2.,3.));\n"
+                    b"ENDSEC;\nEND-ISO-10303-21;\n"
+                ),
                 headers={**headers, "Content-Type": "model/step"},
             )
             analysis = await client.post(
@@ -790,7 +795,11 @@ class ControlPlaneAPITests(unittest.IsolatedAsyncioTestCase):
                 headers=headers,
             )
             self.assertEqual(analysis.status_code, 201)
-            self.assertEqual(analysis.json()["evidence"]["status"], "unavailable")
+            self.assertEqual(analysis.json()["evidence"]["status"], "verified")
+            self.assertEqual(
+                analysis.json()["evidence"]["result"]["geometry_status"],
+                "measured",
+            )
 
     async def test_evidence_correction_is_append_only_and_cannot_claim_verified(self):
         async with self.client() as client:

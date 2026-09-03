@@ -86,6 +86,7 @@ exact-digest approval.
 | `/health/ready` | Database/schema/frontend dependency readiness |
 | `/api/v2/openapi.json` | Authenticated generated API schema |
 | `/api/v2/events` | Authenticated durable SSE replay/resync stream |
+| `/api/v2/artifacts` + `/api/v2/cad/*` + `/api/v2/vision/*` | Quarantined source-artifact analysis with digest-bound geometry/image evidence |
 | `web/dist` | Vite-built cockpit bundle; no production CDN runtime |
 | `electron/main.js` | Supervised loopback shell with readiness polling |
 
@@ -152,7 +153,7 @@ manifest.
 
 The checked-in example contains only a generated loopback-only API credential
 and uses SQLite for a portable local baseline; it contains no shared-service
-passwords. This checkout's private `.env` is machine-generated and uses the
+passwords. This checkout's private `.env` is machine-local and uses the
 shared authenticated PostgreSQL and Redis services; those credentials are
 never committed. Local green tests do not prove staging deployment, managed
 operations, external egress, hardware control, formal/cryptographic proof, or
