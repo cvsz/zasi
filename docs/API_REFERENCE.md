@@ -71,6 +71,10 @@ cursor is accepted only for migration compatibility.
   vision evidence record only when its evidence kind and adapter provenance
   identify the image-metadata procedure. The CAD retrieval route applies the
   equivalent kind/provenance filter for CAD parser evidence.
+- A malformed CAD or image artifact creates an immutable rejected evidence
+  record and returns its identifier as `error.details.evidence_id`; callers with
+  `evidence:read` may retrieve that rejection record through
+  `GET /api/v2/evidence/{evidence_id}`.
 - `POST /api/v2/mobile/pair` or `POST /api/v2/devices` creates a short-lived
   one-time challenge. `POST /api/v2/mobile/{device_id}/approve` consumes it;
   `POST /api/v2/devices/{device_id}/revoke` invalidates device sessions.
