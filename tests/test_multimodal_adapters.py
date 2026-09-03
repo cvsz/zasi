@@ -1,4 +1,6 @@
+import base64
 import hashlib
+import json
 import struct
 import tempfile
 import unittest
@@ -27,6 +29,61 @@ DATA;
 ENDSEC;
 END-ISO-10303-21;
 """
+
+
+def glb_fixture() -> bytes:
+    positions = struct.pack(
+        "<9f",
+        0.0,
+        0.0,
+        0.0,
+        2.0,
+        0.0,
+        0.0,
+        0.0,
+        3.0,
+        0.0,
+    )
+    indices = struct.pack("<3H", 0, 1, 2)
+    binary = positions + indices
+    document = {
+        "asset": {"version": "2.0"},
+        "buffers": [{"byteLength": len(binary)}],
+        "bufferViews": [
+            {"buffer": 0, "byteOffset": 0, "byteLength": len(positions)},
+            {"buffer": 0, "byteOffset": len(positions), "byteLength": len(indices)},
+        ],
+        "accessors": [
+            {"bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3"},
+            {"bufferView": 1, "componentType": 5123, "count": 3, "type": "SCALAR"},
+        ],
+        "meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "indices": 1}]}],
+    }
+    encoded_json = json.dumps(document, separators=(",", ":")).encode("utf-8")
+    encoded_json += b" " * ((-len(encoded_json)) % 4)
+    encoded_binary = binary + b"\x00" * ((-len(binary)) % 4)
+    total_length = 12 + 8 + len(encoded_json) + 8 + len(encoded_binary)
+    return (
+        b"glTF"
+        + struct.pack("<II", 2, total_length)
+        + struct.pack("<II", len(encoded_json), 0x4E4F534A)
+        + encoded_json
+        + struct.pack("<II", len(encoded_binary), 0x004E4942)
+        + encoded_binary
+    )
+
+
+def gltf_json_fixture() -> bytes:
+    glb = glb_fixture()
+    json_length = struct.unpack_from("<I", glb, 12)[0]
+    binary_offset = 20 + json_length
+    binary_length = struct.unpack_from("<I", glb, binary_offset)[0]
+    binary = glb[binary_offset + 8 : binary_offset + 8 + binary_length]
+    document = json.loads(glb[20 : 20 + json_length])
+    document["buffers"][0]["uri"] = (
+        "data:application/octet-stream;base64," + base64.b64encode(binary).decode("ascii")
+    )
+    return json.dumps(document, separators=(",", ":")).encode("utf-8")
 
 
 def png_fixture(width: int, height: int, pixel: bytes) -> bytes:
@@ -233,6 +290,66 @@ endsolid test
         with patch.object(multimodal, "MAX_OBJ_FACE_REFERENCES", 3):
             with self.assertRaises(multimodal.ArtifactFormatError):
                 multimodal.parse_cad_artifact(obj, "model/obj")
+
+    def test_glb_parser_measures_actual_positions_and_indices(self):
+        from src.control_plane.multimodal import parse_cad_artifact
+
+        result = parse_cad_artifact(glb_fixture(), "model/gltf-binary")
+
+        self.assertEqual(result["format"], "GLB")
+        self.assertEqual(result["parser"], "zasi.gltf.stdlib")
+        self.assertEqual(result["units"], "m")
+        self.assertEqual(result["vertex_count"], 3)
+        self.assertEqual(result["face_count"], 1)
+        self.assertEqual(result["triangle_count"], 1)
+        self.assertEqual(result["bounding_box"]["dimensions"], {"x": 2.0, "y": 3.0, "z": 0.0})
+        self.assertTrue(result["mesh_renderable"])
+
+    def test_gltf_json_parser_measures_embedded_buffer_geometry(self):
+        from src.control_plane.multimodal import parse_cad_artifact
+
+        result = parse_cad_artifact(gltf_json_fixture(), "model/gltf+json")
+
+        self.assertEqual(result["format"], "GLTF")
+        self.assertEqual(result["vertex_count"], 3)
+        self.assertEqual(result["triangle_count"], 1)
+        self.assertEqual(result["bounding_box"]["dimensions"], {"x": 2.0, "y": 3.0, "z": 0.0})
+
+    def test_gltf_external_buffers_are_rejected_instead_of_fetched(self):
+        from src.control_plane.multimodal import ArtifactFormatError, parse_cad_artifact
+
+        document = {
+            "asset": {"version": "2.0"},
+            "buffers": [{"byteLength": 12, "uri": "https://example.invalid/mesh.bin"}],
+        }
+        with self.assertRaises(ArtifactFormatError):
+            parse_cad_artifact(
+                json.dumps(document).encode("utf-8"), "model/gltf+json"
+            )
+
+    def test_glb_without_binary_buffer_is_rejected_as_a_format_error(self):
+        from src.control_plane.multimodal import ArtifactFormatError, parse_cad_artifact
+
+        glb = bytearray(glb_fixture())
+        json_length = struct.unpack_from("<I", glb, 12)[0]
+        del glb[20 + json_length :]
+        struct.pack_into("<I", glb, 8, len(glb))
+
+        with self.assertRaises(ArtifactFormatError):
+            parse_cad_artifact(bytes(glb), "model/gltf-binary")
+
+    def test_gltf_oversized_json_integer_is_rejected_as_a_format_error(self):
+        from src.control_plane.multimodal import ArtifactFormatError, parse_cad_artifact
+
+        document = b'{"asset":{"version":"2.0"},"oversized":' + b"9" * 5000 + b"}"
+        with self.assertRaises(ArtifactFormatError):
+            parse_cad_artifact(document, "model/gltf+json")
+
+    def test_gltf_data_uri_requires_an_exact_base64_parameter(self):
+        from src.control_plane.multimodal import ArtifactFormatError, _gltf_data_uri
+
+        with self.assertRaises(ArtifactFormatError):
+            _gltf_data_uri("data:application/octet-stream;base64x,AA==")
 
     def test_image_observation_changes_with_actual_png_input(self):
         try:
@@ -523,6 +640,24 @@ class MultimodalApiTests(unittest.IsolatedAsyncioTestCase):
             )
             self.assertEqual(analysis.status_code, 201)
             self.assertEqual(analysis.json()["evidence"]["result"]["format"], "OBJ")
+
+    async def test_glb_upload_reaches_quarantine_and_analysis(self):
+        async with self.client() as (client, headers):
+            artifact = await client.post(
+                "/api/v2/artifacts",
+                content=glb_fixture(),
+                headers={**headers, "Content-Type": "model/gltf-binary"},
+            )
+            self.assertEqual(artifact.status_code, 201)
+            analysis = await client.post(
+                "/api/v2/cad/analyze",
+                json={"artifact_id": artifact.json()["artifact_id"], "analysis_kind": "geometry"},
+                headers=headers,
+            )
+            self.assertEqual(analysis.status_code, 201)
+            evidence = analysis.json()["evidence"]
+            self.assertEqual(evidence["result"]["format"], "GLB")
+            self.assertEqual(evidence["provenance"]["adapter_id"], "zasi.gltf.stdlib")
 
     async def test_cad_solver_kinds_are_rejected_instead_of_verified(self):
         async with self.client() as (client, headers):

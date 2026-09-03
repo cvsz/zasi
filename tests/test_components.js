@@ -63,6 +63,12 @@ assert(cockpitTsx.includes("/api/v2/vision/analyze"), 'engineering view must dis
 assert(cockpitTsx.includes("/api/v2/artifacts/${artifact.artifact_id}/content"), 'mesh viewer must retrieve authorized artifact content');
 assert(cockpitTsx.includes("three/examples/jsm/loaders/STLLoader.js"), 'mesh viewer must use the bundled STL loader');
 assert(cockpitTsx.includes("three/examples/jsm/loaders/OBJLoader.js"), 'mesh viewer must use the bundled OBJ loader');
+assert(cockpitTsx.includes("three/examples/jsm/loaders/GLTFLoader.js"), 'mesh viewer must use the bundled GLTF loader');
+assert(cockpitTsx.includes('setURLModifier'), 'GLTF viewer must control resource URL resolution');
+assert(cockpitTsx.includes('External glTF resources are disabled'), 'GLTF viewer must reject external resource loads');
+assert(cockpitTsx.includes('model/gltf-binary'), 'cockpit must map GLB artifacts to the governed media type');
+assert(cockpitTsx.includes('model/gltf+json'), 'cockpit must map glTF artifacts to the governed media type');
+assert(cockpitTsx.includes('.glb,.gltf'), 'engineering upload must accept GLB and glTF files');
 assert(cockpitTsx.includes('source digest'), 'engineering view must disclose the source digest');
 assert(cockpitTsx.includes('const abortController = new AbortController()'), 'mesh viewer must cancel in-flight content loads on unmount');
 assert(cockpitTsx.includes('signal: abortController.signal'), 'mesh viewer fetch must receive the unmount abort signal');

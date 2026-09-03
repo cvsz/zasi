@@ -7,9 +7,12 @@ classify images, authenticate speakers, or authorize actions.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import hmac
 import io
+import json
 import math
 import re
 import struct
@@ -23,6 +26,12 @@ MAX_TOPOLOGY_RECORDS = 2_000_000
 MAX_OBJ_VERTICES = min(MAX_GEOMETRY_RECORDS, MAX_ARTIFACT_BYTES // 64)
 MAX_OBJ_RECORDS = MAX_OBJ_VERTICES * 2
 MAX_OBJ_FACE_REFERENCES = MAX_OBJ_VERTICES
+MAX_GLTF_JSON_BYTES = 8 * 1024 * 1024
+MAX_GLTF_BUFFER_BYTES = MAX_ARTIFACT_BYTES
+MAX_GLTF_JSON_DEPTH = 64
+MAX_GLTF_COLLECTION_ITEMS = 100_000
+MAX_GLTF_CHUNKS = 64
+MAX_GLTF_INDEX_RECORDS = 2_000_000
 MAX_IMAGE_DIMENSION = 32_768
 MAX_DECODED_IMAGE_BYTES = 64 * 1024 * 1024
 
@@ -55,6 +64,23 @@ _ADAM7_PASSES = (
     (1, 0, 2, 2),
     (0, 1, 1, 2),
 )
+_GLTF_COMPONENTS = {
+    5120: ("b", 1),
+    5121: ("B", 1),
+    5122: ("h", 2),
+    5123: ("H", 2),
+    5125: ("I", 4),
+    5126: ("f", 4),
+}
+_GLTF_TYPES = {
+    "SCALAR": 1,
+    "VEC2": 2,
+    "VEC3": 3,
+    "VEC4": 4,
+    "MAT2": 4,
+    "MAT3": 9,
+    "MAT4": 16,
+}
 
 
 class ArtifactFormatError(ValueError):
@@ -434,6 +460,400 @@ def _obj(data: bytes) -> Dict[str, Any]:
     }
 
 
+def _gltf_object(pairs: List[Tuple[str, Any]]) -> Dict[str, Any]:
+    result: Dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ArtifactFormatError("glTF JSON contains a duplicate object key")
+        result[key] = value
+    return result
+
+
+def _gltf_constant(value: str) -> Any:
+    raise ArtifactFormatError(f"glTF JSON constant {value} is not valid")
+
+
+def _validate_gltf_json_depth(text: str) -> None:
+    depth = 0
+    in_string = False
+    escaped = False
+    for character in text:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                in_string = False
+            continue
+        if character == '"':
+            in_string = True
+        elif character in "[{":
+            depth += 1
+            if depth > MAX_GLTF_JSON_DEPTH:
+                raise ArtifactFormatError("glTF JSON nesting exceeds the safe bound")
+        elif character in "]}":
+            depth -= 1
+            if depth < 0:
+                raise ArtifactFormatError("glTF JSON nesting is invalid")
+    if in_string or escaped or depth != 0:
+        raise ArtifactFormatError("glTF JSON structure is incomplete")
+
+
+def _gltf_json_document(data: bytes) -> Dict[str, Any]:
+    if not data or len(data) > MAX_GLTF_JSON_BYTES:
+        raise ArtifactFormatError("glTF JSON exceeds the safe bound")
+    trimmed = data.rstrip(b" \t\r\n\x00")
+    try:
+        text = trimmed.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ArtifactFormatError("glTF JSON must be UTF-8") from exc
+    _validate_gltf_json_depth(text)
+    try:
+        document = json.loads(
+            text,
+            object_pairs_hook=_gltf_object,
+            parse_constant=_gltf_constant,
+        )
+    except ArtifactFormatError:
+        raise
+    except (json.JSONDecodeError, RecursionError, MemoryError, ValueError) as exc:
+        raise ArtifactFormatError("glTF JSON is invalid") from exc
+    if not isinstance(document, dict):
+        raise ArtifactFormatError("glTF root must be a JSON object")
+    return document
+
+
+def _gltf_integer(value: Any, name: str, *, minimum: int = 0) -> int:
+    if type(value) is not int or value < minimum:
+        raise ArtifactFormatError(f"glTF {name} must be a bounded integer")
+    return value
+
+
+def _gltf_mapping(value: Any, name: str) -> Dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ArtifactFormatError(f"glTF {name} must be an object")
+    return value
+
+
+def _gltf_collection(document: Dict[str, Any], name: str, *, required: bool = False) -> List[Any]:
+    value = document.get(name)
+    if value is None and not required:
+        return []
+    if not isinstance(value, list) or len(value) > MAX_GLTF_COLLECTION_ITEMS:
+        raise ArtifactFormatError(f"glTF {name} collection is invalid or too large")
+    if required and not value:
+        raise ArtifactFormatError(f"glTF {name} collection is empty")
+    return value
+
+
+def _gltf_data_uri(uri: Any) -> bytes:
+    if not isinstance(uri, str) or not uri.lower().startswith("data:"):
+        raise ArtifactFormatError("external glTF buffer URIs are not fetched")
+    header, separator, payload = uri.partition(",")
+    parameters = header.split(";")
+    if not separator or not any(parameter.lower() == "base64" for parameter in parameters[1:]):
+        raise ArtifactFormatError("glTF buffers require a base64 data URI")
+    try:
+        return base64.b64decode(payload, validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise ArtifactFormatError("glTF buffer data URI is invalid") from exc
+
+
+def _gltf_buffers(document: Dict[str, Any], binary_payload: bytes | None) -> List[bytes]:
+    raw_buffers = _gltf_collection(document, "buffers", required=True)
+    if binary_payload is not None and (
+        len(raw_buffers) != 1
+        or not isinstance(raw_buffers[0], dict)
+        or raw_buffers[0].get("uri") is not None
+    ):
+        raise ArtifactFormatError("GLB must contain exactly one URI-less buffer")
+    buffers: List[bytes] = []
+    total_bytes = 0
+    for index, raw_buffer in enumerate(raw_buffers):
+        buffer = _gltf_mapping(raw_buffer, f"buffer {index}")
+        byte_length = _gltf_integer(buffer.get("byteLength"), f"buffer {index} byteLength", minimum=1)
+        if byte_length > MAX_GLTF_BUFFER_BYTES:
+            raise ArtifactFormatError("glTF buffer exceeds the safe bound")
+        uri = buffer.get("uri")
+        if uri is None:
+            if binary_payload is None:
+                raise ArtifactFormatError("glTF JSON buffer has no embedded data")
+            payload = binary_payload
+        else:
+            if binary_payload is not None:
+                raise ArtifactFormatError("GLB must not reference external buffers")
+            payload = _gltf_data_uri(uri)
+        if len(payload) < byte_length:
+            raise ArtifactFormatError("glTF buffer is shorter than its declared length")
+        total_bytes += byte_length
+        if total_bytes > MAX_GLTF_BUFFER_BYTES:
+            raise ArtifactFormatError("glTF buffers exceed the aggregate safe bound")
+        buffers.append(payload[:byte_length])
+    return buffers
+
+
+def _gltf_container(data: bytes, media_type: str) -> Tuple[Dict[str, Any], List[bytes], str]:
+    binary_types = {"model/gltf-binary", "application/gltf-binary"}
+    json_types = {"model/gltf+json", "application/gltf+json"}
+    if media_type in binary_types or data.startswith(b"glTF"):
+        if len(data) < 20:
+            raise ArtifactFormatError("GLB header is incomplete")
+        magic, version, declared_length = struct.unpack_from("<4sII", data, 0)
+        if magic != b"glTF" or version != 2 or declared_length != len(data):
+            raise ArtifactFormatError("GLB header is invalid")
+        offset = 12
+        chunk_count = 0
+        json_payload: bytes | None = None
+        binary_payload: bytes | None = None
+        while offset < declared_length:
+            chunk_count += 1
+            if chunk_count > MAX_GLTF_CHUNKS or offset + 8 > declared_length:
+                raise ArtifactFormatError("GLB chunk structure is invalid")
+            chunk_length, chunk_type = struct.unpack_from("<II", data, offset)
+            if chunk_length % 4 != 0:
+                raise ArtifactFormatError("GLB chunk length is not aligned")
+            end = offset + 8 + chunk_length
+            if end > declared_length:
+                raise ArtifactFormatError("GLB chunk exceeds artifact bounds")
+            payload = data[offset + 8 : end]
+            if chunk_type == 0x4E4F534A:
+                if chunk_count != 1 or json_payload is not None:
+                    raise ArtifactFormatError("GLB JSON chunk is duplicated or misplaced")
+                json_payload = payload
+            elif chunk_type == 0x004E4942:
+                if binary_payload is not None:
+                    raise ArtifactFormatError("GLB BIN chunk is duplicated")
+                binary_payload = payload
+            offset = end
+        if json_payload is None or offset != declared_length:
+            raise ArtifactFormatError("GLB JSON chunk is missing")
+        document = _gltf_json_document(json_payload)
+        return document, _gltf_buffers(document, binary_payload), "GLB"
+    if media_type not in json_types:
+        raise ArtifactFormatError("glTF media type is not supported by the reference parser")
+    document = _gltf_json_document(data)
+    return document, _gltf_buffers(document, None), "GLTF"
+
+
+def _gltf_accessor_descriptor(
+    accessors: List[Any],
+    buffer_views: List[Any],
+    buffers: List[bytes],
+    accessor_index: Any,
+    *,
+    expected_type: str | None = None,
+    allowed_component_types: frozenset[int] | None = None,
+) -> Dict[str, Any]:
+    index = _gltf_integer(accessor_index, "accessor index")
+    if index >= len(accessors):
+        raise ArtifactFormatError("glTF accessor index is out of range")
+    accessor = _gltf_mapping(accessors[index], f"accessor {index}")
+    if "sparse" in accessor:
+        raise ArtifactFormatError("sparse glTF accessors are not enabled")
+    view_index = accessor.get("bufferView")
+    view_index = _gltf_integer(view_index, f"accessor {index} bufferView")
+    if view_index >= len(buffer_views):
+        raise ArtifactFormatError("glTF bufferView index is out of range")
+    view = _gltf_mapping(buffer_views[view_index], f"bufferView {view_index}")
+    buffer_index = _gltf_integer(view.get("buffer"), f"bufferView {view_index} buffer")
+    if buffer_index >= len(buffers):
+        raise ArtifactFormatError("glTF buffer index is out of range")
+    buffer_offset = _gltf_integer(view.get("byteOffset", 0), f"bufferView {view_index} byteOffset")
+    view_length = _gltf_integer(view.get("byteLength"), f"bufferView {view_index} byteLength", minimum=1)
+    if buffer_offset + view_length > len(buffers[buffer_index]):
+        raise ArtifactFormatError("glTF bufferView exceeds its buffer")
+    component_type = _gltf_integer(accessor.get("componentType"), f"accessor {index} componentType")
+    component_info = _GLTF_COMPONENTS.get(component_type)
+    if component_info is None or (
+        allowed_component_types is not None and component_type not in allowed_component_types
+    ):
+        raise ArtifactFormatError("glTF accessor component type is unsupported")
+    accessor_type = accessor.get("type")
+    if not isinstance(accessor_type, str) or accessor_type not in _GLTF_TYPES:
+        raise ArtifactFormatError("glTF accessor type is unsupported")
+    if expected_type is not None and accessor_type != expected_type:
+        raise ArtifactFormatError(f"glTF accessor must have type {expected_type}")
+    component_count = _GLTF_TYPES[accessor_type]
+    component_format, component_width = component_info
+    element_size = component_count * component_width
+    accessor_offset = _gltf_integer(accessor.get("byteOffset", 0), f"accessor {index} byteOffset")
+    start = buffer_offset + accessor_offset
+    if start % component_width != 0:
+        raise ArtifactFormatError("glTF accessor is misaligned")
+    normalized = accessor.get("normalized", False)
+    if not isinstance(normalized, bool):
+        raise ArtifactFormatError("glTF accessor normalized flag is invalid")
+    if normalized and component_type == 5126:
+        raise ArtifactFormatError("floating-point glTF accessors cannot be normalized")
+    count = _gltf_integer(accessor.get("count"), f"accessor {index} count", minimum=1)
+    if count > MAX_GEOMETRY_RECORDS:
+        raise ArtifactFormatError("glTF accessor count exceeds the safe bound")
+    if "byteStride" in view:
+        stride = _gltf_integer(
+            view["byteStride"], f"bufferView {view_index} byteStride", minimum=element_size
+        )
+        if stride > 252 or stride % 4 != 0:
+            raise ArtifactFormatError("glTF bufferView byteStride is invalid")
+    else:
+        stride = element_size
+    required_end = start + (count - 1) * stride + element_size
+    if required_end > buffer_offset + view_length:
+        raise ArtifactFormatError("glTF accessor exceeds its bufferView")
+    return {
+        "buffer": buffers[buffer_index],
+        "start": start,
+        "stride": stride,
+        "format": component_format,
+        "components": component_count,
+        "component_type": component_type,
+        "count": count,
+        "normalized": normalized,
+    }
+
+
+def _gltf_normalize(value: int, component_type: int) -> float:
+    if component_type == 5120:
+        return max(value / 127.0, -1.0)
+    if component_type == 5121:
+        return value / 255.0
+    if component_type == 5122:
+        return max(value / 32767.0, -1.0)
+    if component_type == 5123:
+        return value / 65535.0
+    if component_type == 5125:
+        return value / 4294967295.0
+    raise ArtifactFormatError("glTF normalized component type is unsupported")
+
+
+def _gltf_accessor_values(descriptor: Dict[str, Any]) -> Iterable[Tuple[float, ...]]:
+    format_string = "<" + descriptor["format"] * descriptor["components"]
+    for item_index in range(descriptor["count"]):
+        values = struct.unpack_from(
+            format_string,
+            descriptor["buffer"],
+            descriptor["start"] + item_index * descriptor["stride"],
+        )
+        if descriptor["normalized"]:
+            yield tuple(
+                _gltf_normalize(value, descriptor["component_type"]) for value in values
+            )
+        else:
+            yield tuple(float(value) for value in values)
+
+
+def _gltf(data: bytes, media_type: str) -> Dict[str, Any]:
+    document, buffers, container = _gltf_container(data, media_type)
+    asset = _gltf_mapping(document.get("asset"), "asset")
+    version = asset.get("version")
+    if not isinstance(version, str) or not version.startswith("2."):
+        raise ArtifactFormatError("glTF asset version 2 is required")
+    buffer_views = _gltf_collection(document, "bufferViews", required=True)
+    accessors = _gltf_collection(document, "accessors", required=True)
+    meshes = _gltf_collection(document, "meshes", required=True)
+    minimum = [math.inf, math.inf, math.inf]
+    maximum = [-math.inf, -math.inf, -math.inf]
+    vertex_count = 0
+    triangle_count = 0
+    index_count = 0
+    primitive_count = 0
+    for mesh_index, raw_mesh in enumerate(meshes):
+        mesh = _gltf_mapping(raw_mesh, f"mesh {mesh_index}")
+        primitives = mesh.get("primitives")
+        if not isinstance(primitives, list) or not primitives or len(primitives) > MAX_GLTF_COLLECTION_ITEMS:
+            raise ArtifactFormatError("glTF mesh primitives are invalid or empty")
+        for primitive in primitives:
+            primitive = _gltf_mapping(primitive, "mesh primitive")
+            attributes = _gltf_mapping(primitive.get("attributes"), "primitive attributes")
+            position_index = attributes.get("POSITION")
+            position = _gltf_accessor_descriptor(
+                accessors,
+                buffer_views,
+                buffers,
+                position_index,
+                expected_type="VEC3",
+                allowed_component_types=frozenset({5126}),
+            )
+            primitive_vertex_count = position["count"]
+            vertex_count += primitive_vertex_count
+            if vertex_count > MAX_GEOMETRY_RECORDS:
+                raise ArtifactFormatError("glTF geometry record limit exceeded")
+            for point in _gltf_accessor_values(position):
+                if not all(math.isfinite(value) for value in point):
+                    raise ArtifactFormatError("glTF POSITION contains a non-finite coordinate")
+                for axis in range(3):
+                    minimum[axis] = min(minimum[axis], point[axis])
+                    maximum[axis] = max(maximum[axis], point[axis])
+            indices = primitive.get("indices")
+            if indices is not None:
+                index_descriptor = _gltf_accessor_descriptor(
+                    accessors,
+                    buffer_views,
+                    buffers,
+                    indices,
+                    expected_type="SCALAR",
+                    allowed_component_types=frozenset({5121, 5123, 5125}),
+                )
+                index_count += index_descriptor["count"]
+                if index_count > MAX_GLTF_INDEX_RECORDS:
+                    raise ArtifactFormatError("glTF index record limit exceeded")
+                for index_value in _gltf_accessor_values(index_descriptor):
+                    index = int(index_value[0])
+                    if index < 0 or index >= primitive_vertex_count:
+                        raise ArtifactFormatError("glTF index references a missing POSITION")
+                primitive_vertex_count = index_descriptor["count"]
+            mode = primitive.get("mode", 4)
+            mode = _gltf_integer(mode, "primitive mode")
+            if mode > 6:
+                raise ArtifactFormatError("glTF primitive mode is unsupported")
+            if mode == 4:
+                if primitive_vertex_count % 3 != 0:
+                    raise ArtifactFormatError("glTF triangle primitive is incomplete")
+                triangle_count += primitive_vertex_count // 3
+            elif mode in {5, 6}:
+                triangle_count += max(0, primitive_vertex_count - 2)
+            if triangle_count > MAX_GEOMETRY_RECORDS:
+                raise ArtifactFormatError("glTF triangle record limit exceeded")
+            primitive_count += 1
+    if vertex_count == 0 or not all(math.isfinite(value) for value in minimum + maximum):
+        raise ArtifactFormatError("glTF contains no finite POSITION geometry")
+    dimensions = {
+        axis: maximum[index] - minimum[index]
+        for index, axis in enumerate(("x", "y", "z"))
+    }
+    if not all(math.isfinite(value) for value in dimensions.values()):
+        raise ArtifactFormatError("glTF bounding-box dimensions are not finite")
+    return {
+        "format": container,
+        "parser": "zasi.gltf.stdlib",
+        "parser_version": "1.0.0",
+        "geometry_status": "measured",
+        "units": "m",
+        "vertex_count": vertex_count,
+        "edge_count": None,
+        "face_count": triangle_count,
+        "triangle_count": triangle_count,
+        "mesh_count": len(meshes),
+        "primitive_count": primitive_count,
+        "buffer_count": len(buffers),
+        "index_count": index_count,
+        "coordinate_space": "mesh-local",
+        "bounding_box": {
+            "minimum": {axis: minimum[index] for index, axis in enumerate(("x", "y", "z"))},
+            "maximum": {axis: maximum[index] for index, axis in enumerate(("x", "y", "z"))},
+            "dimensions": dimensions,
+        },
+        "analysis": {"fea": "not_run", "thermal": "not_run"},
+        "mesh_renderable": True,
+        "source_digest": artifact_digest(data),
+        "disclosure": (
+            "Measured from actual glTF POSITION and index accessor bytes by the bounded stdlib parser. "
+            "Bounds are mesh-local; node transforms, sparse accessors, external buffers, materials, "
+            "morph targets, FEA, and thermal analysis were not applied or run."
+        ),
+    }
+
+
 def parse_cad_artifact(data: bytes, media_type: str) -> Dict[str, Any]:
     """Parse supported geometry bytes without trusting caller-provided metadata."""
     data = _bounded_bytes(data)
@@ -446,6 +866,13 @@ def parse_cad_artifact(data: bytes, media_type: str) -> Dict[str, Any]:
         return _stl(data)
     if normalized_type == "model/obj":
         return _obj(data)
+    if normalized_type in {
+        "model/gltf+json",
+        "application/gltf+json",
+        "model/gltf-binary",
+        "application/gltf-binary",
+    }:
+        return _gltf(data, normalized_type)
     if normalized_type == "application/octet-stream":
         if data.lstrip().startswith(b"ISO-10303-21;"):
             return _step(data)
@@ -453,6 +880,8 @@ def parse_cad_artifact(data: bytes, media_type: str) -> Dict[str, Any]:
             return _stl(data)
         if re.search(rb"(?m)^\s*v\s+", data):
             return _obj(data)
+        if data.startswith(b"glTF"):
+            return _gltf(data, normalized_type)
     raise ArtifactFormatError("CAD media type is not supported by the reference parser")
 
 

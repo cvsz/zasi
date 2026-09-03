@@ -613,9 +613,9 @@ function MeshViewer({ artifact, token }: MeshViewerProps) {
     const [error, setError] = useState('');
     useEffect(() => {
         const mediaType = artifact.media_type;
-        if (mediaType !== 'model/stl' && mediaType !== 'model/obj') {
+        if (mediaType !== 'model/stl' && mediaType !== 'model/obj' && mediaType !== 'model/gltf-binary') {
             setStatus('unavailable');
-            setError('This format is not browser-renderable; measured evidence remains available below.');
+            setError('This format is not browser-renderable in the reference viewer; measured evidence remains available below.');
             return undefined;
         }
         let disposed = false;
@@ -657,7 +657,7 @@ function MeshViewer({ artifact, token }: MeshViewerProps) {
                 }
                 parsedGeometry.computeVertexNormals();
                 object = new THREE.Mesh(parsedGeometry, new THREE.MeshStandardMaterial({ color: 0x38bdf8, metalness: 0.15, roughness: 0.55, wireframe: false }));
-            } else {
+            } else if (mediaType === 'model/obj') {
                 const { OBJLoader } = await import('three/examples/jsm/loaders/OBJLoader.js');
                 if (disposed) return;
                 const loader = new OBJLoader();
@@ -675,6 +675,24 @@ function MeshViewer({ artifact, token }: MeshViewerProps) {
                     else mesh.material.dispose();
                     mesh.material = new THREE.MeshStandardMaterial({ color: 0x38bdf8, metalness: 0.15, roughness: 0.55 });
                 });
+            } else {
+                const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
+                if (disposed) return;
+                const source = await response.arrayBuffer();
+                if (disposed) return;
+                const manager = new THREE.LoadingManager();
+                manager.setURLModifier((url) => {
+                    if (url.toLowerCase().startsWith('data:')) return url;
+                    throw new Error('External glTF resources are disabled in the reference viewer');
+                });
+                const loader = new GLTFLoader(manager);
+                object = await new Promise<import('three').Object3D>((resolve, reject) => {
+                    loader.parse(source, '', (gltf) => resolve(gltf.scene), (reason) => reject(reason));
+                });
+                if (disposed) {
+                    disposeObject(object);
+                    return;
+                }
             }
             if (disposed) {
                 disposeObject(object);
@@ -741,9 +759,9 @@ function MeshViewer({ artifact, token }: MeshViewerProps) {
 
 function artifactMediaType(file: File): string {
     const declared = file.type.toLowerCase();
-    if (['application/step', 'model/step', 'model/stl', 'model/obj', 'image/png', 'image/jpeg'].includes(declared)) return declared;
+    if (['application/step', 'model/step', 'model/stl', 'model/obj', 'model/gltf+json', 'model/gltf-binary', 'image/png', 'image/jpeg'].includes(declared)) return declared;
     const extension = file.name.toLowerCase().split('.').pop() || '';
-    return ({ stp: 'application/step', step: 'application/step', stl: 'model/stl', obj: 'model/obj', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg' } as Record<string, string>)[extension] || 'application/octet-stream';
+    return ({ stp: 'application/step', step: 'application/step', stl: 'model/stl', obj: 'model/obj', glb: 'model/gltf-binary', gltf: 'model/gltf+json', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg' } as Record<string, string>)[extension] || 'application/octet-stream';
 }
 
 function EngineeringPage() {
@@ -781,11 +799,11 @@ function EngineeringPage() {
             <div className="notice">Uploads remain quarantined. Geometry facts are measured from source bytes; FEA, thermal safety, semantic labels, and manufacturing claims are not inferred.</div>
             <div className="card">
                 <div className="card-header">SOURCE ARTIFACT</div>
-                <div className="artifact-upload-row"><input aria-label="Choose CAD or image artifact" type="file" accept=".step,.stp,.stl,.obj,.png,.jpg,.jpeg" onChange={(event) => { setFile(event.target.files?.[0] ?? null); setError(''); }} /><button className="btn primary" disabled={!file || pending} onClick={submit}>{pending ? 'ANALYZING…' : 'UPLOAD + ANALYZE'}</button></div>
+                <div className="artifact-upload-row"><input aria-label="Choose CAD or image artifact" type="file" accept=".step,.stp,.stl,.obj,.glb,.gltf,.png,.jpg,.jpeg" onChange={(event) => { setFile(event.target.files?.[0] ?? null); setError(''); }} /><button className="btn primary" disabled={!file || pending} onClick={submit}>{pending ? 'ANALYZING…' : 'UPLOAD + ANALYZE'}</button></div>
                 {error && <p className="error-text" role="alert">{error}</p>}
                 {artifact && <div className="artifact-meta"><StatusBadge status={artifact.status}>{artifact.status}</StatusBadge><span>{artifact.media_type}</span><span>{artifact.size_bytes} bytes</span><span>source digest: <code>{artifact.digest}</code></span></div>}
             </div>
-            {artifact && (artifact.media_type === 'model/stl' || artifact.media_type === 'model/obj') && session?.access_token && <div className="card"><div className="card-header">READ-ONLY MESH VIEWER</div><MeshViewer artifact={artifact} token={session.access_token} /></div>}
+            {artifact && (artifact.media_type === 'model/stl' || artifact.media_type === 'model/obj' || artifact.media_type === 'model/gltf-binary') && session?.access_token && <div className="card"><div className="card-header">READ-ONLY MESH VIEWER</div><MeshViewer artifact={artifact} token={session.access_token} /></div>}
             {evidence && <div className="card"><div className="card-header">IMMUTABLE ANALYSIS EVIDENCE · {evidence.evidence_id}</div><div className="state-row"><StatusBadge status={evidence.status}>{evidence.status}</StatusBadge><span className="muted">artifact: {evidence.artifact_ref || '—'}</span></div><p className="disclosure">{displayValue(evidence.provenance?.disclosure, 'Adapter disclosure unavailable.')}</p><pre className="code-out" aria-label="Analysis result">{JSON.stringify(evidence.result, null, 2)}</pre></div>}
         </div>
     );
