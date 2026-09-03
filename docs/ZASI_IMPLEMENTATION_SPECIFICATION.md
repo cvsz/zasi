@@ -1,7 +1,7 @@
 # ZASI Implementation Specification
 
 Status: implemented reference slice; conditional read-only/assistive
-Revision: 2026-09-02
+Revision: 2026-09-03
 Authority: companion specification to ZASI_FULL_ARCHITECTURE.md
 Scope: implementation, security hardening, verification, and release gates
 Change posture: normative contract with source, test, and release evidence tracked in this revision
@@ -1876,6 +1876,19 @@ signed commit `a2f11175f78226b7513803c8c8c7c9bccbed4f67`; PR
 `a2e5d96db6665fa10f2618890b95347e5bfec3d9` after all required hosted checks
 passed. PR-only GHCR publication remained intentionally skipped. These checks
 are implementation evidence, not release approval.
+The current-tree test-count reconciliation is in signed commit
+`c659476d68b3ebb8116a7a5c3306fd5dd63b9d92`; PR [#44](https://github.com/cvsz/zasi/pull/44)
+merged that exact head into main at
+`5d187a1d5949e9f28282c1a7cc888ab4f0fd76b5` after the required hosted checks
+passed. The same signed head was subsequently merged by duplicate PR
+[#45](https://github.com/cvsz/zasi/pull/45) at
+`63092bd654f14830ee455cb08c794c6fb03f5be1`; no additional source change was
+introduced. The CodeQL workflow permission baseline and its regression test are
+in signed commit `512bd8357cff3f59b56c47e0d2299645e5a3db14`; PR
+[#46](https://github.com/cvsz/zasi/pull/46) merged that exact head into main at
+`7f840ee3e8a361bca130afc1f469bc496bf247c0` after all required hosted checks
+passed. PR-only GHCR publication remained intentionally skipped. These checks
+are implementation evidence, not release approval.
 The release-publication and schema-preserving backup hardening was merged by
 PR [#31](https://github.com/cvsz/zasi/pull/31), in signed commits
 `e972295` and `84e4f99`; the protected RACER and J.A.R.V.I.S. reference files
@@ -1908,8 +1921,8 @@ implementation claim.
 
 | Command or inspection | Observed result | Evidence class |
 |---|---|---|
-| `python3 -m unittest discover -s tests -q` | 326 tests passed, 2 optional live-service checks skipped; current-tree run completed with `OK` | Local functional regression |
-| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 326 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
+| `python3 -m unittest discover -s tests -q` | 327 tests passed, 2 optional live-service checks skipped; current-tree run completed with `OK` | Local functional regression |
+| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` | 327 tests passed, 2 optional live-service checks skipped; no unclosed SQLite warning | Local resource-lifecycle regression |
 | Focused control-plane/security suite (`tests.test_control_plane_core`, `tests.test_control_plane_broker`, `tests.test_control_plane_api`, `tests.test_security_hardening`, `tests.test_egress_security`) | Passed, including memory-hard API-key verification and TLS 1.2 floor tests | Local governed/security regression |
 | Focused outbox worker suite (`tests.test_outbox_worker tests.test_control_plane_core`) | 28 tests passed; bounded polling, interruptible shutdown, retry/dead-letter preservation, expired-lease reclaim, conditional-claim race handling, configuration fail-closed behavior, and worker identifier validation covered | Local outbox worker regression |
 | `PYTHONPATH=. python3 -m unittest tests.test_release_signing -v` | 5 tests passed; artifact selection/checksum determinism, signed-bundle publication, and protected release workflow requirements covered | Local release-signing regression |
@@ -1920,6 +1933,7 @@ implementation claim.
 | `python3 -m unittest tests.test_encrypted_backup -q` | 11 passed, including AES-256-GCM tamper and wrong-key rejection, atomic mode-600 files, missing-source rejection, no-clobber restore, older-schema preservation, and SQLite restore integrity | Local encrypted backup/restore regression |
 | `python3 -m unittest tests.test_control_plane_api.ControlPlaneAPITests.test_intent_plan_and_scoped_event_replay_are_read_only_until_run -q` | Passed; an approved plan records the resolved tool version and execution rejects registry-version drift with a bounded conflict | Local plan-integrity regression |
 | `PYTHONPATH=. python3 -m unittest tests.test_control_plane_api tests.test_control_plane_core tests.test_security_hardening -q` | 47 tests passed, including malformed session-scope rejection, read/disabled-operation scope enforcement, and authentication on the method-not-allowed plan route; the new red tests reproduced the prior unauthorized `200` and unauthenticated `405` behavior before the repair | Local RBAC regression |
+| `python3 -m unittest tests.test_workflow_permissions -v` | 1 test passed; every GitHub Actions workflow declares a top-level `contents: read` baseline, including CodeQL | Local CI permission regression |
 | `PYTHONPATH=. python3 -m unittest tests.test_egress_security -v` | 10 tests passed; dual-stack SSRF rejection, redirect policy, TLS floor, connect deadline, bounded DNS resolution, resolver contention, absolute-deadline forwarding, and no-connect-after-resolution-timeout behavior were verified | Local egress security regression |
 | `python3 -m unittest tests.test_sbom tests.test_installer -v` | 5 tests passed; SBOM npm-coordinate deduplication, selected Python extras, deterministic output, and fresh installer build-output selection are covered | Local packaging regression |
 | `node tests/test_components.js` | Passed; verifies React 19/Router 7 pins, typed entrypoint ownership, local scripts, and governed route declarations | Local bundle/source safety assertions |
@@ -1940,7 +1954,7 @@ implementation claim.
 | `ZASI_REDIS_URL` with `RedisRuntime` against the shared ACL user | Authenticated ping, atomic namespaced rate-limit, and ASGI request smoke passed; the live host ACL has `default` disabled and `zasi` limited to `~zasi:*` plus `PING`, `EVAL`, `INCRBY`, and `EXPIRE`; direct `CONFIG`/`GET`/`SET`, ACL introspection, outside-namespace keys, and unauthenticated access were denied | Local Redis integration and least-privilege ACL audit |
 | Private `.env` service credential shape | Mode `600`; `zasi` PostgreSQL/Redis URLs and `PGPASSWORD`/`REDIS_PASSWORD` contain operator-supplied high-entropy hex material; the value is ignored by Git and absent from tracked source | Local secret-handling inspection |
 | `npm audit --omit=dev --json` | 0 info/low/moderate/high/critical findings after the React Router 7.18.3 upgrade | Local dependency audit |
-| Isolated project environment: `pip-audit --local --format json` after installing `.[dev]` | 0 vulnerable project packages; host-wide audit findings are outside the ZASI dependency environment | Local Python dependency audit |
+| Isolated project environment: `pip-audit --local --format columns` after installing `.[dev]` | No known vulnerabilities found; host-wide audit findings are outside the ZASI dependency environment | Local Python dependency audit |
 | `docker compose config` | Passed with explicit local API key/CORS inputs | Local configuration rendering |
 | ASGI smoke: session bootstrap, authenticated OpenAPI, header-based SSE resume, `/health/live`, `/health/ready`, `/`, and an unknown API route | Session `201`; authenticated OpenAPI `200`; SSE resume `200` with `stream.end`; liveness/readiness/root `200`; unknown API route returned JSON 404 | Local HTTP smoke |
 | `docker build --pull -t zasi:architecture-implementation .` | Passed for the implementation branch | Local container build |
@@ -1957,6 +1971,9 @@ implementation claim.
 | PR #40 hosted checks for exact merged head `8f338043b8f58d7c7514ec2751826da7a98450bb` | Actions/JavaScript-TypeScript/Python analysis, Python 3.11/3.12, syntax/type, distribution, Docker image/build, and CodeQL checks passed; PR #40 merged at `63967db5b023dcb92252331ab86592c991e60d68`. | Current merged hosted CI evidence; not release approval |
 | PR #41 hosted checks for exact merged head `8980fc9655fcf0a043255863a89345f482266667` | Actions/JavaScript-TypeScript/Python analysis, Python 3.11/3.12, syntax/type, distribution, Docker image/build, and CodeQL checks passed; PR #41 merged at `8ffe398721b5cfb9b484f052b8ee24f94a27eac3`. | Current merged hosted CI evidence; not release approval |
 | PR #42 hosted checks for exact PR head `b95b8ae10a3b66cc3abce709b9ce8ab5094a11c5` | Actions/JavaScript-TypeScript/Python analysis, Python 3.11/3.12, syntax/type, distribution, Docker image/build, Docker Build Check, and CodeQL checks passed; PR #42 merged at `a2e5d96db6665fa10f2618890b95347e5bfec3d9`; PR-only GHCR publication was skipped. | Current merged hosted CI evidence; not release approval |
+| PR #44 hosted checks for exact merged head `c659476d68b3ebb8116a7a5c3306fd5dd63b9d92` | Actions/JavaScript-TypeScript/Python analysis, Python 3.11/3.12, syntax/type, distribution, Docker image/build, and Docker Build Check passed; PR #44 merged at `5d187a1d5949e9f28282c1a7cc888ab4f0fd76b5`; PR-only GHCR publication was skipped. | Current merged hosted CI evidence; not release approval |
+| PR #45 hosted checks for exact duplicate head `c659476d68b3ebb8116a7a5c3306fd5dd63b9d92` | The same documentation commit passed the hosted matrix again; PR #45 merged at `63092bd654f14830ee455cb08c794c6fb03f5be1` without additional source changes. | Duplicate hosted evidence; not release approval |
+| PR #46 hosted checks for exact merged head `512bd8357cff3f59b56c47e0d2299645e5a3db14` | Actions/JavaScript-TypeScript/Python analysis, Python 3.11/3.12, syntax/type, distribution, Docker image/build, Docker Build Check, and CodeQL checks passed; PR #46 merged at `7f840ee3e8a361bca130afc1f469bc496bf247c0`; PR-only GHCR publication was skipped. | Current merged hosted CI evidence; not release approval |
 | GitHub environment and managed-secret inventory on 2026-09-02 UTC | GitHub exposes publish/pages environments but no `staging` environment or staging secret/variable scope; no managed-secret client or provider credential is configured on the validation host | External release-gate inventory; missing infrastructure remains an open blocker |
 | GitHub Issue #18 | Remains `OPEN`; current status comments are maintained in the [roadmap thread](https://github.com/cvsz/zasi/issues/18) | External roadmap status, not release approval |
 
