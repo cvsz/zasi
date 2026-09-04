@@ -43,9 +43,10 @@ class WorkflowPermissionTests(unittest.TestCase):
         ci = (WORKFLOW_DIR / "ci.yml").read_text(encoding="utf-8")
         self.assertIn("scripts/npm_ci_audit.sh", ci)
         install_audit_script = Path(__file__).parents[1] / "scripts" / "npm_ci_audit.sh"
-        self.assertIn("npm ci --ignore-scripts --audit --json", install_audit_script.read_text(encoding="utf-8"))
+        self.assertIn("npm ci --ignore-scripts --no-audit", install_audit_script.read_text(encoding="utf-8"))
+        self.assertIn("npm_bulk_audit.mjs", install_audit_script.read_text(encoding="utf-8"))
         audit_script = Path(__file__).parents[1] / "scripts" / "npm_audit_retry.sh"
-        self.assertIn("--audit-level=moderate", audit_script.read_text(encoding="utf-8"))
+        self.assertIn("npm_bulk_audit.mjs", audit_script.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

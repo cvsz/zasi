@@ -55,8 +55,8 @@ actions. Their local evidence procedure and limitations are recorded in the
 ## Run the authoritative application
 
 The bundled cockpit requires Node.js `>=22.12.0` (the Electron dependency
-engine requirement). Use the checked-in lockfile and the single-operation
-online install/audit wrapper when validating a fresh install:
+engine requirement). Use the checked-in lockfile and the fail-closed online
+bulk-advisory install/audit wrapper when validating a fresh install:
 
 ```bash
 set -a
