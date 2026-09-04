@@ -432,6 +432,76 @@ _POSTGRES_SCHEMA_STATEMENTS = (
         UNIQUE (tenant_id, schedule_id, occurrence_key)
     )
     """,
+    """
+    CREATE TABLE IF NOT EXISTS agents (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL REFERENCES tenants(id),
+        principal_id TEXT NOT NULL REFERENCES principals(id),
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS agent_versions (
+        id TEXT PRIMARY KEY,
+        agent_id TEXT NOT NULL,
+        tenant_id TEXT NOT NULL REFERENCES tenants(id),
+        version TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'draft',
+        system_prompt TEXT NOT NULL DEFAULT '',
+        allowed_tools_json TEXT NOT NULL DEFAULT '[]',
+        model_policy_json TEXT NOT NULL DEFAULT '{}',
+        budget_json TEXT NOT NULL DEFAULT '{}',
+        digest TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        published_at TEXT,
+        UNIQUE (agent_id, version)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS agent_executions (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL REFERENCES tenants(id),
+        principal_id TEXT NOT NULL REFERENCES principals(id),
+        agent_id TEXT NOT NULL,
+        agent_version_id TEXT NOT NULL,
+        idempotency_key TEXT NOT NULL,
+        task TEXT NOT NULL,
+        status TEXT NOT NULL,
+        plan_json TEXT NOT NULL DEFAULT '{}',
+        model_json TEXT NOT NULL DEFAULT '{}',
+        knowledge_run_id TEXT,
+        ticket_run_id TEXT,
+        result_json TEXT NOT NULL DEFAULT '{}',
+        error_json TEXT NOT NULL DEFAULT '{}',
+        created_at TEXT NOT NULL,
+        started_at TEXT,
+        finished_at TEXT,
+        UNIQUE (tenant_id, idempotency_key)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS agent_approvals (
+        id TEXT PRIMARY KEY,
+        tenant_id TEXT NOT NULL REFERENCES tenants(id),
+        execution_id TEXT NOT NULL,
+        agent_version_id TEXT NOT NULL,
+        run_id TEXT NOT NULL,
+        tool_id TEXT NOT NULL,
+        tool_version TEXT NOT NULL,
+        action_digest TEXT NOT NULL,
+        decision TEXT NOT NULL DEFAULT 'pending',
+        reason TEXT NOT NULL DEFAULT '',
+        approver_id TEXT,
+        created_at TEXT NOT NULL,
+        resolved_at TEXT,
+        expires_at TEXT NOT NULL,
+        UNIQUE (tenant_id, execution_id, action_digest)
+    )
+    """,
     "ALTER TABLE device_pairing_challenges ADD COLUMN IF NOT EXISTS idempotency_key TEXT",
     "ALTER TABLE runs ADD COLUMN IF NOT EXISTS principal_id TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE runs ADD COLUMN IF NOT EXISTS cancel_requested INTEGER NOT NULL DEFAULT 0",
@@ -455,6 +525,12 @@ _POSTGRES_SCHEMA_STATEMENTS = (
     "ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS trust TEXT NOT NULL DEFAULT 'operator'",
     "ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS last_verified_at TEXT",
     "ALTER TABLE memory_items ADD COLUMN IF NOT EXISTS fresh_until TEXT",
+    "ALTER TABLE events ADD COLUMN IF NOT EXISTS execution_id TEXT",
+    "ALTER TABLE events ADD COLUMN IF NOT EXISTS agent_version TEXT",
+    "ALTER TABLE events ADD COLUMN IF NOT EXISTS correlation_id TEXT",
+    "ALTER TABLE events ADD COLUMN IF NOT EXISTS causation_id TEXT",
+    "ALTER TABLE events ADD COLUMN IF NOT EXISTS sensitivity TEXT NOT NULL DEFAULT 'tenant'",
+    "ALTER TABLE events ADD COLUMN IF NOT EXISTS idempotency_key TEXT",
     "CREATE INDEX IF NOT EXISTS idx_sessions_tenant ON sessions(tenant_id, status, expires_at)",
     "CREATE INDEX IF NOT EXISTS idx_events_tenant_sequence ON events(tenant_id, sequence)",
     "CREATE INDEX IF NOT EXISTS idx_runs_tenant_idempotency ON runs(tenant_id, idempotency_key)",
@@ -472,6 +548,11 @@ _POSTGRES_SCHEMA_STATEMENTS = (
     "CREATE INDEX IF NOT EXISTS idx_task_runs_task_history ON task_runs(tenant_id, task_id, created_at, id)",
     "CREATE INDEX IF NOT EXISTS idx_task_runs_claimable ON task_runs(tenant_id, status, lease_until, scheduled_for)",
     "CREATE INDEX IF NOT EXISTS idx_memory_project_scope ON memory_items(tenant_id, project_id, status, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_agents_tenant ON agents(tenant_id, status, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_agent_versions_agent ON agent_versions(agent_id, status, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_agent_executions_tenant_status ON agent_executions(tenant_id, status, created_at)",
+    "CREATE INDEX IF NOT EXISTS idx_agent_approvals_tenant_decision ON agent_approvals(tenant_id, decision, expires_at)",
+    "CREATE INDEX IF NOT EXISTS idx_events_tenant_execution ON events(tenant_id, execution_id, sequence)",
     (
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_pairing_tenant_idempotency "
         "ON device_pairing_challenges(tenant_id, idempotency_key) "

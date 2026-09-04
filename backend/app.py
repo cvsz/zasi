@@ -33,6 +33,18 @@ from src.control_plane.connectors import ConnectorRegistry
 from src.control_plane.execution import ActionBroker, ToolDefinition, ToolRegistry
 from src.control_plane.events import OutboxDispatcher
 from src.control_plane.identity import hash_token, issue_id, issue_token, optional_bearer
+from src.control_plane.agent_runtime import (
+    AgentService,
+    AgentServiceError,
+    register_agent_runtime,
+)
+from src.control_plane.agent_contracts import (
+    AgentApprovalDecisionRequest,
+    AgentCreateRequest,
+    AgentExecutionRequest,
+    AgentSandboxRequest,
+    AgentVersionCreateRequest,
+)
 from src.control_plane.multimodal import (
     ArtifactFormatError,
     ArtifactIntegrityError,
@@ -515,6 +527,11 @@ def create_app(
     )
     policy = PolicyEngine(registry.capabilities())
     broker = ActionBroker(store=store, registry=registry, policy=policy)
+    agent_service = register_agent_runtime(
+        store=store,
+        registry=registry,
+        settings=settings,
+    )
 
     def require_scope(context: AuthContext, scope: str, message: str) -> None:
         if scope not in context.scopes:
@@ -571,6 +588,7 @@ def create_app(
     app.state.connector_registry = connector_registry
     app.state.broker = broker
     app.state.redis_runtime = redis_runtime
+    app.state.agent_service = agent_service
 
     def authoritative_openapi() -> Dict[str, Any]:
         if app.openapi_schema is not None:
@@ -1078,6 +1096,10 @@ def create_app(
         context: AuthContext = Depends(_context_from_request),
         limit: int = Query(default=100, ge=1, le=1000),
         after: Optional[str] = Query(default=None, max_length=64),
+        execution_id: Optional[str] = Query(default=None, max_length=128),
+        event_type: Optional[str] = Query(default=None, max_length=128),
+        sensitivity: Optional[str] = Query(default=None, max_length=32),
+        since: Optional[str] = Query(default=None, max_length=64),
     ):
         if "audit:read" not in context.scopes:
             raise HTTPException(
@@ -1085,7 +1107,15 @@ def create_app(
                 detail={"code": "POLICY_DENIED", "message": "Audit visibility is not permitted."},
             )
         try:
-            records = app.state.store.list_audit(context.tenant_id, limit=limit, after=after)
+            records = app.state.store.list_audit(
+                context.tenant_id,
+                limit=limit,
+                after=after,
+                execution_id=execution_id,
+                event_type=event_type,
+                sensitivity=sensitivity,
+                since=since,
+            )
         except ValueError as exc:
             raise HTTPException(
                 status_code=400,
@@ -3038,10 +3068,15 @@ def create_app(
                     "operator_disclosure": definition.disclosure,
                 }
             )
+        try:
+            from src.control_plane.research import list_research_capabilities
+            research = list_research_capabilities()
+        except Exception:
+            research = []
         return {
             "capabilities": registered,
             "tenant_id": context.tenant_id,
-            "profile": settings.profile,
+            "research_capabilities": research,
         }
 
     @app.post("/api/v2/tools/preview")
@@ -3215,6 +3250,26 @@ def create_app(
         context: AuthContext = Depends(_context_from_request),
     ):
         require_scope(context, "workspace:read", "Snapshot visibility is not permitted.")
+        try:
+            agent_summary = request.app.state.agent_service.summary(tenant_id=context.tenant_id)
+        except Exception:
+            agent_summary = {
+                "total_agents": 0,
+                "published_versions": 0,
+                "active_executions": 0,
+                "pending_approvals": 0,
+                "completed_executions": 0,
+                "latest_execution_at": None,
+            }
+        try:
+            model_status = request.app.state.agent_service.model_status()
+        except Exception:
+            model_status = {
+                "mode": "deterministic_simulator",
+                "model": "deterministic_simulator",
+                "status": "simulator",
+                "disclosures": ["Model status could not be read."],
+            }
         return {
             "tenant_id": context.tenant_id,
             "schema_version": CURRENT_SCHEMA_VERSION,
@@ -3225,8 +3280,281 @@ def create_app(
                 "research_execution": "configured" if settings.research_execution_enabled else "disabled",
                 "physical_actuation": "disabled",
             },
+            "agents": agent_summary,
+            "active_executions": agent_summary["active_executions"],
+            "pending_agent_approvals": agent_summary["pending_approvals"],
+            "model_status": model_status,
             "disclosure": "Snapshot is authoritative for control-plane state only; it is not subsystem availability evidence.",
         }
+
+    @app.post("/api/v2/agents", status_code=201)
+    async def create_agent(
+        payload: AgentCreateRequest,
+        request: Request,
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "plan:create", "Agent creation is not permitted.")
+        try:
+            return request.app.state.agent_service.create_agent(
+                tenant_id=context.tenant_id,
+                principal_id=context.principal_id,
+                request=payload,
+            )
+        except (NotFoundError, ConflictError) as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "CONFLICT", "message": str(exc)},
+            )
+
+    @app.get("/api/v2/agents")
+    async def list_agents(
+        request: Request,
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "workspace:read", "Agent list is not permitted.")
+        return request.app.state.agent_service.list_agents(tenant_id=context.tenant_id)
+
+    @app.get("/api/v2/agents/{agent_id}")
+    async def get_agent(
+        agent_id: str,
+        request: Request,
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "workspace:read", "Agent visibility is not permitted.")
+        try:
+            agent = request.app.state.agent_service.get_agent(
+                tenant_id=context.tenant_id, agent_id=agent_id
+            )
+            versions = request.app.state.agent_service.list_versions(
+                tenant_id=context.tenant_id, agent_id=agent_id
+            )
+        except (NotFoundError, ScopeViolation):
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Agent not found."},
+            )
+        return {"agent": agent, "versions": versions}
+
+    @app.post("/api/v2/agents/{agent_id}/versions", status_code=201)
+    async def create_agent_version(
+        agent_id: str,
+        payload: AgentVersionCreateRequest,
+        request: Request,
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "plan:create", "Version creation is not permitted.")
+        try:
+            return request.app.state.agent_service.create_version(
+                tenant_id=context.tenant_id,
+                principal_id=context.principal_id,
+                agent_id=agent_id,
+                request=payload,
+            )
+        except NotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Agent not found."},
+            )
+        except ConflictError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "CONFLICT", "message": str(exc)},
+            )
+
+    @app.post("/api/v2/agents/{agent_id}/versions/{version_id}/publish")
+    async def publish_agent_version(
+        agent_id: str,
+        version_id: str,
+        request: Request,
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "plan:create", "Version publish is not permitted.")
+        try:
+            return request.app.state.agent_service.publish_version(
+                tenant_id=context.tenant_id,
+                principal_id=context.principal_id,
+                agent_id=agent_id,
+                version_id=version_id,
+            )
+        except NotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Version not found."},
+            )
+        except ConflictError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "CONFLICT", "message": str(exc)},
+            )
+
+    @app.post("/api/v2/agents/{agent_id}/sandbox")
+    async def sandbox_agent(
+        agent_id: str,
+        payload: AgentSandboxRequest,
+        request: Request,
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "workspace:read", "Sandbox visibility is not permitted.")
+        try:
+            return request.app.state.agent_service.sandbox(
+                tenant_id=context.tenant_id,
+                principal_id=context.principal_id,
+                agent_id=agent_id,
+                request=payload,
+                scopes=context.scopes,
+            )
+        except AgentServiceError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "SANDBOX_REJECTED", "message": str(exc)},
+            )
+        except NotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Agent not found."},
+            )
+
+    @app.post("/api/v2/agents/{agent_id}/executions", status_code=201)
+    async def start_agent_execution(
+        agent_id: str,
+        payload: AgentExecutionRequest,
+        request: Request,
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "plan:create", "Agent execution is not permitted.")
+        idempotency_key = _idempotency_key(
+            request, "Idempotency-Key is required for agent executions."
+        )
+        try:
+            return request.app.state.agent_service.start_execution(
+                tenant_id=context.tenant_id,
+                principal_id=context.principal_id,
+                agent_id=agent_id,
+                request=payload,
+                scopes=context.scopes,
+                idempotency_key=idempotency_key,
+            )
+        except AgentServiceError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "EXECUTION_REJECTED", "message": str(exc)},
+            )
+        except NotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Agent not found."},
+            )
+
+    @app.get("/api/v2/agents/{agent_id}/executions")
+    async def list_agent_executions(
+        agent_id: str,
+        request: Request,
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "workspace:read", "Execution list is not permitted.")
+        try:
+            return request.app.state.agent_service.list_executions(
+                tenant_id=context.tenant_id, agent_id=agent_id
+            )
+        except NotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Agent not found."},
+            )
+
+    @app.get("/api/v2/agent-executions/{execution_id}")
+    async def get_agent_execution(
+        execution_id: str,
+        request: Request,
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "workspace:read", "Execution visibility is not permitted.")
+        try:
+            return request.app.state.agent_service.get_execution(
+                tenant_id=context.tenant_id, execution_id=execution_id
+            )
+        except NotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Execution not found."},
+            )
+
+    @app.get("/api/v2/agent-approvals")
+    async def list_agent_approvals(
+        request: Request,
+        decision: Optional[str] = Query(default="pending"),
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "workspace:read", "Approval list is not permitted.")
+        return request.app.state.agent_service.list_approvals(
+            tenant_id=context.tenant_id, decision=decision
+        )
+
+    @app.post("/api/v2/agent-approvals/{approval_id}/approve")
+    async def approve_agent_approval(
+        approval_id: str,
+        payload: AgentApprovalDecisionRequest,
+        request: Request,
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "approval:write", "Approval resolution is not permitted.")
+        try:
+            return request.app.state.agent_service.resolve_approval(
+                tenant_id=context.tenant_id,
+                principal_id=context.principal_id,
+                approval_id=approval_id,
+                request=AgentApprovalDecisionRequest(
+                    reason=payload.reason
+                ),
+                scopes=context.scopes,
+                decision="approved",
+            )
+        except AgentServiceError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "APPROVAL_REJECTED", "message": str(exc)},
+            )
+        except NotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Approval not found."},
+            )
+
+    @app.post("/api/v2/agent-approvals/{approval_id}/reject")
+    async def reject_agent_approval(
+        approval_id: str,
+        payload: AgentApprovalDecisionRequest,
+        request: Request,
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "approval:write", "Approval resolution is not permitted.")
+        try:
+            return request.app.state.agent_service.resolve_approval(
+                tenant_id=context.tenant_id,
+                principal_id=context.principal_id,
+                approval_id=approval_id,
+                request=AgentApprovalDecisionRequest(reason=payload.reason),
+                scopes=context.scopes,
+                decision="rejected",
+            )
+        except AgentServiceError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "APPROVAL_REJECTED", "message": str(exc)},
+            )
+        except NotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "NOT_FOUND", "message": "Approval not found."},
+            )
+
+    @app.get("/api/v2/models/status")
+    async def model_status(
+        request: Request,
+        context: AuthContext = Depends(_context_from_request),
+    ):
+        require_scope(context, "workspace:read", "Model status is not permitted.")
+        return request.app.state.agent_service.model_status()
 
     @app.get("/api/v2/events")
     async def events(

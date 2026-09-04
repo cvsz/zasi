@@ -1,4 +1,4 @@
-.PHONY: all setup test test-api test-control-plane test-js typecheck test-all coverage clean build build-web sbom install server run docker-build docker-run ci help
+.PHONY: all setup test test-agent-platform test-api test-control-plane test-js typecheck test-all coverage clean build build-web sbom install server run docker-build docker-run ci help
 
 PYTHON ?= python3
 PIP ?= $(PYTHON) -m pip
@@ -14,6 +14,9 @@ setup:
 test:
 	$(PYTHON) -m unittest discover -s tests -q
 
+test-agent-platform:
+	$(PYTHON) -m unittest tests.test_agent_platform
+
 test-api:
 	$(PYTHON) -m unittest tests.test_api
 
@@ -26,6 +29,8 @@ test-js:
 typecheck:
 	npm ci --ignore-scripts
 	npm run typecheck
+
+check: test-agent-platform test-control-plane
 
 test-all: test test-api test-js typecheck coverage
 
@@ -69,9 +74,11 @@ help:
 	@echo "ZASI Full-Stack Automation Makefile"
 	@echo "  make setup       - Install build dependencies"
 	@echo "  make test        - Run the Python test suite"
+	@echo "  make test-agent-platform - Run the AI Futures agent platform tests"
 	@echo "  make test-api    - Run legacy compatibility tests"
 	@echo "  make test-control-plane - Run governed API, broker, persistence, and security tests"
 	@echo "  make test-js     - Run React Router component structure tests"
+	@echo "  make check       - Run Python-only acceptance gate (agent platform + control plane)"
 	@echo "  make test-all    - Run all unit, integration, and UI tests + coverage"
 	@echo "  make build       - Build wheel & sdist distributions"
 	@echo "  make sbom        - Generate a CycloneDX 1.5 dependency inventory"

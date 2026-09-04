@@ -32,11 +32,26 @@ authenticated session -> scoped observation -> typed intent -> policy
 -> explicit approval -> brokered action
 ```
 
+The reference control plane also ships the **AI Futures Project Superintelligence**
+agent platform. An authenticated operator can define and version an agent, run
+a sandbox dry run, submit a supervised execution, observe a tenant-scoped
+read-only knowledge result, approve or reject an exact simulated ticket update,
+and inspect the complete event, audit, and evidence history. The simulator is
+the default model; a loopback-only Ollama adapter is available when explicitly
+configured.
+
 Brokered actions are durably queued before dispatch. The reference application
 may drain bounded R0/R1 observations through the leased `ActionWorker`; timeout,
 lease expiry, cancellation during execution, and uncertain outcomes become
 explicit `unknown` states that require authenticated reconciliation. R2-R5
 actions remain queued and external writes are disabled in the reference profile.
+
+The agent platform adds bounded agent definitions and versions, deterministic
+typed plans, and an approval-gated simulated local write. Every agent mutation
+is authenticated, tenant-scoped, bounded, idempotent, auditable, and
+fail-closed. `knowledge.search` is read-only and tenant-scoped;
+`ticket.update` is a deterministic local simulator whose result explicitly
+states `simulated=true` and `external_write=false`.
 
 The repository also contains a historical 176-entry prototype catalog. A
 catalog entry is not an execution grant, and the catalog is not evidence that
@@ -74,6 +89,38 @@ commands. `backend.server` and `zasi-legacy` are compatibility/research paths,
 not production owners. The `zasi-demo` entrypoint is retained for source
 continuity but exits with an explicit simulation-only/disabled disclosure; it
 does not run the historical capability-shaped demo.
+
+## AI Futures quickstart
+
+Set `ZASI_API_KEY` and start the control plane:
+
+```bash
+python3 -m backend.app
+```
+
+Create a session and create an agent:
+
+```bash
+TOKEN=$(python3 -c 'import json, os; print(json.dumps({"api_key": os.environ["ZASI_API_KEY"]}))' |
+  curl -sS http://127.0.0.1:8080/api/v2/sessions \
+    -H 'Content-Type: application/json' \
+    --data-binary @- | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+curl -sS http://127.0.0.1:8080/api/v2/agents \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"demo"}'
+```
+
+Start a supervised execution, approve the simulated write, and inspect the
+audit stream. Run the Python-only acceptance gate:
+
+```bash
+make check
+```
+
+`make check` runs `tests.test_agent_platform` and the control-plane core
+tests without invoking npm, Docker, network access, or a live service port.
 
 Create a session and call the read-only status tool:
 
@@ -183,6 +230,7 @@ ASI/AGI capability. Those remain explicit release gates.
 - [Implementation specification](docs/ZASI_IMPLEMENTATION_SPECIFICATION.md)
 - [System architecture and ownership](docs/ARCHITECTURE.md)
 - [API reference](docs/API_REFERENCE.md)
+- [AI Futures agent platform](docs/AI_FUTURES_AGENT_PLATFORM.md)
 - [Deployment and operations](docs/DEPLOYMENT_GUIDE.md)
 - [Alignment and safety boundaries](docs/ALIGNMENT_AND_SAFETY.md)
 - [Historical catalog with state disclaimers](docs/SUBSYSTEMS_REFERENCE.md)

@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 import hashlib
+import inspect
 import json
 import threading
 from typing import Any, Callable, Dict, FrozenSet, Mapping, Optional, Tuple
@@ -12,7 +13,37 @@ from .policy import Capability, PolicyDecision, PolicyEngine
 from .storage import ControlPlaneStore
 
 
-ToolHandler = Callable[[Dict[str, Any]], Dict[str, Any]]
+ToolHandler = Callable[..., Dict[str, Any]]
+
+
+@dataclass(frozen=True)
+class ToolExecutionContext:
+    """Authenticated, tenant-scoped execution context for context-aware tools.
+
+    The runtime injects this context; reserved internal fields cannot be
+    overridden by the user payload.
+    """
+
+    tenant_id: str
+    principal_id: str
+    run_id: str
+    action_id: str
+    execution_id: str = ""
+    agent_version: str = ""
+    approval_id: str = ""
+    action_digest: str = ""
+
+
+def _context_aware(handler: ToolHandler) -> bool:
+    """Detect whether a handler was registered as context-aware."""
+    try:
+        signature = inspect.signature(handler)
+    except (TypeError, ValueError):
+        return False
+    return "context" in signature.parameters or any(
+        parameter.kind is inspect.Parameter.VAR_KEYWORD
+        for parameter in signature.parameters.values()
+    )
 
 
 @dataclass(frozen=True)
@@ -36,6 +67,7 @@ class ToolDefinition:
     approval_policy: str = "never"
     evidence_method_ref: str = "procedure.tool.v1"
     freshness_seconds: int = 60
+    context_aware: bool = False
 
     def capability(self) -> Capability:
         return Capability(
@@ -95,6 +127,8 @@ class ToolRegistry:
             raise ValueError("tool retry_policy must be none or bounded")
         if definition.retry_policy == "none" and definition.max_attempts != 1:
             raise ValueError("retry_policy=none requires max_attempts=1")
+        if definition.context_aware and not _context_aware(definition.handler):
+            raise ValueError("context_aware=True requires a handler that accepts a context kwarg")
         self._tools[definition.tool_id] = definition
 
     def get(self, tool_id: str) -> Optional[ToolDefinition]:
@@ -345,6 +379,133 @@ class ActionWorker:
             or "physical" in tool.side_effects
         )
 
+    def run_simulated_once(
+        self,
+        tenant_id: str,
+        run_id: str,
+        *,
+        approval_id: str,
+        action_digest: str,
+        agent_version: str = "",
+        execution_id: str = "",
+        principal_id: str = "",
+        now: Optional[Any] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Execute a previously approved R2 simulated action once.
+
+        The path refuses any tool that is not currently registered, is not
+        enabled, is not at the approved risk tier (R2), is not network-egress
+        ``none``, and does not declare ``simulated_local`` as a side effect.
+        Replays with the same approval ID and action digest return the
+        original durable result without invoking the handler twice.
+        """
+        current = self.store.get_run(run_id, tenant_id)
+        tool = self.registry.get(current["tool_id"])
+        if tool is None:
+            return current
+        if (
+            tool.risk_tier != "R2"
+            or tool.network_egress != "none"
+            or "simulated_local" not in tool.side_effects
+        ):
+            return current
+        if current["action_status"] == "succeeded":
+            return current
+        claim = self.store.claim_simulated_action(
+            run_id=run_id,
+            tenant_id=tenant_id,
+            worker_id=self.worker_id,
+            approval_id=approval_id,
+            action_digest=action_digest,
+            lease_seconds=self.lease_seconds,
+        )
+        if claim is None:
+            return self.store.get_run(run_id, tenant_id)
+        payload_json = json.dumps(
+            claim["payload"], sort_keys=True, separators=(",", ":"), allow_nan=False
+        )
+        provenance = {
+            "adapter_id": claim["tool_id"],
+            "adapter_version": tool.version,
+            "origin": "simulator-worker",
+            "input_digest": "sha256:" + hashlib.sha256(payload_json.encode("utf-8")).hexdigest(),
+            "method_ref": tool.evidence_method_ref,
+            "freshness_seconds": tool.freshness_seconds,
+            "approval_id": approval_id,
+            "action_digest": action_digest,
+            "execution_id": execution_id,
+            "agent_version": agent_version,
+        }
+        outcome: Dict[str, Any] = {}
+
+        def invoke() -> None:
+            try:
+                context = ToolExecutionContext(
+                    tenant_id=tenant_id,
+                    principal_id=principal_id,
+                    run_id=claim["run_id"],
+                    action_id=claim["action_id"],
+                    execution_id=execution_id,
+                    agent_version=agent_version,
+                    approval_id=approval_id,
+                    action_digest=action_digest,
+                )
+                result = tool.handler(dict(claim["payload"]), context=context)
+                if not isinstance(result, dict):
+                    raise TypeError("tool result must be an object")
+                outcome["result"] = result
+            except Exception:
+                outcome["error"] = True
+
+        thread = threading.Thread(
+            target=invoke,
+            name=f"zasi-simulator-{claim['action_id']}",
+            daemon=True,
+        )
+        thread.start()
+        thread.join(max(0.001, claim["timeout_ms"] / 1000.0))
+        if thread.is_alive():
+            return self.store.finish_action(
+                run_id,
+                tenant_id,
+                self.worker_id,
+                claim["lease_token"],
+                "unknown",
+                result={"error_code": "ACTION_TIMEOUT"},
+                evidence_status="unknown",
+                provenance=provenance,
+                disclosure=(
+                    "The simulator exceeded its deadline; the side-effect status is unknown and requires reconciliation."
+                ),
+                unknown_reason="action_timeout",
+            )
+        if "error" in outcome:
+            return self.store.finish_action(
+                run_id,
+                tenant_id,
+                self.worker_id,
+                claim["lease_token"],
+                "unknown",
+                result={"error_code": "ACTION_OUTCOME_UNKNOWN"},
+                evidence_status="unknown",
+                provenance=provenance,
+                disclosure=(
+                    "The simulator failed and the side-effect status is unknown; reconciliation is required."
+                ),
+                unknown_reason="side_effect_uncertain",
+            )
+        return self.store.finish_action(
+            run_id,
+            tenant_id,
+            self.worker_id,
+            claim["lease_token"],
+            "succeeded",
+            result=outcome["result"],
+            evidence_status=tool.evidence_status,
+            provenance=provenance,
+            disclosure=tool.disclosure,
+        )
+
     def run_once(
         self,
         tenant_id: str,
@@ -408,7 +569,18 @@ class ActionWorker:
 
         def invoke() -> None:
             try:
-                result = tool.handler(dict(claim["payload"]))
+                if tool.context_aware:
+                    context = ToolExecutionContext(
+                        tenant_id=tenant_id,
+                        principal_id=self.store._principal_for_run(claim["run_id"])
+                        if hasattr(self.store, "_principal_for_run")
+                        else "",
+                        run_id=claim["run_id"],
+                        action_id=claim["action_id"],
+                    )
+                    result = tool.handler(dict(claim["payload"]), context=context, store=self.store)
+                else:
+                    result = tool.handler(dict(claim["payload"]))
                 if not isinstance(result, dict):
                     raise TypeError("tool result must be an object")
                 outcome["result"] = result

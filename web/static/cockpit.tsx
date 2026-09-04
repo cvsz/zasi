@@ -981,8 +981,301 @@ function MCPPage() {
     return <div className="page route-fade"><h2 className="page-title">🔌 Governed MCP JSON-RPC 2.0</h2><div className="notice">Discovery is read-only. Tool calls use the same identity, policy, idempotency, audit, and evidence path as REST.</div><div className="card"><div className="card-header"><label htmlFor="mcp-request">REQUEST</label></div><textarea id="mcp-request" className="mcp-textarea" value={input} onChange={(event) => setInput(event.target.value)} rows={8} /><button className="btn primary" onClick={send}>DISPATCH</button></div><div className="card"><div className="card-header">RESPONSE</div><pre className="code-out" aria-live="polite">{response || 'Awaiting dispatch…'}</pre></div></div>;
 }
 
+// =================================================================== AI Futures pages
+interface AgentRecord {
+    agent_id: string;
+    name: string;
+    description: string;
+    status: string;
+    created_at: string;
+}
+
+interface AgentVersionRecord {
+    version_id: string;
+    agent_id: string;
+    version: string;
+    status: string;
+    system_prompt: string;
+    allowed_tools: string[];
+    model_policy: Record<string, unknown>;
+    budget: Record<string, number>;
+    digest: string;
+    created_at: string;
+    published_at: string | null;
+}
+
+interface AgentExecutionRecord {
+    execution_id: string;
+    tenant_id: string;
+    principal_id: string;
+    agent_id: string;
+    agent_version_id: string;
+    task: string;
+    status: string;
+    plan: { steps?: unknown[]; disclosures?: string[] } & Record<string, unknown>;
+    model: { mode: string; model: string; status: string; disclosures?: string[] } & Record<string, unknown>;
+    knowledge_run_id: string | null;
+    ticket_run_id: string | null;
+    result: Record<string, unknown>;
+    error: Record<string, unknown>;
+    created_at: string;
+    finished_at: string | null;
+}
+
+interface AgentApprovalRecord {
+    approval_id: string;
+    execution_id: string;
+    tool_id: string;
+    tool_version: string;
+    action_digest: string;
+    decision: string;
+    reason: string;
+    approver_id: string | null;
+    created_at: string;
+    resolved_at: string | null;
+    expires_at: string;
+}
+
+interface ModelStatus {
+    mode: string;
+    model: string;
+    status: string;
+    disclosures: string[];
+}
+
+function useAgentList(token: string | null) {
+    return useApi<AgentRecord[]>('/api/v2/agents', token);
+}
+
+function useExecutions(token: string | null) {
+    return useApi<AgentExecutionRecord[]>('/api/v2/agent-approvals?decision=pending', token);
+}
+
+function useApprovals(token: string | null) {
+    return useApi<AgentApprovalRecord[]>('/api/v2/agent-approvals?decision=pending', token);
+}
+
+function useModelStatus(token: string | null) {
+    return useApi<ModelStatus>('/api/v2/models/status', token);
+}
+
+function useAudit(token: string | null, filters: { execution_id?: string; event_type?: string; sensitivity?: string }) {
+    const params = new URLSearchParams();
+    if (filters.execution_id) params.set('execution_id', filters.execution_id);
+    if (filters.event_type) params.set('event_type', filters.event_type);
+    if (filters.sensitivity) params.set('sensitivity', filters.sensitivity);
+    const path = params.toString() ? `/api/v2/audit?${params}` : '/api/v2/audit';
+    return useApi<JsonRecord[]>(path, token);
+}
+
+function useApi<T>(path: string, token: string | null) {
+    const [data, setData] = useState<T | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
+    useEffect(() => {
+        if (!token) return;
+        let cancelled = false;
+        setLoading(true);
+        setError(null);
+        api.get<T>(path, token)
+            .then((result) => { if (!cancelled) setData(result); })
+            .catch((err) => { if (!cancelled) setError(errorMessage(err)); })
+            .finally(() => { if (!cancelled) setLoading(false); });
+        return () => { cancelled = true; };
+    }, [path, token]);
+    return { data, error, loading };
+}
+
+function AgentsPage() {
+    const { session } = useAuth();
+    const token = session?.access_token ?? null;
+    const agents = useApi<AgentRecord[]>('/api/v2/agents', token);
+    const [creating, setCreating] = useState(false);
+    const [name, setName] = useState('demo');
+    const [description, setDescription] = useState('Local deterministic agent');
+    const { addToast } = useToast();
+    const create = async () => {
+        if (!token) return;
+        try {
+            await api.post('/api/v2/agents', token, { name: name, description: description });
+            addToast('Agent created (initial draft)', 'success');
+            setCreating(false);
+            window.location.reload();
+        } catch (error) {
+            addToast(`Failed: ${errorMessage(error)}`, 'error');
+        }
+    };
+    return <div className="page route-fade">
+        <h2 className="page-title">🧠 AI Futures Agents</h2>
+        <div className="notice">Agents are scoped to your tenant. The deterministic simulator is the default model. External services are disabled.</div>
+        <div className="card">
+            <div className="card-header">
+                <span>Registered agents</span>
+                <button className="btn primary small" onClick={() => setCreating((value) => !value)}>{creating ? 'Cancel' : 'New agent'}</button>
+            </div>
+            {creating && <div className="form-row">
+                <label htmlFor="agent-name">Name</label>
+                <input id="agent-name" value={name} onChange={(event) => setName(event.target.value)} />
+                <label htmlFor="agent-desc">Description</label>
+                <input id="agent-desc" value={description} onChange={(event) => setDescription(event.target.value)} />
+                <button className="btn primary" onClick={create}>Create draft</button>
+            </div>}
+            {agents.loading && <div className="empty">Loading…</div>}
+            {agents.error && <div className="error">{agents.error}</div>}
+            {agents.data && agents.data.length === 0 && <div className="empty">No agents yet. Use “New agent” to create a draft.</div>}
+            {agents.data && agents.data.length > 0 && <table className="data-table"><thead><tr><th>Name</th><th>Status</th><th>Description</th><th>Created</th></tr></thead><tbody>
+                {agents.data.map((agent) => <tr key={agent.agent_id}><td>{agent.name}</td><td><StatusBadge status={agent.status}>{agent.status}</StatusBadge></td><td>{agent.description || '—'}</td><td>{agent.created_at}</td></tr>)}
+            </tbody></table>}
+        </div>
+    </div>;
+}
+
+function ExecutionsPage() {
+    const { session } = useAuth();
+    const token = session?.access_token ?? null;
+    const [executionId, setExecutionId] = useState('');
+    const effectiveExecutionId = executionId.trim();
+    const path = effectiveExecutionId ? `/api/v2/agent-executions/${encodeURIComponent(effectiveExecutionId)}` : '';
+    const execution = useApi<AgentExecutionRecord>(path, (path && token ? token : null) as string | null);
+    return <div className="page route-fade">
+        <h2 className="page-title">⏱ Executions</h2>
+        <div className="notice">Executions and approvals are tenant-scoped. Pending approvals and rejected runs are displayed alongside completed runs.</div>
+        <div className="card">
+            <div className="card-header">Inspect execution</div>
+            <div className="form-row">
+                <label htmlFor="exec-id">Execution id</label>
+                <input id="exec-id" value={executionId} onChange={(event) => setExecutionId(event.target.value)} placeholder="aexec_…" />
+            </div>
+            {execution.data && <div className="execution-detail">
+                <div><strong>Status:</strong> <StatusBadge status={execution.data.status}>{execution.data.status}</StatusBadge></div>
+                <div><strong>Task:</strong> {execution.data.task}</div>
+                <div><strong>Model:</strong> {String(execution.data.model.mode ?? '—')} · {String(execution.data.model.model ?? '—')}</div>
+                <div><strong>Knowledge run:</strong> {execution.data.knowledge_run_id ?? '—'}</div>
+                <div><strong>Ticket run:</strong> {execution.data.ticket_run_id ?? '—'}</div>
+                <pre className="code-out">{JSON.stringify(execution.data.plan, null, 2)}</pre>
+                {execution.data.error && Object.keys(execution.data.error).length > 0 && <div className="error">Error: {JSON.stringify(execution.data.error)}</div>}
+                {execution.data.result && Object.keys(execution.data.result).length > 0 && <pre className="code-out">{JSON.stringify(execution.data.result, null, 2)}</pre>}
+            </div>}
+        </div>
+        <div className="card">
+            <div className="card-header">Recent pending approvals</div>
+            <ApprovalsList token={token} onSelectExecution={(id) => setExecutionId(id)} />
+        </div>
+    </div>;
+}
+
+function ApprovalsList({ token, onSelectExecution }: { token: string | null, onSelectExecution?: (id: string) => void }) {
+    const approvals = useApi<AgentApprovalRecord[]>('/api/v2/agent-approvals?decision=pending', token);
+    if (approvals.data && approvals.data.length === 0) return <div className="empty">No pending approvals.</div>;
+    if (!approvals.data) return <div className="empty">Loading…</div>;
+    return <table className="data-table"><thead><tr><th>Approval</th><th>Execution</th><th>Tool</th><th>Action digest</th><th>Expires</th></tr></thead><tbody>
+        {approvals.data.map((approval) => <tr key={approval.approval_id}>
+            <td className="mono">{approval.approval_id}</td>
+            <td>{onSelectExecution ? <button className="btn secondary small" onClick={() => onSelectExecution(approval.execution_id)}>{approval.execution_id}</button> : approval.execution_id}</td>
+            <td>{approval.tool_id}@{approval.tool_version}</td>
+            <td className="mono">{approval.action_digest.slice(0, 16)}…</td>
+            <td>{approval.expires_at}</td>
+        </tr>)}
+    </tbody></table>;
+}
+
+function ApprovalsPage() {
+    const { session } = useAuth();
+    const token = session?.access_token ?? null;
+    const approvals = useApi<AgentApprovalRecord[]>('/api/v2/agent-approvals?decision=pending', token);
+    const [reason, setReason] = useState('Operator-approved demo write');
+    const { addToast } = useToast();
+    const decide = async (approval: AgentApprovalRecord, decision: 'approved' | 'rejected') => {
+        if (!token) return;
+        const path = decision === 'approved'
+            ? `/api/v2/agent-approvals/${approval.approval_id}/approve`
+            : `/api/v2/agent-approvals/${approval.approval_id}/reject`;
+        try {
+            await api.post(path, token, { reason });
+            addToast(`Approval ${decision}`, 'success');
+            window.location.reload();
+        } catch (error) {
+            addToast(`Failed: ${errorMessage(error)}`, 'error');
+        }
+    };
+    return <div className="page route-fade">
+        <h2 className="page-title">🛂 Pending approvals</h2>
+        <div className="notice">Each approval is bound to the exact tenant, execution, agent version, tool, version, and action digest. Replays return the original durable result.</div>
+        <div className="form-row">
+            <label htmlFor="approval-reason">Decision reason (mandatory)</label>
+            <textarea id="approval-reason" rows={3} value={reason} onChange={(event) => setReason(event.target.value)} />
+        </div>
+        {approvals.data && approvals.data.length === 0 && <div className="empty">No pending approvals. Start an execution to populate this queue.</div>}
+        {approvals.data && approvals.data.length > 0 && <table className="data-table"><thead><tr><th>Approval</th><th>Execution</th><th>Tool</th><th>Action digest</th><th>Expires</th><th>Decision</th></tr></thead><tbody>
+            {approvals.data.map((approval) => <tr key={approval.approval_id}>
+                <td className="mono">{approval.approval_id}</td>
+                <td className="mono">{approval.execution_id}</td>
+                <td>{approval.tool_id}@{approval.tool_version}</td>
+                <td className="mono">{approval.action_digest.slice(0, 16)}…</td>
+                <td>{approval.expires_at}</td>
+                <td>
+                    <button className="btn primary small" onClick={() => decide(approval, 'approved')}>Approve</button>
+                    {' '}
+                    <button className="btn secondary small" onClick={() => decide(approval, 'rejected')}>Reject</button>
+                </td>
+            </tr>)}
+        </tbody></table>}
+    </div>;
+}
+
+function AuditPage() {
+    const { session } = useAuth();
+    const token = session?.access_token ?? null;
+    const [executionId, setExecutionId] = useState('');
+    const [eventType, setEventType] = useState('');
+    const [sensitivity, setSensitivity] = useState('');
+    const audit = useAudit(token, { execution_id: executionId, event_type: eventType, sensitivity });
+    return <div className="page route-fade">
+        <h2 className="page-title">📜 Tenant audit</h2>
+        <div className="notice">Filter the tenant audit stream. The transport is not read directly from the browser; this view uses the REST query projection.</div>
+        <div className="form-row">
+            <label htmlFor="audit-exec">Execution id</label>
+            <input id="audit-exec" value={executionId} onChange={(event) => setExecutionId(event.target.value)} />
+            <label htmlFor="audit-type">Event type</label>
+            <input id="audit-type" value={eventType} onChange={(event) => setEventType(event.target.value)} placeholder="agent.execution.requested" />
+            <label htmlFor="audit-sensitivity">Sensitivity</label>
+            <input id="audit-sensitivity" value={sensitivity} onChange={(event) => setSensitivity(event.target.value)} placeholder="tenant" />
+        </div>
+        {audit.data && audit.data.length === 0 && <div className="empty">No matching audit records.</div>}
+        {audit.data && audit.data.length > 0 && <table className="data-table"><thead><tr><th>Action</th><th>Target</th><th>Outcome</th><th>Execution</th><th>Created</th></tr></thead><tbody>
+            {audit.data.map((record) => <tr key={String(record.audit_id)}>
+                <td>{String(record.action ?? '—')}</td>
+                <td className="mono">{String(record.target ?? '—')}</td>
+                <td>{String(record.outcome ?? '—')}</td>
+                <td className="mono">{String(record.execution_id ?? '—')}</td>
+                <td>{String(record.created_at ?? '—')}</td>
+            </tr>)}
+        </tbody></table>}
+    </div>;
+}
+
+function ModelsPage() {
+    const { session } = useAuth();
+    const token = session?.access_token ?? null;
+    const status = useModelStatus(token);
+    return <div className="page route-fade">
+        <h2 className="page-title">🤖 Model policy</h2>
+        <div className="notice">The control plane never contacts a hosted model. A loopback Ollama endpoint may be enabled by the operator; model output is treated as an untrusted proposal.</div>
+        {status.data && <div className="card">
+            <div className="card-header"><StatusBadge status={status.data.status}>{status.data.status}</StatusBadge> {status.data.mode} · {status.data.model}</div>
+            {(status.data.disclosures ?? []).map((line) => <div key={line} className="disclosure">• {line}</div>)}
+        </div>}
+        {!status.data && <div className="empty">Loading model status…</div>}
+    </div>;
+}
+
 const NAV: NavigationLink[] = [
     { to: '/', label: '⚡ Overview', end: true },
+    { to: '/agents', label: '🧠 Agents' },
+    { to: '/executions', label: '⏱ Executions' },
+    { to: '/approvals', label: '🛂 Approvals' },
+    { to: '/audit', label: '📜 Audit' },
+    { to: '/models', label: '🤖 Models' },
     { to: '/jarvis', label: '🤖 J.A.R.V.I.S.' },
     { to: '/engineering', label: '🧩 Engineering' },
     { to: '/subsystems', label: '🔬 Registry' },
@@ -1001,7 +1294,7 @@ function Shell() {
 function AuthenticatedApp() {
     const { session } = useAuth();
     if (!session) return <LoginPage />;
-    return <Routes><Route path="/" element={<Shell />}><Route index element={<OverviewPage />} /><Route path="jarvis" element={<JarvisPage />} /><Route path="engineering" element={<EngineeringPage />} /><Route path="subsystems" element={<SubsystemsPage />} /><Route path="cockpit" element={<CockpitPage />} /><Route path="mcp" element={<MCPPage />} /></Route></Routes>;
+    return <Routes><Route path="/" element={<Shell />}><Route index element={<OverviewPage />} /><Route path="agents" element={<AgentsPage />} /><Route path="executions" element={<ExecutionsPage />} /><Route path="approvals" element={<ApprovalsPage />} /><Route path="audit" element={<AuditPage />} /><Route path="models" element={<ModelsPage />} /><Route path="jarvis" element={<JarvisPage />} /><Route path="engineering" element={<EngineeringPage />} /><Route path="subsystems" element={<SubsystemsPage />} /><Route path="cockpit" element={<CockpitPage />} /><Route path="mcp" element={<MCPPage />} /></Route></Routes>;
 }
 
 function App() {
