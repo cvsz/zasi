@@ -4,9 +4,11 @@ This guide deploys the governed reference profile. A successful local process,
 Docker build, or generated UI is not production deployment evidence.
 
 The bundled cockpit requires Node.js `>=22.12.0`. Keep `package-lock.json`
-authoritative; `scripts/npm_audit_retry.sh` performs the online production
-dependency audit with bounded retries for transient registry failures and
-still fails closed on vulnerabilities or non-transient errors.
+authoritative; `scripts/npm_ci_audit.sh` performs the lockfile install and
+online production dependency audit in one registry operation, then fails
+closed unless npm emits valid zero-vulnerability metadata. The standalone
+`scripts/npm_audit_retry.sh` remains available for an explicit bounded online
+audit outside installation.
 
 ## Local
 
@@ -14,9 +16,8 @@ still fails closed on vulnerabilities or non-transient errors.
 set -a
 . .env
 set +a
-npm ci --ignore-scripts
+scripts/npm_ci_audit.sh
 npm run typecheck
-scripts/npm_audit_retry.sh
 npm run build
 python3 -m backend.app
 ```
@@ -229,7 +230,7 @@ deployed workers, external side effects, or production safety.
 set -a
 . .env
 set +a
-npm ci --ignore-scripts
+scripts/npm_ci_audit.sh
 npm run build
 npm run electron
 ```

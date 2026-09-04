@@ -26,8 +26,7 @@ jobs:
         with: { node-version: "22.14.0" }
       - name: Install and build bundled cockpit
         run: |
-          npm ci --ignore-scripts
-          scripts/npm_audit_retry.sh
+          scripts/npm_ci_audit.sh
           npm run typecheck
           npm run build
       - name: Install dependencies
@@ -64,8 +63,7 @@ jobs:
         with: { node-version: "22.14.0" }
       - name: Build bundled cockpit before packaging
         run: |
-          npm ci --ignore-scripts
-          scripts/npm_audit_retry.sh
+          scripts/npm_ci_audit.sh
           npm run typecheck
           npm run build
       - run: pip install '.[dev]' build

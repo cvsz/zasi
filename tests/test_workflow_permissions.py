@@ -41,7 +41,9 @@ class WorkflowPermissionTests(unittest.TestCase):
                 self.assertIn('node-version: "22.14.0"', workflow)
 
         ci = (WORKFLOW_DIR / "ci.yml").read_text(encoding="utf-8")
-        self.assertIn("scripts/npm_audit_retry.sh", ci)
+        self.assertIn("scripts/npm_ci_audit.sh", ci)
+        install_audit_script = Path(__file__).parents[1] / "scripts" / "npm_ci_audit.sh"
+        self.assertIn("npm ci --ignore-scripts --audit --json", install_audit_script.read_text(encoding="utf-8"))
         audit_script = Path(__file__).parents[1] / "scripts" / "npm_audit_retry.sh"
         self.assertIn("--audit-level=moderate", audit_script.read_text(encoding="utf-8"))
 

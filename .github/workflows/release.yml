@@ -35,8 +35,7 @@ jobs:
 
       - name: Build bundled cockpit before packaging
         run: |
-          npm ci --ignore-scripts
-          scripts/npm_audit_retry.sh
+          scripts/npm_ci_audit.sh
           npm run typecheck
           npm run build
 
