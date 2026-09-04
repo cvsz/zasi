@@ -56,6 +56,9 @@ class Settings:
     physical_actuation_enabled: bool = False
     egress_allowed_hosts: Tuple[str, ...] = ()
     api_prefix: str = "/api/v2"
+    ollama_base_url: str = ""
+    ollama_model: str = ""
+    ollama_timeout_seconds: float = 3.0
 
     @classmethod
     def from_mapping(cls, mapping: Optional[Mapping[str, str]] = None) -> "Settings":
@@ -241,6 +244,33 @@ class Settings:
                 "physical actuation is disabled in the reference control plane"
             )
 
+        ollama_base_url = source.get("ZASI_OLLAMA_BASE_URL", "").strip()
+        if ollama_base_url:
+            parsed_ollama = urlsplit(ollama_base_url)
+            if (
+                parsed_ollama.scheme not in {"http"}
+                or not parsed_ollama.hostname
+                or parsed_ollama.username is not None
+                or parsed_ollama.password is not None
+                or parsed_ollama.query
+                or parsed_ollama.fragment
+                or parsed_ollama.hostname.lower() not in {"localhost", "127.0.0.1", "::1"}
+            ):
+                raise ConfigurationError(
+                    "ZASI_OLLAMA_BASE_URL must be a loopback http://localhost URL with no credentials"
+                )
+        ollama_model = source.get("ZASI_OLLAMA_MODEL", "").strip()
+        if ollama_model and not ollama_base_url:
+            raise ConfigurationError(
+                "ZASI_OLLAMA_MODEL requires ZASI_OLLAMA_BASE_URL"
+            )
+        try:
+            ollama_timeout_seconds = float(source.get("ZASI_OLLAMA_TIMEOUT", "3.0"))
+        except ValueError as exc:
+            raise ConfigurationError("ZASI_OLLAMA_TIMEOUT must be a number") from exc
+        if ollama_timeout_seconds < 0.1 or ollama_timeout_seconds > 30.0:
+            raise ConfigurationError("ZASI_OLLAMA_TIMEOUT must be between 0.1 and 30 seconds")
+
         return cls(
             profile=profile,
             host=host,
@@ -266,6 +296,9 @@ class Settings:
             research_execution_enabled=research_execution_enabled,
             physical_actuation_enabled=False,
             egress_allowed_hosts=egress_allowed_hosts,
+            ollama_base_url=ollama_base_url,
+            ollama_model=ollama_model,
+            ollama_timeout_seconds=ollama_timeout_seconds,
         )
 
     def api_key_matches(self, candidate: str) -> bool:

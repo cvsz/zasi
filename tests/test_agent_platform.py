@@ -671,5 +671,246 @@ class AgentRepositoryTests(unittest.TestCase):
         self.assertEqual(summary["pending_approvals"], 0)
 
 
+class ModelGatewayTests(unittest.TestCase):
+    def test_default_gateway_is_deterministic_simulator(self):
+        from src.control_plane.model_gateway import ModelGateway
+
+        gateway = ModelGateway()
+        status = gateway.status()
+        self.assertEqual(status["mode"], "deterministic_simulator")
+        self.assertEqual(status["status"], "simulator")
+        selection = gateway.select({})
+        self.assertEqual(selection.mode, "deterministic_simulator")
+
+    def test_invalid_ollama_url_is_rejected(self):
+        from src.control_plane.model_gateway import ModelGateway
+
+        with self.assertRaises(ValueError):
+            ModelGateway(base_url="http://example.com")
+        with self.assertRaises(ValueError):
+            ModelGateway(base_url="https://localhost")
+        with self.assertRaises(ValueError):
+            ModelGateway(base_url="http://user:pass@localhost")
+        with self.assertRaises(ValueError):
+            ModelGateway(base_url="http://localhost", timeout_seconds=99)
+
+    def test_proposal_digest_changes_with_input(self):
+        from src.control_plane.model_gateway import ModelGateway
+
+        gateway = ModelGateway()
+        proposal_a = gateway.propose(
+            task="summarize", context={"k": 1}, policy={}
+        )
+        proposal_b = gateway.propose(
+            task="summarize", context={"k": 2}, policy={}
+        )
+        self.assertNotEqual(proposal_a["proposal_digest"], proposal_b["proposal_digest"])
+        self.assertTrue(proposal_a["proposal_digest"].startswith("sha256:"))
+
+    def test_proposal_reports_simulator_disclosure(self):
+        from src.control_plane.model_gateway import ModelGateway
+
+        gateway = ModelGateway()
+        proposal = gateway.propose(task="t", context={}, policy={})
+        self.assertIn("simulator", proposal["disclosures"][0].lower())
+
+
+class AgentPlannerTests(unittest.TestCase):
+    def setUp(self):
+        from src.control_plane.agent_planner import AgentPlanner
+        from src.control_plane.execution import ToolDefinition, ToolRegistry
+        from src.control_plane.policy import PolicyEngine
+
+        self.store = ControlPlaneStore(":memory:")
+        self.store.initialize()
+        self.store.create_tenant("tenant-a")
+        self.store.create_principal("principal-a", "tenant-a")
+        self.registry = ToolRegistry()
+        self.policy = PolicyEngine(self.registry.capabilities())
+        self.planner = AgentPlanner(registry=self.registry, policy=self.policy, store=self.store)
+        from src.control_plane.agent_tools import register_agent_tools
+        register_agent_tools(self.registry, self.store)
+
+    def tearDown(self):
+        self.store.close()
+
+    def _spec(self, allowed=("knowledge.search", "ticket.update")):
+        return AgentVersionSpec(
+            version="1.0.0",
+            system_prompt="",
+            allowed_tools=tuple(allowed),
+        )
+
+    def test_deterministic_plan_has_two_steps(self):
+        plan = self.planner.plan(
+            version=self._spec(),
+            task="summarize",
+            ticket_id="DEMO-1",
+            ticket_fields={"status": "open"},
+            scopes=frozenset({"workspace:read", "workspace:write", "plan:create"}),
+        )
+        self.assertEqual(len(plan.steps), 2)
+        self.assertEqual(plan.steps[0].tool_id, "knowledge.search")
+        self.assertEqual(plan.steps[1].tool_id, "ticket.update")
+
+    def test_verify_rejects_unknown_tools(self):
+        spec = AgentVersionSpec(
+            version="1.0.0",
+            system_prompt="",
+            allowed_tools=("knowledge.search", "ticket.update"),
+        )
+        plan = self.planner.plan(
+            version=spec,
+            task="t",
+            ticket_id="DEMO-1",
+            ticket_fields={},
+            scopes=frozenset({"workspace:read", "workspace:write", "plan:create"}),
+        )
+        bad_step = PlanStep(
+            step_id="s1",
+            tool_id="unknown.tool",
+            tool_version="1.0.0",
+            risk_tier="R0",
+            input={},
+        )
+        bad_plan = TypedAgentPlan(steps=(bad_step,), disclosures=())
+        ok, reasons = self.planner.verify(
+            plan=bad_plan,
+            version=spec,
+            scopes=frozenset({"workspace:read", "workspace:write", "plan:create"}),
+        )
+        self.assertFalse(ok)
+        self.assertTrue(any("tool_unrecognised" in r for r in reasons))
+
+    def test_verify_rejects_missing_scopes(self):
+        spec = self._spec()
+        plan = self.planner.plan(
+            version=spec,
+            task="t",
+            ticket_id="DEMO-1",
+            ticket_fields={},
+            scopes=frozenset({"workspace:read"}),
+        )
+        ok, reasons = self.planner.verify(
+            plan=plan,
+            version=spec,
+            scopes=frozenset({"workspace:read"}),
+        )
+        self.assertFalse(ok)
+        self.assertTrue(any("scope.missing" in r for r in reasons))
+
+
+class AgentToolsTests(unittest.TestCase):
+    def setUp(self):
+        self.store = ControlPlaneStore(":memory:")
+        self.store.initialize()
+        self.store.create_tenant("tenant-a")
+        self.store.create_principal("principal-a", "tenant-a")
+        from src.control_plane.execution import ToolRegistry
+        from src.control_plane.agent_tools import register_agent_tools
+
+        self.registry = ToolRegistry()
+        register_agent_tools(self.registry, self.store)
+
+    def tearDown(self):
+        self.store.close()
+
+    def test_knowledge_search_is_tenant_scoped(self):
+        self.store.create_tenant("tenant-b")
+        self.store.create_principal("principal-b", "tenant-b")
+        self.store._conn().execute(
+            "INSERT INTO memory_items(id, tenant_id, principal_id, content, scope, "
+            "memory_type, status, created_at) VALUES(?, ?, ?, ?, ?, ?, 'active', ?)",
+            ("mem-1", "tenant-a", "principal-a", "hello zasi", "workspace", "fact",
+             "2026-09-04T00:00:00+00:00"),
+        )
+        self.store._conn().execute(
+            "INSERT INTO memory_items(id, tenant_id, principal_id, content, scope, "
+            "memory_type, status, created_at) VALUES(?, ?, ?, ?, ?, ?, 'active', ?)",
+            ("mem-2", "tenant-b", "principal-b", "other tenant", "workspace", "fact",
+             "2026-09-04T00:00:00+00:00"),
+        )
+        from src.control_plane.execution import ToolExecutionContext
+        context = ToolExecutionContext(
+            tenant_id="tenant-a",
+            principal_id="principal-a",
+            run_id="run-1",
+            action_id="act-1",
+        )
+        result = self.registry.get("knowledge.search").handler(
+            {"query": "zasi", "limit": 5},
+            context=context,
+        )
+        self.assertEqual(result["tenant_id"], "tenant-a")
+        self.assertEqual(result["count"], 1)
+        self.assertEqual(result["snippets"][0]["memory_id"], "mem-1")
+
+    def test_knowledge_search_excludes_stale_memory(self):
+        self.store._conn().execute(
+            "INSERT INTO memory_items(id, tenant_id, principal_id, content, scope, "
+            "memory_type, status, fresh_until, created_at) "
+            "VALUES(?, ?, ?, ?, ?, ?, 'active', ?, ?)",
+            ("stale-1", "tenant-a", "principal-a", "stale", "workspace", "fact",
+             "2020-01-01T00:00:00+00:00", "2020-01-01T00:00:00+00:00"),
+        )
+        from src.control_plane.execution import ToolExecutionContext
+        context = ToolExecutionContext(
+            tenant_id="tenant-a",
+            principal_id="principal-a",
+            run_id="run-1",
+            action_id="act-1",
+        )
+        result = self.registry.get("knowledge.search").handler(
+            {"query": "stale"},
+            context=context,
+        )
+        self.assertEqual(result["count"], 0)
+
+    def test_ticket_update_is_simulated_and_no_external_call(self):
+        from src.control_plane.execution import ToolExecutionContext
+        context = ToolExecutionContext(
+            tenant_id="tenant-a",
+            principal_id="principal-a",
+            run_id="run-1",
+            action_id="act-1",
+            execution_id="exec-1",
+            agent_version="1.0.0",
+            approval_id="ap-1",
+            action_digest="sha256:abc",
+        )
+        result = self.registry.get("ticket.update").handler(
+            {"ticket_id": "DEMO-1", "fields": {"status": "closed"}},
+            context=context,
+        )
+        self.assertTrue(result["simulated"])
+        self.assertFalse(result["external_write"])
+        self.assertEqual(result["before"]["fields"], {})
+        self.assertEqual(result["after"]["fields"], {"status": "closed"})
+
+    def test_ticket_update_requires_approval_context(self):
+        from src.control_plane.execution import ToolExecutionContext
+        context = ToolExecutionContext(
+            tenant_id="tenant-a",
+            principal_id="principal-a",
+            run_id="run-1",
+            action_id="act-1",
+        )
+        with self.assertRaises(ValueError):
+            self.registry.get("ticket.update").handler(
+                {"ticket_id": "DEMO-1", "fields": {"status": "closed"}},
+                context=context,
+            )
+
+    def test_manifest_records_evidence_status_and_side_effects(self):
+        knowledge = self.registry.get("knowledge.search").manifest()
+        self.assertEqual(knowledge["risk_tier"], "R0")
+        self.assertEqual(knowledge["network_egress"], "none")
+        self.assertEqual(knowledge["evidence_status"], "verified_local")
+        ticket = self.registry.get("ticket.update").manifest()
+        self.assertEqual(ticket["risk_tier"], "R2")
+        self.assertIn("simulated_local", ticket["side_effects"])
+        self.assertEqual(ticket["network_egress"], "none")
+
+
 if __name__ == "__main__":
     unittest.main()
