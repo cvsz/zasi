@@ -9,6 +9,14 @@ from .identity import hash_token
 from .policy import PolicyDecision, PolicyEngine
 from .postgres_storage import PostgresControlPlaneStore
 from .scheduler import DurableScheduler
+from .secrets import SecretProviderError, read_secret, resolve_secret_mapping
+from .speech_adapters import (
+    FliteTTSAdapter,
+    SpeechAdapterError,
+    SpeechSynthesis,
+    SpeechTranscription,
+    WhisperCppSTTAdapter,
+)
 from .storage import ConflictError, ControlPlaneStore, ScopeViolation
 from .worker import OutboxWorker, WorkerReport
 
@@ -26,10 +34,18 @@ __all__ = [
     "PolicyDecision",
     "PolicyEngine",
     "PostgresControlPlaneStore",
+    "FliteTTSAdapter",
     "OutboxDispatcher",
     "OutboxWorker",
+    "SecretProviderError",
+    "SpeechAdapterError",
+    "SpeechSynthesis",
+    "SpeechTranscription",
     "ScopeViolation",
     "Settings",
     "WorkerReport",
+    "WhisperCppSTTAdapter",
     "hash_token",
+    "read_secret",
+    "resolve_secret_mapping",
 ]

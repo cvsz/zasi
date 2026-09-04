@@ -484,7 +484,11 @@ def create_app(
             store = PostgresControlPlaneStore(settings.database_url)
         else:
             store = ControlPlaneStore(settings.database_path)
-    redis_runtime = RedisRuntime(settings.redis_url) if settings.redis_url else None
+    redis_runtime = (
+        RedisRuntime(settings.redis_url, key_prefix=settings.redis_key_prefix)
+        if settings.redis_url
+        else None
+    )
     registry = ToolRegistry()
     connector_registry = ConnectorRegistry()
 

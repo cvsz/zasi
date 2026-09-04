@@ -35,6 +35,7 @@ from src.control_plane.backup import (
     open_sealed,
 )
 from src.control_plane.postgres_storage import PostgresControlPlaneStore
+from src.control_plane.secrets import SecretProviderError, read_secret
 from src.control_plane.storage import _prepare_private_sqlite_path
 
 
@@ -45,9 +46,14 @@ def _read_backup_key() -> bytes:
         raise BackupError(
             "staging and production backup keys require an external secret provider"
         )
-    encoded = os.environ.get("ZASI_BACKUP_KEY_B64", "").strip()
-    if not encoded:
-        raise BackupError("ZASI_BACKUP_KEY_B64 must be injected by the secret provider")
+    try:
+        encoded = read_secret("ZASI_BACKUP_KEY_B64")
+    except SecretProviderError as exc:
+        if not os.environ.get("ZASI_BACKUP_KEY_B64", "").strip():
+            raise BackupError(
+                "ZASI_BACKUP_KEY_B64 must be injected by the secret provider"
+            ) from exc
+        raise BackupError(str(exc)) from exc
     try:
         key = base64.b64decode(encoded.encode("ascii"), validate=True)
     except (UnicodeEncodeError, ValueError, binascii.Error) as exc:
@@ -81,7 +87,15 @@ def _sqlite_source_path(source: Optional[str]) -> Path:
 
 
 def _postgres_database_url(database_url: Optional[str]) -> str:
-    url = database_url or os.environ.get("ZASI_DATABASE_URL", "")
+    if database_url:
+        url = database_url
+    else:
+        try:
+            url = read_secret("ZASI_DATABASE_URL")
+        except SecretProviderError as exc:
+            raise BackupError(
+                "PostgreSQL backup requires a database URL from the configured secret provider"
+            ) from exc
     if not url or not url.startswith(("postgresql://", "postgres://")):
         raise BackupError("PostgreSQL backup requires a PostgreSQL database URL")
     return url
@@ -357,11 +371,7 @@ def restore_backup(args: argparse.Namespace) -> int:
             target.chmod(0o600)
         else:
             _validate_postgresql_archive(raw_path)
-            database_url = args.database_url or os.environ.get("ZASI_DATABASE_URL", "")
-            if not database_url:
-                raise BackupError(
-                    "PostgreSQL restore requires --database-url or ZASI_DATABASE_URL"
-                )
+            database_url = _postgres_database_url(args.database_url)
             _restore_postgresql(raw_path, database_url, args.replace)
     print(_metadata_report(metadata, operation="restore", result="passed"))
     return 0

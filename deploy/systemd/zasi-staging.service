@@ -1,0 +1,53 @@
+[Unit]
+Description=ZASI governed staging control plane
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target
+ConditionPathExists=/etc/zasi/staging/zasi-secrets.cred
+
+[Service]
+Type=simple
+User=zasi
+Group=zasi
+WorkingDirectory=/opt/zasi
+ExecStart=/opt/zasi/.venv/bin/python3 -m backend.app
+Restart=on-failure
+RestartSec=5s
+UMask=0077
+
+# systemd decrypts this credential into CREDENTIALS_DIRECTORY. The process
+# receives no plaintext secret through the unit file or an Environment= line.
+LoadCredentialEncrypted=zasi-secrets:/etc/zasi/staging/zasi-secrets.cred
+Environment=PYTHONUNBUFFERED=1
+Environment=ZASI_PROFILE=staging
+Environment=ZASI_SECRET_PROVIDER=systemd-credential
+Environment=ZASI_BACKUP_POLICY=managed-encrypted
+Environment=ZASI_DATABASE_BACKEND=postgresql
+Environment=ZASI_REDIS_KEY_PREFIX=zasi:staging
+Environment=ZASI_HOST=127.0.0.1
+Environment=ZASI_PORT=8080
+Environment=ZASI_ALLOW_PUBLIC_BIND=no
+Environment=ZASI_CORS_ORIGINS=http://127.0.0.1:8080
+Environment=ZASI_ARTIFACT_DIRECTORY=/var/lib/zasi/artifacts
+Environment=ZASI_ENABLE_EXTERNAL_EGRESS=no
+Environment=ZASI_ENABLE_RESEARCH_EXECUTION=no
+Environment=ZASI_ENABLE_PHYSICAL_ACTUATION=no
+
+StateDirectory=zasi
+ReadWritePaths=/var/lib/zasi
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+MemoryMax=512M
+TasksMax=128
+
+[Install]
+WantedBy=multi-user.target

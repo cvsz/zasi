@@ -82,6 +82,29 @@ class SecurityHardeningTests(unittest.TestCase):
         self.assertEqual(analysis["evidence_state"], "unverified")
         self.assertNotIn("surpasses", analysis["benchmark_evaluation"].lower())
 
+    def test_legacy_voice_facade_does_not_claim_synthetic_audio_is_ready(self):
+        response = JAVISVoiceMultimodalInterface().process_voice_command(
+            "status",
+            {},
+        )
+        self.assertFalse(response.audio_synthesis_ready)
+        self.assertFalse(response.hud_telemetry["audio_synthesis_ready"])
+
+    def test_voice_facade_reports_audio_ready_only_with_an_explicit_tts_adapter(self):
+        class TTSAdapter:
+            def synthesize(self, text):
+                return type(
+                    "Synthesis",
+                    (),
+                    {"sample_rate_hz": 16000, "duration_seconds": 1.0},
+                )()
+
+        response = JAVISVoiceMultimodalInterface(
+            tts_adapter=TTSAdapter(),
+        ).process_voice_command("status", {})
+        self.assertTrue(response.audio_synthesis_ready)
+        self.assertTrue(response.hud_telemetry["audio_synthesis_ready"])
+
 
 if __name__ == "__main__":
     unittest.main()
