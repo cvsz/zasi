@@ -33,6 +33,18 @@ class WorkflowPermissionTests(unittest.TestCase):
                 self.assertIn("permissions:", block)
                 self.assertIn("  contents: read", block)
 
+    def test_node_workflows_use_the_declared_electron_engine_and_bounded_audit(self):
+        for name in ("ci.yml", "lint.yml", "pages.yml", "release.yml", "npm-publish.yml"):
+            path = WORKFLOW_DIR / name
+            workflow = path.read_text(encoding="utf-8")
+            with self.subTest(workflow=name):
+                self.assertIn('node-version: "22.14.0"', workflow)
+
+        ci = (WORKFLOW_DIR / "ci.yml").read_text(encoding="utf-8")
+        self.assertIn("scripts/npm_audit_retry.sh", ci)
+        audit_script = Path(__file__).parents[1] / "scripts" / "npm_audit_retry.sh"
+        self.assertIn("--audit-level=moderate", audit_script.read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -12,6 +12,9 @@
     "electron-build": "electron-builder --config electron-builder.config.js --linux --mac --win",
     "test": "node tests/test_components.js && node tests/test_electron_runtime.js && node tests/test_electron_integration.js && node tests/test_electron_packaging.js"
   },
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "devDependencies": {
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.5",

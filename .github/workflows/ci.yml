@@ -23,9 +23,13 @@ jobs:
       - uses: actions/setup-python@v7
         with: { python-version: "${{ matrix.python-version }}" }
       - uses: actions/setup-node@v7
-        with: { node-version: "20" }
+        with: { node-version: "22.14.0" }
       - name: Install and build bundled cockpit
-        run: npm ci --ignore-scripts && npm audit --omit=dev && npm run typecheck && npm run build
+        run: |
+          npm ci --ignore-scripts
+          scripts/npm_audit_retry.sh
+          npm run typecheck
+          npm run build
       - name: Install dependencies
         run: pip install '.[dev]' build coverage
       - name: Audit project Python dependencies
@@ -57,9 +61,13 @@ jobs:
       - uses: actions/setup-python@v7
         with: { python-version: "3.11" }
       - uses: actions/setup-node@v7
-        with: { node-version: "20" }
+        with: { node-version: "22.14.0" }
       - name: Build bundled cockpit before packaging
-        run: npm ci --ignore-scripts && npm audit --omit=dev && npm run typecheck && npm run build
+        run: |
+          npm ci --ignore-scripts
+          scripts/npm_audit_retry.sh
+          npm run typecheck
+          npm run build
       - run: pip install '.[dev]' build
       - name: Build wheel and sdist
         run: python3 -m build
