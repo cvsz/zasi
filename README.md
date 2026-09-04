@@ -54,11 +54,17 @@ actions. Their local evidence procedure and limitations are recorded in the
 
 ## Run the authoritative application
 
+The bundled cockpit requires Node.js `>=22.12.0` (the Electron dependency
+engine requirement). Use the checked-in lockfile and the bounded online audit
+wrapper when validating a fresh install:
+
 ```bash
 set -a
 . .env
 set +a
 npm ci --ignore-scripts
+npm run typecheck
+scripts/npm_audit_retry.sh
 npm run build
 python3 -m backend.app
 ```
@@ -137,7 +143,7 @@ python3 -m unittest tests.test_control_plane_core tests.test_control_plane_broke
 python3 scripts/run_action_worker.py --once
 node tests/test_components.js
 npm run typecheck
-npm audit --omit=dev
+scripts/npm_audit_retry.sh
 npm run build
 python3 -m build
 python3 scripts/sign_release_artifacts.py --help

@@ -3,7 +3,7 @@
 > **Repository:** `cvsz/zasi`
 > **Target:** ZASI v33 Autonomous Chief-of-Staff architecture
 > **Current implementation baseline:** ZASI v32.0 governed reference transition
-> **Revision:** 2026-09-03 — implementation-status reconciliation after re-reading `docs/javis` and GitHub issues #9–#18
+> **Revision:** 2026-09-04 — implementation-status reconciliation after re-reading `docs/javis`, the implementation specification, and GitHub issues #9–#18
 > **Purpose:** End-to-end architecture for the J.A.R.V.I.S. / F.R.I.D.A.Y. / E.D.I.T.H. command system, upgraded into a production-oriented **Autonomous Chief-of-Staff runtime** that combines on-device voice intelligence, local-first execution, goal/task orchestration, evidence-grounded executive briefing, ZASI cognitive planning, formal verification, memory routing, MCP/tool fabric, durable scheduling, distributed services, and a next-generation operational cockpit.
 
 > **Runtime authority:** The design below is a target architecture. The
@@ -76,6 +76,7 @@ This is a source inspection snapshot, not a production-readiness claim. It preve
 | SQLite/PostgreSQL state | `ControlPlaneStore` and `PostgresControlPlaneStore` persist tenants, principals, devices, sessions, capabilities, intents, plans, approvals, runs, actions, evidence, audit, events, outbox, idempotency records, rate limits, artifacts, memory, briefings, sequences, schema-11 Goal/Task schedules, task runs, and leased action runs. Redis provides authenticated shared rate-limit coordination. | Local SQLite and shared PostgreSQL/Redis paths are implemented; managed backup, staging, and multi-process deployment evidence remain release gates. |
 | `/api/tick`, `/api/execute/{key}`, `/api/mutate`, `/api/rsi/upgrade` | Compatibility routes are retired with typed 410 responses; no privileged GET path is used by the authoritative app. | Preserve the safe migration response and use v2 typed plans/broker for future capability work. |
 | `docs/javis/*.mp4` | Reference recordings only; no executable contract, telemetry, or acceptance evidence. | Use for UX acceptance scenarios and visual language, never for capability verification. |
+| Local authenticated browser runtime on `127.0.0.1` | The built React cockpit opened through the authoritative ASGI app, authenticated with the private local API key, rendered the Overview and J.A.R.V.I.S. Observe/Assist routes, submitted `observe system status`, and displayed verified evidence, durable run state, and the explicit no-legacy-availability disclosure. | Current local UX/runtime evidence for the governed read-only reference profile; it is not public ingress, production staging, external actuation, hardware, self-evolution, or ASI/AGI evidence. |
 
 Until the v33 gates are implemented and verified, labels such as “176 subsystems online”, “320× RSI”, measured power, successful CAD analysis, or completed external actions must be rendered as `simulated`, `estimated`, `unavailable`, or `unknown` when no evidence object supports them.
 
