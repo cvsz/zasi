@@ -1269,6 +1269,189 @@ function ModelsPage() {
     </div>;
 }
 
+function MemoryPage() {
+    const { session } = useAuth();
+    const token = session?.access_token ?? null;
+    const [query, setQuery] = useState('');
+    const [memoryType, setMemoryType] = useState('');
+    const [limit] = useState(50);
+    const [showCreate, setShowCreate] = useState(false);
+    const [content, setContent] = useState('');
+    const [scope, setScope] = useState('workspace');
+    const [projectId, setProjectId] = useState('');
+    const { addToast } = useToast();
+    const params = new URLSearchParams();
+    if (query) params.set('query', query);
+    if (memoryType) params.set('memory_type', memoryType);
+    params.set('limit', String(limit));
+    const memory = useApi<JsonRecord[]>(`/api/v2/memory/search?${params}`, token && (query || memoryType) ? token : null);
+    const create = async (): Promise<void> => {
+        if (!token || !content.trim()) return;
+        try {
+            await api.post('/api/v2/memory', token, { content: content.trim(), scope, project_id: projectId || undefined, memory_type: 'fact' });
+            addToast('Memory created', 'success');
+            setContent('');
+            setProjectId('');
+            setShowCreate(false);
+        } catch (error) {
+            addToast(`Failed: ${errorMessage(error)}`, 'error');
+        }
+    };
+    const remove = async (memoryId: string): Promise<void> => {
+        if (!token) return;
+        try {
+            await api.request(`/api/v2/memory/${memoryId}`, { token, method: 'DELETE' });
+            addToast('Memory deleted', 'success');
+        } catch (error) {
+            addToast(`Failed: ${errorMessage(error)}`, 'error');
+        }
+    };
+    return <div className="page route-fade">
+        <h2 className="page-title">💾 Memory browser</h2>
+        <div className="notice">Memory is tenant-scoped and scope-checked. Project memory requires project_id. Stale or expired entries are excluded from search results unless explicitly included by the backend.</div>
+        <div className="card">
+            <div className="card-header">Search memory</div>
+            <div className="form-row">
+                <label htmlFor="mem-query">Query</label>
+                <input id="mem-query" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="search terms…" />
+                <label htmlFor="mem-type">Type</label>
+                <input id="mem-type" value={memoryType} onChange={(event) => setMemoryType(event.target.value)} placeholder="fact / conversation" />
+                <button className="btn primary small" onClick={() => {}}>Search</button>
+            </div>
+            {memory.loading && <div className="empty">Loading…</div>}
+            {memory.error && <div className="error">{memory.error}</div>}
+            {memory.data && memory.data.length === 0 && <div className="empty">No memory items match the query.</div>}
+            {memory.data && memory.data.length > 0 && <table className="data-table"><thead><tr><th>ID</th><th>Type</th><th>Content</th><th>Scope</th><th>Created</th><th></th></tr></thead><tbody>
+                {memory.data.map((item) => <tr key={String(item.memory_id)}>
+                    <td className="mono">{String(item.memory_id).slice(0, 16)}…</td>
+                    <td>{String(item.memory_type ?? '—')}</td>
+                    <td>{String(item.content ?? '').slice(0, 120)}</td>
+                    <td>{String(item.scope ?? '—')}{item.project_id ? ` / ${String(item.project_id)}` : ''}</td>
+                    <td>{String(item.created_at ?? '—')}</td>
+                    <td><button className="btn secondary small" onClick={() => remove(String(item.memory_id))}>Delete</button></td>
+                </tr>)}
+            </tbody></table>}
+        </div>
+        <div className="card">
+            <div className="card-header">Create memory</div>
+            {showCreate ? <div className="form-row">
+                <label htmlFor="mem-content">Content</label>
+                <textarea id="mem-content" rows={3} value={content} onChange={(event) => setContent(event.target.value)} />
+                <label htmlFor="mem-scope">Scope</label>
+                <select id="mem-scope" value={scope} onChange={(event) => setScope(event.target.value)}>
+                    <option value="workspace">workspace</option>
+                    <option value="project">project</option>
+                </select>
+                {scope === 'project' && <><label htmlFor="mem-project">Project ID</label><input id="mem-project" value={projectId} onChange={(event) => setProjectId(event.target.value)} /></>}
+                <button className="btn primary" onClick={create}>Create</button>
+            </div> : <button className="btn secondary" onClick={() => setShowCreate(true)}>New memory item</button>}
+        </div>
+    </div>;
+}
+
+function GovernancePage() {
+    const { session } = useAuth();
+    const token = session?.access_token ?? null;
+    const policies = useApi<JsonRecord>('/api/v2/governance/policies', token);
+    const approvals = useApi<JsonRecord>('/api/v2/governance/approvals', token);
+    const policyList = (policies.data?.policies ?? []) as any[];
+    const agentApprovals = (approvals.data?.agent_approvals ?? []) as any[];
+    const legacyApprovals = (approvals.data?.legacy_approvals ?? []) as any[];
+    return <div className="page route-fade">
+        <h2 className="page-title">🛡 Governance</h2>
+        <div className="notice">Policy, capability, and approval visibility. The control plane never bypasses policy; every tool call is mediated by the registry and policy engine.</div>
+        <div className="card">
+            <div className="card-header">Capability policies</div>
+            {policyList.length === 0 && <div className="empty">No policies registered.</div>}
+            {policyList.length > 0 && <table className="data-table"><thead><tr><th>Capability</th><th>Tool</th><th>Risk</th><th>Scopes</th><th>Egress</th><th>Side effects</th></tr></thead><tbody>
+                {policyList.map((policy) => <tr key={String(policy.capability_id)}>
+                    <td className="mono">{String(policy.capability_id)}</td>
+                    <td>{String(policy.tool_id)}</td>
+                    <td><StatusBadge status={String(policy.risk_tier)}>{String(policy.risk_tier)}</StatusBadge></td>
+                    <td>{(policy.required_scopes ?? []).map((scope: string) => <code key={scope}>{scope}</code>)}</td>
+                    <td>{String(policy.network_egress)}</td>
+                    <td>{String(policy.side_effects?.join(', ') ?? '—')}</td>
+                </tr>)}
+            </tbody></table>}
+            {policies.error && <div className="error">{policies.error}</div>}
+        </div>
+        <div className="card">
+            <div className="card-header">Pending approvals</div>
+            {agentApprovals.length === 0 && legacyApprovals.length === 0 && <div className="empty">No pending approvals.</div>}
+            {(agentApprovals.length > 0 || legacyApprovals.length > 0) && <table className="data-table"><thead><tr><th>Type</th><th>ID</th><th>Execution / Plan</th><th>Status</th></tr></thead><tbody>
+                {agentApprovals.map((approval) => <tr key={String(approval.approval_id)}>
+                    <td>agent</td>
+                    <td className="mono">{String(approval.approval_id)}</td>
+                    <td className="mono">{String(approval.execution_id)}</td>
+                    <td><StatusBadge status={String(approval.decision)}>{String(approval.decision)}</StatusBadge></td>
+                </tr>)}
+                {legacyApprovals.map((approval) => <tr key={String(approval.approval_id)}>
+                    <td>legacy</td>
+                    <td className="mono">{String(approval.approval_id)}</td>
+                    <td className="mono">{String(approval.plan_id)}</td>
+                    <td><StatusBadge status={String(approval.status)}>{String(approval.status)}</StatusBadge></td>
+                </tr>)}
+            </tbody></table>}
+            {approvals.error && <div className="error">{approvals.error}</div>}
+        </div>
+    </div>;
+}
+
+function TelemetryPage() {
+    const { session } = useAuth();
+    const token = session?.access_token ?? null;
+    const telemetry = useApi<JsonRecord>('/api/v2/telemetry', token);
+    const data = telemetry.data as Record<string, any> | null;
+    const processData = data?.process as Record<string, any> | undefined;
+    const diskData = data?.disk as Record<string, any> | undefined;
+    return <div className="page route-fade">
+        <h2 className="page-title">📊 Telemetry</h2>
+        <div className="notice">Local process and disk telemetry for the control-plane runtime. This is not public ingress telemetry.</div>
+        {data && <div className="telemetry-grid">
+            <div className="tele-card"><div className="tele-label">PID</div><div className="tele-val">{String(processData?.pid ?? '—')}</div></div>
+            <div className="tele-card"><div className="tele-label">CPU %</div><div className="tele-val">{String(processData?.cpu_percent ?? '—')}</div></div>
+            <div className="tele-card"><div className="tele-label">MEM RSS</div><div className="tele-val">{formatBytes(processData?.memory_rss_bytes ?? 0)}</div></div>
+            <div className="tele-card"><div className="tele-label">MEM VMS</div><div className="tele-val">{formatBytes(processData?.memory_vms_bytes ?? 0)}</div></div>
+            <div className="tele-card"><div className="tele-label">DISK TOTAL</div><div className="tele-val">{formatBytes(diskData?.total_bytes ?? 0)}</div></div>
+            <div className="tele-card"><div className="tele-label">DISK FREE</div><div className="tele-val">{formatBytes(diskData?.free_bytes ?? 0)}</div></div>
+        </div>}
+        {!data && <div className="empty">Loading telemetry…</div>}
+        {telemetry.error && <div className="error">{telemetry.error}</div>}
+        <div className="disclosure">{String(data?.disclosure ?? '')}</div>
+    </div>;
+}
+
+function SettingsPage() {
+    const { session } = useAuth();
+    const token = session?.access_token ?? null;
+    const settings = useApi<JsonRecord>('/api/v2/settings', token);
+    const data = settings.data as Record<string, any> | null;
+    return <div className="page route-fade">
+        <h2 className="page-title">⚙️ Runtime settings</h2>
+        <div className="notice">The reference profile exposes read-only runtime settings. Mutation requires operator-level configuration outside the cockpit.</div>
+        {data && <div className="card">
+            <div className="card-header">Configuration</div>
+            <table className="data-table"><tbody>
+                {Object.entries(data).filter(([key]) => key !== 'disclosure').map(([key, value]) => <tr key={key}>
+                    <td><strong>{key}</strong></td>
+                    <td>{String(value ?? '—')}</td>
+                </tr>)}
+            </tbody></table>
+            <div className="disclosure">{String(data?.disclosure ?? '')}</div>
+        </div>}
+        {!data && <div className="empty">Loading settings…</div>}
+        {settings.error && <div className="error">{settings.error}</div>}
+    </div>;
+}
+
+function formatBytes(value: number): string {
+    if (value <= 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const exponent = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
+    const scaled = value / Math.pow(1024, exponent);
+    return `${scaled.toFixed(1)} ${units[exponent]}`;
+}
+
 const NAV: NavigationLink[] = [
     { to: '/', label: '⚡ Overview', end: true },
     { to: '/agents', label: '🧠 Agents' },
@@ -1276,6 +1459,10 @@ const NAV: NavigationLink[] = [
     { to: '/approvals', label: '🛂 Approvals' },
     { to: '/audit', label: '📜 Audit' },
     { to: '/models', label: '🤖 Models' },
+    { to: '/memory', label: '💾 Memory' },
+    { to: '/governance', label: '🛡 Governance' },
+    { to: '/telemetry', label: '📊 Telemetry' },
+    { to: '/settings', label: '⚙️ Settings' },
     { to: '/jarvis', label: '🤖 J.A.R.V.I.S.' },
     { to: '/engineering', label: '🧩 Engineering' },
     { to: '/subsystems', label: '🔬 Registry' },
@@ -1294,7 +1481,7 @@ function Shell() {
 function AuthenticatedApp() {
     const { session } = useAuth();
     if (!session) return <LoginPage />;
-    return <Routes><Route path="/" element={<Shell />}><Route index element={<OverviewPage />} /><Route path="agents" element={<AgentsPage />} /><Route path="executions" element={<ExecutionsPage />} /><Route path="approvals" element={<ApprovalsPage />} /><Route path="audit" element={<AuditPage />} /><Route path="models" element={<ModelsPage />} /><Route path="jarvis" element={<JarvisPage />} /><Route path="engineering" element={<EngineeringPage />} /><Route path="subsystems" element={<SubsystemsPage />} /><Route path="cockpit" element={<CockpitPage />} /><Route path="mcp" element={<MCPPage />} /></Route></Routes>;
+    return <Routes><Route path="/" element={<Shell />}><Route index element={<OverviewPage />} /><Route path="agents" element={<AgentsPage />} /><Route path="executions" element={<ExecutionsPage />} /><Route path="approvals" element={<ApprovalsPage />} /><Route path="audit" element={<AuditPage />} /><Route path="models" element={<ModelsPage />} /><Route path="memory" element={<MemoryPage />} /><Route path="governance" element={<GovernancePage />} /><Route path="telemetry" element={<TelemetryPage />} /><Route path="settings" element={<SettingsPage />} /><Route path="jarvis" element={<JarvisPage />} /><Route path="engineering" element={<EngineeringPage />} /><Route path="subsystems" element={<SubsystemsPage />} /><Route path="cockpit" element={<CockpitPage />} /><Route path="mcp" element={<MCPPage />} /></Route></Routes>;
 }
 
 function App() {

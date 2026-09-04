@@ -586,6 +586,7 @@ def create_app(
     app.state.store = store
     app.state.registry = registry
     app.state.connector_registry = connector_registry
+    app.state.policy = policy
     app.state.broker = broker
     app.state.redis_runtime = redis_runtime
     app.state.agent_service = agent_service
@@ -3718,6 +3719,94 @@ def create_app(
                 "X-ZASI-Event-Cursor": str(latest if requires_resync else next_cursor),
             },
         )
+
+    @app.get("/api/v2/telemetry")
+    async def telemetry(context: AuthContext = Depends(_context_from_request)):
+        require_scope(context, "workspace:read", "Telemetry visibility is not permitted.")
+        try:
+            import psutil
+            proc = psutil.Process()
+            memory = proc.memory_info()
+            cpu_percent = psutil.cpu_percent(interval=0.1)
+            disk = psutil.disk_usage(str(settings.data_directory))
+            return {
+                "tenant_id": context.tenant_id,
+                "process": {
+                    "pid": proc.pid,
+                    "memory_rss_bytes": memory.rss,
+                    "memory_vms_bytes": memory.vms,
+                    "cpu_percent": cpu_percent,
+                },
+                "disk": {
+                    "total_bytes": disk.total,
+                    "used_bytes": disk.used,
+                    "free_bytes": disk.free,
+                    "percent_used": disk.percent,
+                },
+                "disclosure": "Telemetry describes the local control-plane process only.",
+            }
+        except Exception:
+            return {
+                "tenant_id": context.tenant_id,
+                "process": {"pid": 0, "memory_rss_bytes": 0, "memory_vms_bytes": 0, "cpu_percent": 0.0},
+                "disk": {"total_bytes": 0, "used_bytes": 0, "free_bytes": 0, "percent_used": 0},
+                "disclosure": "Telemetry is unavailable in this runtime.",
+            }
+
+    @app.get("/api/v2/settings")
+    async def settings_view(context: AuthContext = Depends(_context_from_request)):
+        require_scope(context, "workspace:read", "Settings visibility is not permitted.")
+        return {
+            "tenant_id": context.tenant_id,
+            "profile": settings.profile,
+            "host": settings.host,
+            "port": settings.port,
+            "database_backend": settings.database_backend,
+            "redis_url": "configured" if settings.redis_url else "not_configured",
+            "external_egress_enabled": settings.external_egress_enabled,
+            "research_execution_enabled": settings.research_execution_enabled,
+            "physical_actuation_enabled": settings.physical_actuation_enabled,
+            "ollama_base_url": settings.ollama_base_url or "not_configured",
+            "ollama_model": settings.ollama_model or "not_configured",
+            "ollama_timeout_seconds": settings.ollama_timeout_seconds,
+            "disclosure": "Settings are read-only in the reference profile.",
+        }
+
+    @app.get("/api/v2/governance/policies")
+    async def governance_policies(context: AuthContext = Depends(_context_from_request)):
+        require_scope(context, "workspace:read", "Policy visibility is not permitted.")
+        policies = []
+        for capability_id, capability in app.state.policy._capabilities.items():
+            policies.append({
+                "capability_id": capability.capability_id,
+                "tool_id": capability.capability_id,
+                "risk_tier": capability.risk_tier,
+                "required_scopes": sorted(capability.required_scopes),
+                "availability": capability.availability,
+                "approval_policy": "operator" if capability.risk_tier in {"R2", "R3", "R4", "R5"} else "never",
+                "network_egress": "none" if capability.risk_tier in {"R0", "R1"} else "loopback" if capability.risk_tier == "R2" else "restricted",
+                "side_effects": [],
+            })
+        return {"policies": policies, "tenant_id": context.tenant_id}
+
+    @app.get("/api/v2/governance/approvals")
+    async def governance_approvals(context: AuthContext = Depends(_context_from_request)):
+        require_scope(context, "workspace:read", "Approval visibility is not permitted.")
+        agent_approvals = app.state.store.list_agent_approvals(context.tenant_id, decision="pending")
+        legacy_approvals = []
+        try:
+            rows = app.state.store._conn().execute(
+                "SELECT id, plan_id, status FROM approvals WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 100",
+                (context.tenant_id,),
+            ).fetchall()
+            legacy_approvals = [{"approval_id": row["id"], "plan_id": row["plan_id"], "status": row["status"]} for row in rows]
+        except Exception:
+            pass
+        return {
+            "agent_approvals": agent_approvals,
+            "legacy_approvals": legacy_approvals,
+            "tenant_id": context.tenant_id,
+        }
 
     @app.get("/api/status")
     async def compatibility_status(context: AuthContext = Depends(_context_from_request)):
