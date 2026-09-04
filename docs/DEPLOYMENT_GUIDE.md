@@ -7,8 +7,10 @@ The bundled cockpit requires Node.js `>=22.12.0`. Keep `package-lock.json`
 authoritative; `scripts/npm_ci_audit.sh` installs without npm's retired quick
 audit fallback, then queries the npm bulk advisory endpoint for production
 packages with bounded retries. Missing, malformed, vulnerable, or unavailable
-audit results fail closed. The standalone `scripts/npm_audit_retry.sh` remains
-available as a compatibility entrypoint for that same explicit online audit.
+audit results fail closed. The pull-request CI gate uses GitHub dependency
+review for change-level coverage; release and explicit local audits use the
+bulk endpoint. The standalone `scripts/npm_audit_retry.sh` remains available
+as a compatibility entrypoint for that same explicit online audit.
 
 ## Local
 

@@ -41,9 +41,9 @@ class WorkflowPermissionTests(unittest.TestCase):
                 self.assertIn('node-version: "22.14.0"', workflow)
 
         ci = (WORKFLOW_DIR / "ci.yml").read_text(encoding="utf-8")
-        self.assertIn("scripts/npm_ci_audit.sh", ci)
+        self.assertIn("actions/dependency-review-action@v4", ci)
+        self.assertIn("npm ci --ignore-scripts --no-audit", ci)
         install_audit_script = Path(__file__).parents[1] / "scripts" / "npm_ci_audit.sh"
-        self.assertIn("npm ci --ignore-scripts --no-audit", install_audit_script.read_text(encoding="utf-8"))
         self.assertIn("npm_bulk_audit.mjs", install_audit_script.read_text(encoding="utf-8"))
         audit_script = Path(__file__).parents[1] / "scripts" / "npm_audit_retry.sh"
         self.assertIn("npm_bulk_audit.mjs", audit_script.read_text(encoding="utf-8"))
