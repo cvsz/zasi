@@ -2,7 +2,7 @@
 
 > **Repository:** `cvsz/zasi`
 > **Target:** ZASI v33 Autonomous Chief-of-Staff architecture
-> **Current implementation baseline:** ZASI v32.0 governed reference transition
+> **Current implementation baseline:** ZASI v32.0 governed reference transition with AI Futures Project Superintelligence agent platform (schema v12)
 > **Revision:** 2026-09-04 — implementation-status reconciliation after re-reading `docs/javis`, the implementation specification, and GitHub issues #9–#18
 > **Purpose:** End-to-end architecture for the J.A.R.V.I.S. / F.R.I.D.A.Y. / E.D.I.T.H. command system, upgraded into a production-oriented **Autonomous Chief-of-Staff runtime** that combines on-device voice intelligence, local-first execution, goal/task orchestration, evidence-grounded executive briefing, ZASI cognitive planning, formal verification, memory routing, MCP/tool fabric, durable scheduling, distributed services, and a next-generation operational cockpit.
 
@@ -67,13 +67,13 @@ This is a source inspection snapshot, not a production-readiness claim. It preve
 
 | Repository surface | Observed current behavior | v33 interpretation |
 |---|---|---|
-| `backend/app.py` | Authoritative FastAPI/ASGI owner with fail-closed session authentication, typed routes, policy/broker dispatch, schema-11 SQLite/PostgreSQL state including durable Goal/Task schedules, task runs, idempotency records, and leased action runs, Redis-backed shared rate limits, durable SSE replay/resync, and bundled cockpit serving. | Current governed reference slice; staging/production remain blocked until managed operations and deployment evidence are supplied. |
+| `backend/app.py` | Authoritative FastAPI/ASGI owner with fail-closed session authentication, typed routes, policy/broker dispatch, schema-12 SQLite/PostgreSQL state including durable Goal/Task schedules, task runs, idempotency records, leased action runs, agent definitions/versions/executions/approvals, event envelope extensions (execution_id, agent_version, correlation_id, causation_id, sensitivity, idempotency_key), Redis-backed shared rate limits, durable SSE replay/resync, and bundled cockpit serving. | Current governed reference slice; staging/production remain blocked until managed operations and deployment evidence are supplied. |
 | `backend/server.py` | Legacy standard-library compatibility server remains isolated from the authoritative import path; its historical WebSocket, catalog, chat, and mutation surfaces are not the production owner. | Compatibility/research edge only; do not use it as production evidence. |
 | `web/static/app.tsx` + `web/static/cockpit.tsx` + `web/static/app.jsx` | React 19 + React Router 7 cockpit uses a strict TypeScript root mount and fully checked TypeScript source for the authenticated v2 session, snapshot, capability registry, SSE event feed, and Engineering artifact workspace. The historical JSX path is a compatibility re-export; the Vite output is the runtime bundle and no CDN runtime is required. | Current cockpit surface for Observe/Assist and governed command presentation; browser mesh rendering is limited to source-backed STL/OBJ/GLB artifacts, while JSON glTF stays evidence-only in the reference viewer and voice, humanoid, accessibility, and performance evidence remain disclosure-bound. |
 | `src/control_plane/multimodal.py` | Bounded stdlib adapters parse actual STEP/STL/OBJ/glTF 2.0 bytes and structurally validate PNG/JPEG bytes after quarantine digest verification. glTF accepts GLB or embedded-base64 JSON buffers and rejects external buffer URIs. | Local source-observation evidence only: measured geometry and image metadata are exposed with provenance; glTF bounds are mesh-local and do not apply node transforms, sparse accessors, materials, or morph targets. Semantic vision, FEA, thermal, material, mass, manufacturing, STT/TTS, anti-replay biometrics, and hardware remain unenabled. |
 | `src/control_plane/speech_adapters.py` | Bounded local `whisper.cpp` STT and Flite TTS adapters use argv-only subprocesses, private temporary files, executable/model digests, timeouts, output bounds, and explicit local provenance. | Local executable/model evidence exists; adapters are opt-in, do not authenticate speakers or authorize actions, and do not establish hosted or production voice operations. |
 | `src/javis_voice_multimodal.py` | Legacy voice/CAD/visual/briefing facade remains a compatibility contract. Synthetic audio is no longer reported as ready unless an explicit TTS adapter is injected; real byte operations use the opt-in speech adapters. | Fixture and compatibility source; no speaker anti-replay, semantic vision, FEA, or physical action claim. |
-| SQLite/PostgreSQL state | `ControlPlaneStore` and `PostgresControlPlaneStore` persist tenants, principals, devices, sessions, capabilities, intents, plans, approvals, runs, actions, evidence, audit, events, outbox, idempotency records, rate limits, artifacts, memory, briefings, sequences, schema-11 Goal/Task schedules, task runs, and leased action runs. Redis provides authenticated shared rate-limit coordination. | Local SQLite and shared PostgreSQL/Redis paths are implemented; managed backup, staging, and multi-process deployment evidence remain release gates. |
+| SQLite/PostgreSQL state | `ControlPlaneStore` and `PostgresControlPlaneStore` persist tenants, principals, devices, sessions, capabilities, intents, plans, approvals, runs, actions, evidence, audit, events, outbox, idempotency records, rate limits, artifacts, memory, briefings, sequences, schema-12 Goal/Task schedules, task runs, leased action runs, agent definitions, agent versions, agent executions, and agent approvals. Redis provides authenticated shared rate-limit coordination. | Local SQLite and shared PostgreSQL/Redis paths are implemented; managed backup, staging, and multi-process deployment evidence remain release gates. |
 | `/api/tick`, `/api/execute/{key}`, `/api/mutate`, `/api/rsi/upgrade` | Compatibility routes are retired with typed 410 responses; no privileged GET path is used by the authoritative app. | Preserve the safe migration response and use v2 typed plans/broker for future capability work. |
 | `docs/javis/*.mp4` | Reference recordings only; no executable contract, telemetry, or acceptance evidence. | Use for UX acceptance scenarios and visual language, never for capability verification. |
 | Local authenticated browser runtime on `127.0.0.1` | The built React cockpit opened through the authoritative ASGI app, authenticated with the private local API key, rendered the Overview and J.A.R.V.I.S. Observe/Assist routes, submitted `observe system status`, and displayed verified evidence, durable run state, and the explicit no-legacy-availability disclosure. | Current local UX/runtime evidence for the governed read-only reference profile; it is not public ingress, production staging, external actuation, hardware, self-evolution, or ASI/AGI evidence. |
@@ -771,6 +771,11 @@ workspace surfaces remain v33 work.
 
 ```text
 /                  Overview
+/agents            Agent definitions and versions
+/executions        Agent execution inspect
+/approvals         Pending approval queue
+/audit             Tenant audit stream
+/models            Model policy / gateway status
 /jarvis            Voice / Chat console
 /subsystems        Subsystem registry
 /cockpit           Realtime operational cockpit
@@ -808,6 +813,10 @@ flowchart LR
 - Context memory
 - Policy verdict
 - Approval queue
+- Agent definitions and versions
+- Agent execution timeline
+- Agent approval queue
+- Model policy / gateway status
 - subsystem health
 - CPU / RAM / GPU telemetry
 - MCP inspector
@@ -815,7 +824,99 @@ flowchart LR
 
 ---
 
-## 16. End-to-End J.A.R.V.I.S. Flow
+## 15.5 AI Futures Project Superintelligence — Agent Platform
+
+[](#155-ai-futures-project-superintelligence--agent-platform)
+
+The agent platform is the v32/v33 safe-path execution layer. It adds bounded, code-owned agent definitions, deterministic typed plans, and an approval-gated simulated local write. Every agent mutation is authenticated, tenant-scoped, bounded, idempotent, auditable, and fail-closed.
+
+### Agent platform architecture
+
+[](#1551-agent-platform-architecture)
+
+```mermaid
+flowchart TB
+    OPERATOR[Operator / Principal] --> COCKPIT[React Cockpit]
+    OPERATOR --> API[REST API /api/v2/agents]
+    COCKPIT --> API
+    API --> AUTH[AuthContext / Scopes]
+    AUTH --> SERVICE[AgentService]
+    SERVICE --> STORE[ControlPlaneStore schema-12]
+    SERVICE --> PLANNER[AgentPlanner]
+    SERVICE --> GATEWAY[ModelGateway]
+    SERVICE --> BROKER[ActionBroker]
+    PLANNER --> REGISTRY[ToolRegistry]
+    REGISTRY --> KNOWLEDGE[knowledge.search R0]
+    REGISTRY --> TICKET[ticket.update R2]
+    KNOWLEDGE --> STORE
+    TICKET --> APPROVAL[AgentApproval]
+    APPROVAL --> OPERATOR
+    SERVICE --> EVENTS[Event Envelope]
+    EVENTS --> STORE
+```
+
+### Agent lifecycle
+
+[](#1552-agent-lifecycle)
+
+1. **Create agent** — `POST /api/v2/agents` creates an agent record and an initial draft version. The request body is validated by strict Pydantic v2 contracts (`AgentCreateRequest`). The version digest is computed from canonical JSON of the spec.
+
+2. **Publish version** — `POST /api/v2/agents/{id}/versions/{version_id}/publish` transitions a draft version to `published`. Only published versions can be executed.
+
+3. **Sandbox** — `POST /api/v2/agents/{id}/sandbox` runs a deterministic dry-run plan without creating an execution. The planner produces a fixed two-step safe demo plan (`knowledge.search` then `ticket.update`) and verifies it against the version's allowed tools, scopes, and policy. The model gateway returns the deterministic simulator proposal or a loopback Ollama proposal; either way the output is treated as an untrusted proposal.
+
+4. **Execute** — `POST /api/v2/agents/{id}/executions` creates an agent execution, runs the knowledge step through the broker, and produces a pending approval for the ticket step. The execution is bound to the exact `Idempotency-Key`; replays return the original durable record.
+
+5. **Approve / Reject** — `POST /api/v2/agent-approvals/{approval_id}/approve` or `/reject` resolves the approval. Approvals require `approval:write` scope and must match the exact tenant, execution, agent version, tool, version, and action digest. Replays return the original durable result; the simulator handler is invoked exactly once on approval.
+
+6. **Inspect** — `GET /api/v2/agent-executions/{execution_id}`, `GET /api/v2/agent-approvals`, `GET /api/v2/audit`, and `GET /api/v2/models/status` provide read-only visibility into executions, approvals, the tenant audit stream, and the model gateway state.
+
+### Schema v12 extensions
+
+[](#1553-schema-v12-extensions)
+
+The agent platform extends the durable schema with four new tables:
+
+- `agents` — agent definitions (name, description, status, principal)
+- `agent_versions` — versioned agent specs (system_prompt, allowed_tools, model_policy, budget, digest)
+- `agent_executions` — execution records (plan, model, knowledge_run_id, ticket_run_id, result, error)
+- `agent_approvals` — approval records (execution_id, agent_version_id, run_id, tool_id, action_digest, decision, expires_at)
+
+The `events` table gains envelope columns: `execution_id`, `agent_version`, `correlation_id`, `causation_id`, `sensitivity`, `idempotency_key`. `list_events` returns the envelope fields; `correlation_id` falls back to the event ID for legacy rows. `list_audit` accepts `execution_id`, `event_type`, `sensitivity`, and `since` filters (tenant-scoped only).
+
+### Tool trust model
+
+[](#1554-tool-trust-model)
+
+| Tool | Risk tier | Network egress | Side effects | Evidence | Approval |
+|---|---|---|---|---|---|
+| `knowledge.search` | R0 | none | none | verified | never |
+| `ticket.update` | R2 | none | simulated_local | simulated | operator |
+
+`knowledge.search` is bounded to active, non-stale tenant memory and never returns another tenant's data. `ticket.update` is a deterministic local simulator; its response always includes `simulated=true` and `external_write=false` and never calls an external connector.
+
+### Model policy
+
+[](#1555-model-policy)
+
+The default model is the deterministic simulator. An operator may configure a loopback-only Ollama endpoint via `ZASI_OLLAMA_BASE_URL` and `ZASI_OLLAMA_MODEL`; the endpoint must be `http://localhost` or `http://127.0.0.1` with no credentials and a bounded timeout (0.1–30 seconds). Model output is treated as an untrusted proposal and never executed without planner whitelist and policy verification. Hosted model fallback is explicitly disabled.
+
+### Research-only capabilities
+
+[](#1556-research-only-capabilities)
+
+The following capabilities are typed as `research_only` with no executable mutation hooks:
+
+- recursive self-improvement (RSI)
+- neural-symbolic verification
+- architecture search
+- kernel generation
+- self-deployment
+- distributed memory topology
+
+These are exposed as read-only status projections via `GET /api/v2/capabilities` and `src/control_plane/research.py`.
+
+---
 
 Example user request:
 
@@ -1080,6 +1181,23 @@ Representative modules:
 - world model
 - causal discovery
 - cooperative game solver
+- agent contracts and immutable models
+- deterministic typed planner
+- model gateway (simulator-first, optional loopback Ollama)
+
+### Domain A1 — Agent platform
+
+Representative modules:
+
+- agent contracts (strict Pydantic v2 request/response models)
+- agent models (immutable dataclasses, canonical digests, action digest binding)
+- agent tools (bounded, context-aware, tenant-scoped: `knowledge.search` R0, `ticket.update` R2 simulated local)
+- agent planner (fail-closed typed planner, rejects unknown tools, missing scopes, mismatched risk tiers, unauthorised egress)
+- agent runtime (orchestration service with create, version, publish, sandbox, execute, approve, reject, replay)
+- model gateway (deterministic simulator by default; loopback-only Ollama adapter with bounded timeout; no hosted fallback)
+- research projections (typed disabled/research-only status for RSI, neural-symbolic, architecture search, kernel generation, self-deployment, distributed memory topology)
+
+The agent platform is the v32/v33 safe-path execution layer. Every mutation is authenticated, tenant-scoped, bounded, idempotent, auditable, and fail-closed. `knowledge.search` is read-only and tenant-scoped; `ticket.update` is a deterministic local simulator whose response explicitly states `simulated=true` and `external_write=false`. The default model is the deterministic simulator; a loopback-only Ollama endpoint may be configured by the operator but model output is treated as an untrusted proposal and never executed without planner whitelist and policy verification.
 
 ### Domain B — Safety & governance
 
@@ -1155,6 +1273,7 @@ zasi/
 │   ├── memory/
 │   ├── governance/
 │   ├── execution/
+│   ├── agent/                 # AI Futures agent platform (contracts, models, tools, planner, runtime, gateway)
 │   ├── protocols/
 │   │   └── mcp/
 │   ├── models/
