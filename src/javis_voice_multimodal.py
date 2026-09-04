@@ -72,10 +72,14 @@ class JAVISVoiceMultimodalInterface:
         persona_name: str = "J.A.R.V.I.S.",
         user_callsign: str = "Sir",
         voiceprint_verifier: Optional[Callable[[AudioWaveformPacket], bool]] = None,
+        stt_adapter: Optional[Any] = None,
+        tts_adapter: Optional[Any] = None,
     ):
         self.persona_name = persona_name
         self.user_callsign = user_callsign
         self.voiceprint_verifier = voiceprint_verifier
+        self.stt_adapter = stt_adapter
+        self.tts_adapter = tts_adapter
         self.dialogue_history: List[Dict[str, str]] = []
         self.cad_registry: Dict[str, CADModelPayload] = {}
         self.verified_voiceprint_hashes: List[str] = [
@@ -164,11 +168,30 @@ class JAVISVoiceMultimodalInterface:
         }
 
     def transcribe_audio_stream(self, audio_packet: AudioWaveformPacket) -> str:
-        """Simulates zero-latency neural speech-to-text transcription."""
+        """Return a legacy fixture transcript; use transcribe_audio_bytes for real STT."""
         return audio_packet.transcript_text
 
+    def transcribe_audio_bytes(
+        self,
+        audio_bytes: bytes,
+        *,
+        content_type: str = "audio/wav",
+    ) -> Any:
+        """Run the explicitly configured source-backed STT adapter."""
+        if self.stt_adapter is None:
+            raise RuntimeError("a real STT adapter is not configured")
+        return self.stt_adapter.transcribe(audio_bytes, content_type=content_type)
+
     def synthesize_speech(self, text: str) -> AudioWaveformPacket:
-        """Synthesizes text into high-fidelity neural audio waveform representation."""
+        """Return compatibility metadata; real bytes require an explicit TTS adapter."""
+        if self.tts_adapter is not None:
+            result = self.tts_adapter.synthesize(text)
+            return AudioWaveformPacket(
+                sample_rate_hz=result.sample_rate_hz,
+                duration_sec=result.duration_seconds,
+                transcript_text=text,
+                speaker_tag=self.persona_name,
+            )
         duration = len(text.split()) * 0.35
         return AudioWaveformPacket(
             sample_rate_hz=48000,
@@ -176,6 +199,12 @@ class JAVISVoiceMultimodalInterface:
             transcript_text=text,
             speaker_tag=self.persona_name
         )
+
+    def synthesize_speech_bytes(self, text: str) -> Any:
+        """Return actual adapter-produced audio, or fail closed when unavailable."""
+        if self.tts_adapter is None:
+            raise RuntimeError("a real TTS adapter is not configured")
+        return self.tts_adapter.synthesize(text)
 
     def analyze_visual_feed(self, frame: MultimodalVisualFrame) -> Dict[str, Any]:
         """Processes real-time vision sensor streams for situational awareness."""
@@ -285,13 +314,14 @@ class JAVISVoiceMultimodalInterface:
             "active_speaker": self.persona_name,
             "callsign": self.user_callsign,
             "speaker_verified": is_founder,
+            "audio_synthesis_ready": self.tts_adapter is not None,
             "last_reply": reply,
             "cad_active": len(self.cad_registry)
         }
 
         return JAVISResponse(
             spoken_text=reply,
-            audio_synthesis_ready=True,
+            audio_synthesis_ready=self.tts_adapter is not None,
             actions_executed=actions,
             hud_telemetry=hud_info,
             morning_brief=morning_brief,

@@ -30,6 +30,47 @@ Quarantined artifact files live outside the web bundle. PostgreSQL profiles use
 `ControlPlaneStore.backup_to()`. Restore into a clean validation environment
 before calling a backup usable.
 
+## Staging credentials with systemd
+
+The repository supports the `systemd-credential` provider for staging and
+production-like services. `systemd-creds` encrypts the credential file with
+the host credential key and systemd materializes it into a private
+`CREDENTIALS_DIRECTORY` for the service. The application accepts only the
+named `ZASI_*` secrets it needs and rejects missing, duplicate, conflicting,
+symlinked, or weakly protected credentials. Plaintext values are not stored in
+the unit file.
+
+This is a host-local custody mechanism. If `systemd-creds setup` reports that
+the host credential key is not on encrypted media, treat that warning as a
+staging limitation; it is not equivalent to a managed secret service with
+independent key custody, rotation, and recovery controls.
+
+Provision a host-local staging credential from an already authorized secret
+source. Do not put these values in the repository or a deployment manifest:
+
+```bash
+sudo systemd-creds setup
+sudo install -d -o root -g root -m 700 /etc/zasi/staging
+printf '%s\n' \
+  "ZASI_API_KEY=$ZASI_API_KEY" \
+  "ZASI_DATABASE_URL=$ZASI_DATABASE_URL" \
+  "ZASI_REDIS_URL=$ZASI_REDIS_URL" \
+  "ZASI_BACKUP_KEY_B64=$ZASI_BACKUP_KEY_B64" |
+  sudo systemd-creds --with-key=host --name=zasi-secrets encrypt \
+    /dev/stdin /etc/zasi/staging/zasi-secrets.cred
+sudo chown root:root /etc/zasi/staging/zasi-secrets.cred
+sudo chmod 400 /etc/zasi/staging/zasi-secrets.cred
+```
+
+Install the application under `/opt/zasi` with a complete virtual environment,
+create the dedicated `zasi` service account and `/var/lib/zasi` state path,
+then install and start `deploy/systemd/zasi-staging.service`. The checked-in
+unit is loopback-only, runs as the non-root `zasi` account, uses strict systemd
+filesystem/resource restrictions, and loads the encrypted credential through
+`LoadCredentialEncrypted`. A staging service must use an isolated PostgreSQL
+database and a Redis key prefix such as `zasi:staging`; it must not reuse
+production state for a rehearsal.
+
 ## Encrypted backup and restore gate
 
 The repository includes `scripts/backup_control_plane.py` and the installed
@@ -228,6 +269,10 @@ cross-platform runtime inputs.
 | `ZASI_DATABASE_BACKEND` | `sqlite` for the portable default or `postgresql` for the shared multi-process repository |
 | `ZASI_DATABASE_URL` | Authenticated PostgreSQL URL when `ZASI_DATABASE_BACKEND=postgresql` |
 | `ZASI_REDIS_URL` | Authenticated Redis URL for shared rate limits and readiness |
+| `ZASI_REDIS_KEY_PREFIX` | `zasi` by default; use a bounded isolated prefix such as `zasi:staging` for staging |
+| `ZASI_SECRET_PROVIDER` | `environment` for local only; `systemd-credential` requires a systemd-managed encrypted credential in staging/production |
+| `ZASI_SECRET_CREDENTIAL_FILE` | Optional explicit mode-600 credential file for tests; systemd services use `CREDENTIALS_DIRECTORY/zasi-secrets` |
+| `ZASI_BACKUP_POLICY` | `local` for local/reference; staging/production require a managed encrypted policy |
 | `ZASI_ARTIFACT_DIRECTORY` | Quarantine directory outside `web/dist` |
 | `ZASI_MAX_BODY` | Bounded request body, default 1 MiB |
 | `ZASI_ENABLE_EXTERNAL_EGRESS` | `no`; enabling requires an allowlist and separate review |
@@ -235,8 +280,9 @@ cross-platform runtime inputs.
 | `ZASI_ENABLE_PHYSICAL_ACTUATION` | Always rejected by the reference profile |
 
 Staging/production settings additionally require `ZASI_DATABASE_BACKEND=postgresql`,
-a PostgreSQL `ZASI_DATABASE_URL`, an authenticated `ZASI_REDIS_URL`, an
-external `ZASI_SECRET_PROVIDER`, and a managed non-local `ZASI_BACKUP_POLICY`.
+a PostgreSQL `ZASI_DATABASE_URL`, an authenticated `ZASI_REDIS_URL`, a
+supported external `ZASI_SECRET_PROVIDER` such as `systemd-credential`, and a
+managed non-local `ZASI_BACKUP_POLICY`.
 The application fails readiness closed when either shared dependency is
 unavailable.
 

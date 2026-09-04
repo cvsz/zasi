@@ -4,10 +4,13 @@ from dataclasses import dataclass, field
 import hashlib
 import hmac
 import os
+import re
 import secrets
 from pathlib import Path
 from typing import Mapping, Optional, Tuple
 from urllib.parse import urlsplit
+
+from .secrets import SecretProviderError, resolve_secret_mapping
 
 
 class ConfigurationError(ValueError):
@@ -45,6 +48,7 @@ class Settings:
     database_backend: str = "sqlite"
     database_url: Optional[str] = None
     redis_url: Optional[str] = field(default=None, repr=False, compare=False)
+    redis_key_prefix: str = "zasi"
     secret_provider: str = "environment"
     backup_policy: str = "local"
     external_egress_enabled: bool = False
@@ -59,6 +63,16 @@ class Settings:
         profile = source.get("ZASI_PROFILE", "local").strip().lower()
         if profile not in {"local", "staging", "production"}:
             raise ConfigurationError("ZASI_PROFILE must be local, staging, or production")
+
+        required_secrets = {"ZASI_API_KEY"}
+        if profile in {"staging", "production"}:
+            required_secrets.update(
+                {"ZASI_DATABASE_URL", "ZASI_REDIS_URL"}
+            )
+        try:
+            source = resolve_secret_mapping(source, required=required_secrets)
+        except SecretProviderError as exc:
+            raise ConfigurationError(str(exc)) from exc
 
         raw_api_key = source.get("ZASI_API_KEY", "")
         if not raw_api_key or not raw_api_key.strip():
@@ -146,6 +160,12 @@ class Settings:
             raise ConfigurationError("ZASI_DATABASE_BACKEND must be sqlite or postgresql")
         database_url = source.get("ZASI_DATABASE_URL", "").strip() or None
         redis_url = source.get("ZASI_REDIS_URL", "").strip() or None
+        redis_key_prefix = source.get("ZASI_REDIS_KEY_PREFIX", "zasi").strip().lower()
+        if (
+            not re.fullmatch(r"zasi(?:[:][a-z0-9][a-z0-9_-]{0,31})?", redis_key_prefix)
+            or redis_key_prefix.endswith(":")
+        ):
+            raise ConfigurationError("ZASI_REDIS_KEY_PREFIX is outside the safe namespace")
         if redis_url:
             try:
                 parsed_redis = urlsplit(redis_url)
@@ -239,6 +259,7 @@ class Settings:
             database_backend=database_backend,
             database_url=database_url,
             redis_url=redis_url,
+            redis_key_prefix=redis_key_prefix,
             secret_provider=secret_provider,
             backup_policy=backup_policy,
             external_egress_enabled=external_egress_enabled,

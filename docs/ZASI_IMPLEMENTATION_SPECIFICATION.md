@@ -1,7 +1,7 @@
 # ZASI Implementation Specification
 
 Status: implemented reference slice; conditional read-only/assistive
-Revision: 2026-09-03
+Revision: 2026-09-04
 Authority: companion specification to ZASI_FULL_ARCHITECTURE.md
 Scope: implementation, security hardening, verification, and release gates
 Change posture: normative contract with source, test, and release evidence tracked in this revision
@@ -129,9 +129,11 @@ Section 2. `backend.app` is the sole authoritative ASGI owner; it initializes
 the durable `ControlPlaneStore`, registers code-owned tool manifests, and
 serves the bundled cockpit. The repository schema is version 11. SQLite and
 the authenticated PostgreSQL adapter are implemented; Redis supplies shared
-rate-limit coordination and readiness. Staging and production settings still
-require explicit service URLs, an external secret provider, and a managed
-backup policy.
+rate-limit coordination and readiness. Staging and production settings require
+explicit service URLs, a supported external secret provider, and a managed
+backup policy. A host-local staging deployment now exercises the
+`systemd-credential` provider and an isolated PostgreSQL database; this is
+staging evidence, not production authorization.
 
 Implemented local controls include fail-closed bootstrap authentication,
 hashed session credentials, tenant-scoped repositories, device challenge
@@ -146,7 +148,10 @@ dependency gating, worker leases, idempotent task creation, and atomic
 completion events. The one enabled runtime
 tool is the local system-status observation; its evidence is `verified` by a
 named local readiness procedure and is not a claim about the historical
-catalog.
+catalog. Optional local Whisper.cpp STT and Flite TTS adapters now provide
+bounded source/model/executable provenance when explicitly configured; they
+remain outside the default API path and cannot authenticate or authorize a
+caller.
 
 The legacy compatibility boundary was then hardened in signed commit
 `afcc04c`: the old demo exits with a simulation-only/disabled disclosure, the
@@ -1946,14 +1951,15 @@ backup, plan-version, and protected-reference changes at exact head
 documentation and publication-permission correction at exact head
 `7a47917fd865b1a1ce4816e75761d9e70cdf2715` with merge commit
 `1e0f8735263bbf7171a8a18edb855c27a88051bd`.
-There is no
-staging deployment, production checkout, or production release authorization.
-The fresh 2026-09-02 external-gate inventory found no GitHub `staging`
-environment, staging secrets, or staging variables, and no configured local
-managed-secret provider or client. The host-level PostgreSQL and Redis
-services are available for local/reference validation only; this absence of
-staging and managed-secret infrastructure is an open release blocker, not a
-successful staging check.
+There is no production checkout or production release authorization. A
+host-local staging deployment is now available through the checked-in
+`deploy/systemd/zasi-staging.service` contract and a systemd encrypted
+credential. The fresh external-gate inventory still found no GitHub `staging`
+environment, hosted staging secrets, or hosted staging variables; a host-local
+systemd provider is not equivalent to a managed production secret service.
+The staging PostgreSQL/Redis service, backup validation, and readiness probes
+are therefore recorded as staging evidence while managed retention/key
+rotation, hosted staging promotion, and production operations remain open.
 The existing `.coverage` deletion is preserved and is not part of the
 implementation claim.
 
@@ -1968,6 +1974,15 @@ implementation claim.
 | `python3 -m unittest tests.test_api -q` | 8 legacy compatibility tests passed, including retired webhook and truthful legacy OpenAPI assertions | Local migration-surface regression |
 | `PYTHONPATH=. python3 -m unittest tests.test_legacy_truthfulness -v` | 8 tests passed; fixed-token removal, loopback binding, escaped HUD values, disabled demo/chat/subsystem execution, retired OpenAPI operations, and disabled background workers were verified | Local legacy-boundary regression |
 | `PYTHONPATH=. python3 -m unittest tests.test_rollback_drill -v` | 6 tests passed; explicit local opt-in, staging/production rejection, generated-name quoting, sanitized result, socket-URL preservation, and remote-host rejection were verified | Local rollback-drill safety regression |
+| `python3 -m unittest tests.test_secret_provider tests.test_systemd_deployment tests.test_speech_adapters -q` | 11 tests passed; systemd credential parsing/permission/symlink/conflict fail-closed behavior, staging unit restrictions, bounded Whisper.cpp subprocess transcription, and bounded Flite WAV synthesis were verified | Local provider/deployment/speech regression |
+| `systemd-run` staging service with `LoadCredentialEncrypted=zasi-secrets:/etc/zasi/staging/zasi-secrets.cred` | A loopback-only staging process ran as non-root `cvsz` for host validation with strict filesystem/resource restrictions; the systemd materialized credential was manager-owned and readable only through the service ACL; external egress, research execution, and physical actuation remained disabled | Host-local staging deployment evidence; checked-in unit targets the dedicated `zasi` service account |
+| Authenticated staging probe on loopback port `18080` | `/health/live` and `/health/ready` returned `200`; readiness reported profile `staging`, PostgreSQL schema `11`, Redis `ready`, and frontend bundle `ready`; encrypted-credential session bootstrap returned `201`, current-session scope remained `local`, and authenticated OpenAPI returned `200` | Host-local staging runtime evidence; not public or production ingress |
+| Staging `backup_control_plane.py create/validate --backend postgresql` through the systemd credential provider | Encrypted PostgreSQL schema-11 archive was created and validated with the provider-injected backup key; archive mode was `600` and no plaintext secret was placed in the unit or repository | Host-local staging backup evidence; managed retention/key rotation and restore promotion remain open |
+| `FliteTTSAdapter` -> `WhisperCppSTTAdapter` real local loop | Flite produced a `17,246`-byte `audio/wav` result with duration `1.075s`; Whisper.cpp `ggml-tiny.en.bin` transcribed the generated audio as `Hello world!`; source, model, executable, and output digests were recorded by the adapter | Host-local real STT/TTS adapter evidence; no speaker authentication, semantic intent authorization, hosted model operations, or production SLO claim |
+| `PYTHONWARNINGS=error::ResourceWarning python3 -m unittest discover -s tests -q` on 2026-09-04 UTC | 374 tests passed with 2 documented optional skips after isolating the legacy compatibility listener from the task-owned staging port; no test failures remained | Fresh local full-suite regression; not hosted CI or production evidence |
+| Isolated project environment: `pip-audit --local` on 2026-09-04 UTC | No known vulnerabilities found after installing the declared project and development dependencies into a fresh virtual environment | Fresh project-scoped Python dependency audit; host-wide distro packages are outside scope |
+| `npm ci --ignore-scripts && npm test && npm run typecheck && npm run build` on 2026-09-04 UTC | Lockfile install audited 319 packages with `0` vulnerabilities; frontend structural/runtime tests, strict TypeScript, and Vite production build passed | Fresh local frontend regression; online `npm audit` was separately time-limited by registry connectivity |
+| Fresh isolated wheel/sdist, SBOM, and signature bundle on 2026-09-04 UTC | Wheel and sdist built outside the repository; CycloneDX SBOM generated with resolved project dependencies; three primary artifacts plus `SHA256SUMS` received detached GPG signatures, and the checksum manifest verified successfully | Local artifact integrity/provenance evidence; not hosted release provenance or tag authorization |
 | `python3 -m compileall -q backend src scripts tests main.py` | Passed | Local syntax check |
 | `python3 -m unittest tests.test_encrypted_backup -q` | 11 passed, including AES-256-GCM tamper and wrong-key rejection, atomic mode-600 files, missing-source rejection, no-clobber restore, older-schema preservation, and SQLite restore integrity | Local encrypted backup/restore regression |
 | `python3 -m unittest tests.test_control_plane_api.ControlPlaneAPITests.test_intent_plan_and_scoped_event_replay_are_read_only_until_run -q` | Passed; an approved plan records the resolved tool version and execution rejects registry-version drift with a bounded conflict | Local plan-integrity regression |
@@ -1992,7 +2007,7 @@ implementation claim.
 | `scripts/rollback_drill.py --allow-local-rehearsal --expected-schema-version 11` against the shared PostgreSQL cluster | Fresh dump/encryption/archive validation passed; restore into a random `zasi_rollback_drill_*` database passed schema-11 and integrity checks; source schema/integrity observation remained unchanged; the temporary database was removed. The command rejects staging/production profiles and emits no target database or secret. | Local rollback rehearsal evidence only; managed retention/key rotation, staging canary, production cutover, and rollback observation remain open |
 | `ZASI_REDIS_URL` with `RedisRuntime` against the shared ACL user | Authenticated ping, atomic namespaced rate-limit, and ASGI request smoke passed; the live host ACL has `default` disabled and `zasi` limited to `~zasi:*` plus `PING`, `EVAL`, `INCRBY`, and `EXPIRE`; direct `CONFIG`/`GET`/`SET`, ACL introspection, outside-namespace keys, and unauthenticated access were denied | Local Redis integration and least-privilege ACL audit |
 | Private `.env` service credential shape | Mode `600`; `zasi` PostgreSQL/Redis URLs and `PGPASSWORD`/`REDIS_PASSWORD` contain operator-supplied high-entropy hex material; the value is ignored by Git and absent from tracked source | Local secret-handling inspection |
-| `npm audit --omit=dev --json` | 0 info/low/moderate/high/critical findings after the React Router 7.18.3 upgrade | Local dependency audit |
+| `npm audit --omit=dev` in the hosted distribution workflow | Hosted distribution validation passed after the React Router 7.18.3 upgrade; the local online registry audit timed out on 2026-09-03/04 and was not counted as fresh external evidence | Hosted dependency audit; rerun online before release |
 | Isolated project environment: `pip-audit --local --format columns` after installing `.[dev]` | No known vulnerabilities found; host-wide audit findings are outside the ZASI dependency environment | Local Python dependency audit |
 | `docker compose config` | Passed with explicit local API key/CORS inputs | Local configuration rendering |
 | ASGI smoke: session bootstrap, authenticated OpenAPI, header-based SSE resume, `/health/live`, `/health/ready`, `/`, and an unknown API route | Session `201`; authenticated OpenAPI `200`; SSE resume `200` with `stream.end`; liveness/readiness/root `200`; unknown API route returned JSON 404 | Local HTTP smoke |
@@ -2039,14 +2054,14 @@ the acceptance criteria in [#9](https://github.com/cvsz/zasi/issues/9) through
 | Issue / phase | Current status | Evidence and remaining release gate |
 |---|---|---|
 | [#9 / P0](https://github.com/cvsz/zasi/issues/9) | Partial, local | `backend.app` is the authoritative ASGI owner; fail-closed settings, readiness, compatibility quarantine, and registry-derived status exist. Duplicate-port ownership detection and hosted runtime ownership evidence remain open. |
-| [#10 / P1](https://github.com/cvsz/zasi/issues/10) | Partial, local PostgreSQL/Redis and encrypted backup mechanics | Tenant-scoped identity, hashed sessions, devices, audit, events, rate limits, schema-11 migrations, PostgreSQL repository, Redis coordination, authenticated API smoke, AES-GCM schema-11 archive create/validate/restore, SQLite restore integrity, temporary PostgreSQL restore integrity checks, and a bounded local rollback rehearsal exist. External identity/managed secrets, multi-process restart proof, managed object-storage retention/key rotation, staging restore, and production rollback operations remain open. |
+| [#10 / P1](https://github.com/cvsz/zasi/issues/10) | Partial, PostgreSQL/Redis plus host-managed staging credentials | Tenant-scoped identity, hashed sessions, devices, audit, events, rate limits, schema-11 migrations, PostgreSQL repository, Redis coordination, authenticated API smoke, AES-GCM schema-11 archive create/validate/restore, temporary PostgreSQL restore integrity checks, a bounded local rollback rehearsal, and a systemd encrypted-credential staging path exist. External identity, managed/cloud secret rotation, multi-process restart proof, managed object-storage retention/key rotation, hosted staging restore, and production rollback operations remain open. |
 | [#11 / P2](https://github.com/cvsz/zasi/issues/11) | Partial, local | Typed intents/plans, deterministic risk policy, exact-digest approval records, evidence provenance, and governed MCP calls exist. Full R0–R5 capability inventory, production verification procedures, and complete claim-to-evidence coverage remain open. |
 | [#12 / P3](https://github.com/cvsz/zasi/issues/12) | Partial, local | Transactional events/outbox, bounded `zasi-outbox-worker` delivery loop, leased claims, authenticated SSE replay, cursor validation, retention gaps, and snapshot resync exist. A continuously deployed production worker, 10,000-event performance evidence, backpressure policy, and multi-process delivery proof remain open. |
 | [#13 / P4](https://github.com/cvsz/zasi/issues/13) | Partial, durable reference worker | Stable tool registry, request digests, run idempotency, approval gating, immutable queued payloads, worker leases/tokens, atomic evidence/events, bounded local retry, timeout/cancellation/unknown semantics, explicit authenticated reconciliation, and the R0/R1 `zasi-action-worker` path exist. Certified isolation, higher-risk worker deployment, external-side-effect proof, multi-process recovery, and production worker evidence remain open. |
 | [#14 / P5](https://github.com/cvsz/zasi/issues/14) | Partial, React 19 / Router 7 with checked TypeScript source | Dependencies are bundled and locked, the cockpit uses authenticated v2 transport, safe rendering, CSP, reconnect/resync state, and a strict TypeScript root entrypoint; the cockpit source is now checked in `cockpit.tsx` and `app.jsx` is only a compatibility export. Accessibility/performance evidence and broad event-driven workspace coverage remain open. |
 | [#15 / P6](https://github.com/cvsz/zasi/issues/15) | Partial, local durable orchestration/reference connectors | SQLite/PostgreSQL goals, tasks, schedules, task runs, project-scoped memory, source-backed briefings, connector health, and a fail-closed packaged Electron runtime contract exist. A continuously deployed production worker, real GitHub/email/calendar/files adapters, semantic retrieval, external-source freshness, complete per-platform runtime bundles, and independent multi-process evidence remain open. |
-| [#16 / P7](https://github.com/cvsz/zasi/issues/16) | Partial, local source-observation adapters | Artifact quarantine now feeds bounded source-backed STEP/STL/OBJ/glTF 2.0 geometry parsing, authorized mesh bytes, and PNG/JPEG structural fingerprints with immutable evidence. glTF is limited to GLB or embedded base64 JSON buffers; semantic vision, IGES conversion, FEA/thermal solvers, STT/TTS, anti-replay speaker verification, and hardware integration remain unenabled. |
-| [#17 / P8](https://github.com/cvsz/zasi/issues/17) | Partial packaging and encrypted-backup hardening; NO-GO | Workflows, non-root container configuration, installer backup behavior, lockfiles, AES-GCM backup/restore mechanics, project-only Python/npm dependency audits, local signed wheel/sdist/SBOM/checksum evidence, a bounded local rollback rehearsal, a fail-closed protected-environment release-signing workflow, hosted CodeQL, and container builds exist. Dedicated source/container scanner provenance, managed retention/key rotation, hosted release provenance from an exercised tag, staging canary, production rollback observation, and independent verification remain open. |
+| [#16 / P7](https://github.com/cvsz/zasi/issues/16) | Partial, local source-observation and speech adapters | Artifact quarantine now feeds bounded source-backed STEP/STL/OBJ/glTF 2.0 geometry parsing, authorized mesh bytes, PNG/JPEG structural fingerprints, and explicit local Whisper.cpp/Flite adapter results with immutable provenance. glTF remains limited to GLB or embedded base64 JSON buffers; semantic vision, IGES conversion, FEA/thermal/material solvers, speaker anti-replay verification, hosted speech operations, and hardware integration remain unenabled. |
+| [#17 / P8](https://github.com/cvsz/zasi/issues/17) | Partial packaging, host-local staging, and encrypted-backup hardening; NO-GO | Workflows, non-root container configuration, installer backup behavior, lockfiles, AES-GCM backup/restore mechanics, project-only Python/npm dependency audits, local signed wheel/sdist/SBOM/checksum evidence, a bounded rollback rehearsal, a systemd encrypted-credential provider, host-local staging readiness, a fail-closed protected-environment release-signing workflow, hosted CodeQL, and container builds exist. Dedicated source/container scanner provenance, managed retention/key rotation, hosted release provenance from an exercised tag, independently governed staging promotion/restore, production rollback observation, and independent verification remain open. |
 | [#18 roadmap](https://github.com/cvsz/zasi/issues/18) | Open roadmap | The phase order and release gates are captured here; issue completion must not be inferred from local test output. |
 
 ### 26.3 Release decision from the evidence

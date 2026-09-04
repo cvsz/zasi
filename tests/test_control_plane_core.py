@@ -23,6 +23,22 @@ from src.control_plane.storage import (
 
 
 class ControlPlaneCoreTests(unittest.TestCase):
+    def _systemd_credential_file(self, directory: str, *, redis_url: str) -> Path:
+        path = Path(directory) / "zasi-secrets"
+        path.write_text(
+            "\n".join(
+                (
+                    "ZASI_API_KEY=test-secret",
+                    "ZASI_DATABASE_URL=postgresql://zasi:generated-secret@db.example/zasi",
+                    f"ZASI_REDIS_URL={redis_url}",
+                    "",
+                )
+            ),
+            encoding="utf-8",
+        )
+        path.chmod(0o600)
+        return path
+
     def test_production_configuration_requires_secret_and_explicit_origin(self):
         with self.assertRaises(ConfigurationError):
             Settings.from_mapping(
@@ -50,18 +66,21 @@ class ControlPlaneCoreTests(unittest.TestCase):
                     "ZASI_CORS_ORIGINS": "https://cockpit.example",
                 }
             )
-        settings = Settings.from_mapping(
-            {
-                "ZASI_PROFILE": "production",
-                "ZASI_API_KEY": "test-secret",
-                "ZASI_CORS_ORIGINS": "https://cockpit.example",
-                "ZASI_DATABASE_BACKEND": "postgresql",
-                "ZASI_DATABASE_URL": "postgresql://db.example/zasi",
-                "ZASI_REDIS_URL": "rediss://zasi:generated-secret@cache.example/0",
-                "ZASI_SECRET_PROVIDER": "vault",
-                "ZASI_BACKUP_POLICY": "managed-encrypted",
-            }
-        )
+        with tempfile.TemporaryDirectory() as directory:
+            credential_file = self._systemd_credential_file(
+                directory,
+                redis_url="rediss://zasi:generated-secret@cache.example/0",
+            )
+            settings = Settings.from_mapping(
+                {
+                    "ZASI_PROFILE": "production",
+                    "ZASI_CORS_ORIGINS": "https://cockpit.example",
+                    "ZASI_DATABASE_BACKEND": "postgresql",
+                    "ZASI_SECRET_CREDENTIAL_FILE": str(credential_file),
+                    "ZASI_SECRET_PROVIDER": "systemd-credential",
+                    "ZASI_BACKUP_POLICY": "managed-encrypted",
+                }
+            )
         self.assertEqual(settings.profile, "production")
         self.assertEqual(settings.database_backend, "postgresql")
         self.assertNotEqual(settings.api_key_digest, b"test-secret")
@@ -74,19 +93,22 @@ class ControlPlaneCoreTests(unittest.TestCase):
         self.assertFalse(settings.api_key_matches("wrong-secret"))
 
     def test_production_configuration_rejects_unauthenticated_redis(self):
-        with self.assertRaises(ConfigurationError):
-            Settings.from_mapping(
-                {
-                    "ZASI_PROFILE": "production",
-                    "ZASI_API_KEY": "test-secret",
-                    "ZASI_CORS_ORIGINS": "https://cockpit.example",
-                    "ZASI_DATABASE_BACKEND": "postgresql",
-                    "ZASI_DATABASE_URL": "postgresql://db.example/zasi",
-                    "ZASI_REDIS_URL": "redis://cache.example/0",
-                    "ZASI_SECRET_PROVIDER": "vault",
-                    "ZASI_BACKUP_POLICY": "managed-encrypted",
-                }
+        with tempfile.TemporaryDirectory() as directory:
+            credential_file = self._systemd_credential_file(
+                directory,
+                redis_url="redis://cache.example/0",
             )
+            with self.assertRaises(ConfigurationError):
+                Settings.from_mapping(
+                    {
+                        "ZASI_PROFILE": "production",
+                        "ZASI_CORS_ORIGINS": "https://cockpit.example",
+                        "ZASI_DATABASE_BACKEND": "postgresql",
+                        "ZASI_SECRET_CREDENTIAL_FILE": str(credential_file),
+                        "ZASI_SECRET_PROVIDER": "systemd-credential",
+                        "ZASI_BACKUP_POLICY": "managed-encrypted",
+                    }
+                )
 
     def test_local_configuration_does_not_create_implicit_credential(self):
         with self.assertRaises(ConfigurationError):

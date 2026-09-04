@@ -56,6 +56,17 @@ class PostgresRedisRuntimeTests(unittest.TestCase):
         self.assertTrue(key.startswith("zasi:ratelimit:"))
         self.assertEqual(window, "60")
 
+    def test_redis_rate_limit_supports_a_scoped_staging_prefix(self):
+        runtime = object.__new__(RedisRuntime)
+        runtime._client = Mock()
+        runtime._client.eval.return_value = 1
+        runtime._key_prefix = "zasi:staging"
+
+        runtime.consume_rate_limit("tenant-a", "subject", 2, 60)
+
+        key = runtime._client.eval.call_args.args[2]
+        self.assertTrue(key.startswith("zasi:staging:ratelimit:"))
+
     @unittest.skipUnless(
         os.environ.get("ZASI_TEST_POSTGRES_URL"),
         "set ZASI_TEST_POSTGRES_URL to run the live PostgreSQL integration check",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 from typing import Any, Tuple
 
@@ -20,9 +21,12 @@ return count
 class RedisRuntime:
     """Authenticated Redis client with a fail-closed shared rate limiter."""
 
-    def __init__(self, redis_url: str):
+    def __init__(self, redis_url: str, *, key_prefix: str = "zasi"):
         if not redis_url:
             raise ValueError("redis_url is required")
+        if not re.fullmatch(r"zasi(?:[:][a-z0-9][a-z0-9_-]{0,31})?", key_prefix):
+            raise ValueError("key_prefix is outside the safe namespace")
+        self._key_prefix = key_prefix
         try:
             import redis
         except ImportError as exc:
@@ -53,7 +57,8 @@ class RedisRuntime:
         now_seconds = int(time.time())
         bucket = now_seconds // window_seconds
         reset_epoch = (bucket + 1) * window_seconds
-        key = "zasi:ratelimit:" + hash_token(f"{tenant_id}:{subject}:{bucket}")
+        key_prefix = getattr(self, "_key_prefix", "zasi")
+        key = key_prefix + ":ratelimit:" + hash_token(f"{tenant_id}:{subject}:{bucket}")
         try:
             count = int(
                 self._client.eval(
