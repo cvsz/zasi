@@ -56,3 +56,26 @@ Staging and production configuration require explicit PostgreSQL and Redis
 URLs, an external secret provider, and a managed backup policy. The repository
 adapter is implemented and locally smoke-tested; staging deployment, managed
 secrets/backups, and rollback evidence remain release gates.
+
+## Agent platform trust zone
+
+The agent platform adds two bounded, code-owned tools:
+
+- `knowledge.search` (R0) is a read-only, tenant-scoped local memory search.
+  It never returns another tenant's data and makes no external calls.
+- `ticket.update` (R2) is an approval-gated deterministic local simulator. Its
+  response always carries `simulated=true` and `external_write=false`; no
+  connector or external write system is ever contacted.
+
+The default model is the deterministic simulator. An operator may configure a
+loopback-only Ollama endpoint (`ZASI_OLLAMA_BASE_URL` and `ZASI_OLLAMA_MODEL`);
+model output is treated as an untrusted proposal and never executed without
+planner whitelist and policy verification. Hosted model fallback is explicitly
+disabled.
+
+The agent platform keeps real-world side effects disabled: no credentials,
+browser automation, arbitrary code execution, robotics, financial actions,
+live SaaS writes, or external connector calls. Research-only capabilities
+(recursive self-improvement, neural-symbolic verification, architecture search,
+kernel generation, self-deployment, and distributed memory topology) are typed
+disabled/research-only projections with no executable mutation hooks.

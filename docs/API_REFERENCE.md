@@ -122,3 +122,42 @@ tests. Its compatibility chat and subsystem execution methods are disabled,
 its background tick/WebSocket/webhook workers do not start, and side-effecting
 routes return `410`. The `zasi-demo` command is also disabled by default; use
 `backend.app` and the authenticated v2 contracts for the reference runtime.
+
+## AI Futures agent platform (v1)
+
+| Method | Route | Purpose | Side effect |
+|---|---|---|---|
+| POST | `/api/v2/agents` | Create agent definition and draft version | audited |
+| GET | `/api/v2/agents` | List tenant-scoped agents | none |
+| GET | `/api/v2/agents/{id}` | Read agent with versions | none |
+| POST | `/api/v2/agents/{id}/versions` | Create draft version | audited |
+| POST | `/api/v2/agents/{id}/versions/{version_id}/publish` | Publish version | audited |
+| POST | `/api/v2/agents/{id}/sandbox` | Deterministic dry-run plan | none |
+| POST | `/api/v2/agents/{id}/executions` | Supervised execution | audited |
+| GET | `/api/v2/agents/{id}/executions` | List tenant-scoped executions | none |
+| GET | `/api/v2/agent-executions/{execution_id}` | Read execution/evidence | none |
+| GET | `/api/v2/agent-approvals` | List pending approvals | none |
+| POST | `/api/v2/agent-approvals/{approval_id}/approve` | Approve exact digest | audited |
+| POST | `/api/v2/agent-approvals/{approval_id}/reject` | Reject with reason | audited |
+| GET | `/api/v2/models/status` | Local simulator/Ollama status | none |
+
+`POST /api/v2/agents/{id}/executions` requires `Idempotency-Key`. The exact
+action digest for the simulated write is returned as `ticket_action_digest`.
+Approvals must use `approval:write` scope. Replays return the original durable
+result; the handler is invoked exactly once on approval. Rejections emit
+`execution.rejected` with `handler_invoked=false`.
+
+`/api/v2/snapshot` adds `agents`, `active_executions`,
+`pending_agent_approvals`, and `model_status`. `/api/v2/audit` accepts
+`execution_id`, `event_type`, `sensitivity`, and `since` query parameters;
+results are always tenant-scoped and ordered by `created_at DESC, audit_id DESC`.
+
+Event envelope extensions (schema version 12) add `execution_id`,
+`agent_version`, `correlation_id`, `causation_id`, `sensitivity`, and
+`idempotency_key` to the durable events table. `list_events` returns the
+envelope fields; `correlation_id` falls back to the event ID for legacy rows.
+
+`knowledge.search` is bounded to active, non-stale tenant memory and never
+returns another tenant's data. `ticket.update` is a deterministic local
+simulator; its response always includes `simulated=true` and `external_write=false`
+and never calls an external connector.

@@ -3068,10 +3068,15 @@ def create_app(
                     "operator_disclosure": definition.disclosure,
                 }
             )
+        try:
+            from src.control_plane.research import list_research_capabilities
+            research = list_research_capabilities()
+        except Exception:
+            research = []
         return {
             "capabilities": registered,
             "tenant_id": context.tenant_id,
-            "profile": settings.profile,
+            "research_capabilities": research,
         }
 
     @app.post("/api/v2/tools/preview")
