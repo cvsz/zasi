@@ -45,6 +45,13 @@ superintelligence capabilities exist. The reference profile keeps external
 writes, research execution, runtime self-modification, and physical actuation
 disabled.
 
+Optional local speech adapters are available as an explicit, source-backed
+path: `WhisperCppSTTAdapter` runs a pinned local Whisper model and
+`FliteTTSAdapter` produces bounded WAV output. They are not enabled by the
+reference API by default, do not authenticate speakers, and cannot authorize
+actions. Their local evidence procedure and limitations are recorded in the
+[implementation specification](docs/ZASI_IMPLEMENTATION_SPECIFICATION.md).
+
 ## Run the authoritative application
 
 ```bash
@@ -145,6 +152,12 @@ runtime and never uses a repository default.
 `zasi-rollback-drill` command) can rehearse PostgreSQL restore into a random,
 temporary database. It is explicitly local/rehearsal evidence and is not
 staging or production rollback approval.
+
+The staging deployment contract uses `deploy/systemd/zasi-staging.service`.
+It requires a systemd encrypted credential named `zasi-secrets`, an external
+PostgreSQL database, authenticated Redis, and a managed backup policy. The
+service is loopback-bound and keeps external egress, research execution, and
+physical actuation disabled.
 
 Tag releases require a protected signing environment; the release workflow
 fails closed without the configured GPG private key and fingerprint, and
