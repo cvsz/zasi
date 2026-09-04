@@ -5747,6 +5747,82 @@ class ControlPlaneStore:
                 raise
         return self.get_run(run_id, tenant_id)
 
+    def claim_simulated_action(
+        self,
+        run_id: str,
+        tenant_id: str,
+        worker_id: str,
+        approval_id: str,
+        action_digest: str,
+        lease_seconds: int = 60,
+    ) -> Optional[Dict[str, Any]]:
+        """Claim a previously approved waiting_approval action for one simulator run.
+
+        The claim succeeds only when the run and approval line up exactly with
+        the provided approval id and action digest.
+        """
+        self._validate_worker_id(worker_id)
+        if (
+            isinstance(lease_seconds, bool)
+            or not isinstance(lease_seconds, int)
+            or not 1 <= lease_seconds <= 3600
+        ):
+            raise ValueError("lease_seconds must be between 1 and 3600")
+        now_dt = _utcnow()
+        now_value = _timestamp(now_dt)
+        lease_until = _timestamp(now_dt + timedelta(seconds=lease_seconds))
+        lease_token = hash_token(
+            f"{tenant_id}:{run_id}:{worker_id}:sim:{os.urandom(32).hex()}"
+        )
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                approval = connection.execute(
+                    "SELECT * FROM agent_approvals WHERE run_id = ? AND tenant_id = ?",
+                    (run_id, tenant_id),
+                ).fetchone()
+                if approval is None:
+                    connection.execute("ROLLBACK")
+                    return None
+                if approval["id"] != approval_id:
+                    connection.execute("ROLLBACK")
+                    return None
+                if approval["action_digest"] != action_digest:
+                    connection.execute("ROLLBACK")
+                    return None
+                if approval["decision"] != "approved":
+                    connection.execute("ROLLBACK")
+                    return None
+                run, action = self._action_and_run_locked(connection, run_id, tenant_id)
+                if action["status"] != "waiting_approval":
+                    connection.execute("ROLLBACK")
+                    return None
+                connection.execute(
+                    "UPDATE actions SET status = 'running', worker_id = ?, lease_token = ?, "
+                    "lease_until = ?, next_attempt_at = NULL WHERE id = ? AND tenant_id = ? "
+                    "AND status = 'waiting_approval'",
+                    (worker_id, lease_token, lease_until, action["id"], tenant_id),
+                )
+                connection.execute(
+                    "UPDATE runs SET status = 'running', finished_at = NULL "
+                    "WHERE id = ? AND tenant_id = ? AND status = 'waiting_approval'",
+                    (run_id, tenant_id),
+                )
+                current = connection.execute(
+                    "SELECT * FROM actions WHERE id = ? AND tenant_id = ?",
+                    (action["id"], tenant_id),
+                ).fetchone()
+                connection.execute("COMMIT")
+                record = self._action_record(
+                    current, include_payload=True, include_lease_token=True
+                )
+                record["principal_id"] = run["principal_id"]
+                return record
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+
     def reconcile_action(
         self,
         run_id: str,

@@ -411,12 +411,13 @@ class ActionWorker:
             return current
         if current["action_status"] == "succeeded":
             return current
-        claim = self.store.claim_action(
+        claim = self.store.claim_simulated_action(
             run_id=run_id,
             tenant_id=tenant_id,
             worker_id=self.worker_id,
+            approval_id=approval_id,
+            action_digest=action_digest,
             lease_seconds=self.lease_seconds,
-            now=now,
         )
         if claim is None:
             return self.store.get_run(run_id, tenant_id)

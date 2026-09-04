@@ -91,7 +91,7 @@ def _tenant_knowledge_search(
         "count": len(snippets),
         "snippets": snippets,
         "disclosure": "Local read-only search. No external services are contacted.",
-        "evidence_status": "verified_local",
+        "evidence_status": "verified",
         "result_digest": digest,
     }
 
@@ -170,7 +170,10 @@ def register_agent_tools(
         payload: Dict[str, Any],
         *,
         context: ToolExecutionContext,
+        store: Optional[ControlPlaneStore] = None,
     ) -> Dict[str, Any]:
+        if store is None:
+            store = _default_store()
         return _tenant_knowledge_search(
             payload,
             context={
@@ -207,7 +210,7 @@ def register_agent_tools(
         risk_tier="R0",
         required_scopes=required_scopes_for("knowledge.search"),
         handler=knowledge_runner,
-        evidence_status="verified_local",
+        evidence_status="verified",
         disclosure=(
             "Local read-only tenant memory search. No external services are contacted."
         ),

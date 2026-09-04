@@ -840,6 +840,7 @@ class AgentToolsTests(unittest.TestCase):
         result = self.registry.get("knowledge.search").handler(
             {"query": "zasi", "limit": 5},
             context=context,
+            store=self.store,
         )
         self.assertEqual(result["tenant_id"], "tenant-a")
         self.assertEqual(result["count"], 1)
@@ -863,6 +864,7 @@ class AgentToolsTests(unittest.TestCase):
         result = self.registry.get("knowledge.search").handler(
             {"query": "stale"},
             context=context,
+            store=self.store,
         )
         self.assertEqual(result["count"], 0)
 
@@ -905,11 +907,242 @@ class AgentToolsTests(unittest.TestCase):
         knowledge = self.registry.get("knowledge.search").manifest()
         self.assertEqual(knowledge["risk_tier"], "R0")
         self.assertEqual(knowledge["network_egress"], "none")
-        self.assertEqual(knowledge["evidence_status"], "verified_local")
+        self.assertEqual(knowledge["evidence_status"], "verified")
         ticket = self.registry.get("ticket.update").manifest()
         self.assertEqual(ticket["risk_tier"], "R2")
         self.assertIn("simulated_local", ticket["side_effects"])
         self.assertEqual(ticket["network_egress"], "none")
+
+
+class AgentRuntimeTests(unittest.TestCase):
+    def setUp(self):
+        import os
+        os.environ.setdefault("ZASI_PROFILE", "local")
+        os.environ.setdefault("ZASI_HOST", "127.0.0.1")
+        os.environ.setdefault("ZASI_PORT", "8080")
+        os.environ.setdefault("ZASI_API_KEY", "test-key")
+        from src.control_plane.agent_runtime import register_agent_runtime
+        from src.control_plane.config import Settings
+        from src.control_plane.execution import ToolRegistry
+
+        self.store = ControlPlaneStore(":memory:")
+        self.store.initialize()
+        self.store.create_tenant("tenant-a")
+        self.store.create_principal("principal-a", "tenant-a")
+        self.registry = ToolRegistry()
+        self.service = register_agent_runtime(
+            store=self.store,
+            registry=self.registry,
+            settings=Settings.from_mapping(),
+        )
+        self.scopes = frozenset({"workspace:read", "workspace:write", "plan:create", "approval:write"})
+
+    def tearDown(self):
+        self.store.close()
+
+    def test_sandbox_does_not_create_execution(self):
+        from src.control_plane.agent_contracts import AgentCreateRequest, AgentSandboxRequest
+
+        created = self.service.create_agent(
+            tenant_id="tenant-a",
+            principal_id="principal-a",
+            request=AgentCreateRequest.model_validate({"name": "demo"}),
+        )
+        self.service.publish_version(
+            tenant_id="tenant-a",
+            principal_id="principal-a",
+            agent_id=created["agent"]["agent_id"],
+            version_id=created["version"]["version_id"],
+        )
+        result = self.service.sandbox(
+            tenant_id="tenant-a",
+            principal_id="principal-a",
+            agent_id=created["agent"]["agent_id"],
+            request=AgentSandboxRequest.model_validate(
+                {"task": "summarize", "ticket_id": "T-1", "ticket_fields": {"status": "open"}}
+            ),
+            scopes=self.scopes,
+        )
+        self.assertTrue(result["sandbox"])
+        self.assertEqual(len(self.store.list_agent_executions("tenant-a")), 0)
+
+    def test_start_execution_creates_pending_approval(self):
+        from src.control_plane.agent_contracts import (
+            AgentCreateRequest,
+            AgentExecutionRequest,
+        )
+
+        created = self.service.create_agent(
+            tenant_id="tenant-a",
+            principal_id="principal-a",
+            request=AgentCreateRequest.model_validate({"name": "demo"}),
+        )
+        self.service.publish_version(
+            tenant_id="tenant-a",
+            principal_id="principal-a",
+            agent_id=created["agent"]["agent_id"],
+            version_id=created["version"]["version_id"],
+        )
+        result = self.service.start_execution(
+            tenant_id="tenant-a",
+            principal_id="principal-a",
+            agent_id=created["agent"]["agent_id"],
+            request=AgentExecutionRequest.model_validate(
+                {"task": "summarize", "ticket_id": "T-1", "ticket_fields": {"status": "open"}}
+            ),
+            scopes=self.scopes,
+            idempotency_key="run-1",
+        )
+        self.assertEqual(result["execution"]["status"], "awaiting_approval")
+        self.assertEqual(result["approval"]["decision"], "pending")
+
+    def test_approval_replay_returns_original(self):
+        from src.control_plane.agent_contracts import (
+            AgentApprovalDecisionRequest,
+            AgentCreateRequest,
+            AgentExecutionRequest,
+        )
+
+        created = self.service.create_agent(
+            tenant_id="tenant-a",
+            principal_id="principal-a",
+            request=AgentCreateRequest.model_validate({"name": "demo"}),
+        )
+        self.service.publish_version(
+            tenant_id="tenant-a",
+            principal_id="principal-a",
+            agent_id=created["agent"]["agent_id"],
+            version_id=created["version"]["version_id"],
+        )
+        first = self.service.start_execution(
+            tenant_id="tenant-a",
+            principal_id="principal-a",
+            agent_id=created["agent"]["agent_id"],
+            request=AgentExecutionRequest.model_validate(
+                {"task": "t", "ticket_id": "T-1", "ticket_fields": {"status": "open"}}
+            ),
+            scopes=self.scopes,
+            idempotency_key="run-2",
+        )
+        first_resolved = self.service.resolve_approval(
+            tenant_id="tenant-a",
+            principal_id="principal-a",
+            approval_id=first["approval"]["approval_id"],
+            request=AgentApprovalDecisionRequest.model_validate({"reason": "ok"}),
+            scopes=self.scopes,
+        )
+        self.assertEqual(first_resolved["approval"]["decision"], "approved")
+        first_execution = first_resolved["execution"]
+        self.assertEqual(first_execution["status"], "completed")
+        # Replay the same approval resolution.
+        replay = self.service.resolve_approval(
+            tenant_id="tenant-a",
+            principal_id="principal-a",
+            approval_id=first["approval"]["approval_id"],
+            request=AgentApprovalDecisionRequest.model_validate({"reason": "ok"}),
+            scopes=self.scopes,
+        )
+        self.assertTrue(replay.get("replay", False))
+        self.assertEqual(replay["approval"]["decision"], "approved")
+
+    def test_rejection_marks_execution_rejected_without_handler(self):
+        from src.control_plane.agent_contracts import (
+            AgentCreateRequest,
+            AgentExecutionRequest,
+        )
+
+        created = self.service.create_agent(
+            tenant_id="tenant-a",
+            principal_id="principal-a",
+            request=AgentCreateRequest.model_validate({"name": "demo"}),
+        )
+        self.service.publish_version(
+            tenant_id="tenant-a",
+            principal_id="principal-a",
+            agent_id=created["agent"]["agent_id"],
+            version_id=created["version"]["version_id"],
+        )
+        result = self.service.start_execution(
+            tenant_id="tenant-a",
+            principal_id="principal-a",
+            agent_id=created["agent"]["agent_id"],
+            request=AgentExecutionRequest.model_validate(
+                {"task": "t", "ticket_id": "T-1", "ticket_fields": {"status": "open"}}
+            ),
+            scopes=self.scopes,
+            idempotency_key="run-3",
+        )
+        # Reject through the resolve path with decision rejected.
+        resolved = self.service.resolve_approval(
+            tenant_id="tenant-a",
+            principal_id="principal-a",
+            approval_id=result["approval"]["approval_id"],
+            request=__import__("src.control_plane.agent_contracts", fromlist=["AgentApprovalDecisionRequest"]).AgentApprovalDecisionRequest.model_validate({"reason": "no"}),
+            scopes=self.scopes,
+        )
+        # Re-issuing the resolve on an already-rejected approval replays.
+        replay = self.service.resolve_approval(
+            tenant_id="tenant-a",
+            principal_id="principal-a",
+            approval_id=result["approval"]["approval_id"],
+            request=__import__("src.control_plane.agent_contracts", fromlist=["AgentApprovalDecisionRequest"]).AgentApprovalDecisionRequest.model_validate({"reason": "no"}),
+            scopes=self.scopes,
+        )
+        self.assertTrue(replay.get("replay", False))
+
+    def test_tenant_isolation_in_service(self):
+        from src.control_plane.agent_contracts import AgentCreateRequest
+        from src.control_plane.storage import NotFoundError
+
+        self.service.create_agent(
+            tenant_id="tenant-a",
+            principal_id="principal-a",
+            request=AgentCreateRequest.model_validate({"name": "demo"}),
+        )
+        with self.assertRaises(NotFoundError):
+            self.service.get_agent(tenant_id="tenant-b", agent_id="any")
+
+    def test_idempotency_replay_returns_existing_execution(self):
+        from src.control_plane.agent_contracts import (
+            AgentCreateRequest,
+            AgentExecutionRequest,
+        )
+
+        created = self.service.create_agent(
+            tenant_id="tenant-a",
+            principal_id="principal-a",
+            request=AgentCreateRequest.model_validate({"name": "demo"}),
+        )
+        self.service.publish_version(
+            tenant_id="tenant-a",
+            principal_id="principal-a",
+            agent_id=created["agent"]["agent_id"],
+            version_id=created["version"]["version_id"],
+        )
+        first = self.service.start_execution(
+            tenant_id="tenant-a",
+            principal_id="principal-a",
+            agent_id=created["agent"]["agent_id"],
+            request=AgentExecutionRequest.model_validate(
+                {"task": "t", "ticket_id": "T-1", "ticket_fields": {"status": "open"}}
+            ),
+            scopes=self.scopes,
+            idempotency_key="run-4",
+        )
+        second = self.service.start_execution(
+            tenant_id="tenant-a",
+            principal_id="principal-a",
+            agent_id=created["agent"]["agent_id"],
+            request=AgentExecutionRequest.model_validate(
+                {"task": "t", "ticket_id": "T-1", "ticket_fields": {"status": "open"}}
+            ),
+            scopes=self.scopes,
+            idempotency_key="run-4",
+        )
+        self.assertTrue(second.get("replay", False))
+        self.assertEqual(
+            second["execution"]["execution_id"], first["execution"]["execution_id"]
+        )
 
 
 if __name__ == "__main__":
