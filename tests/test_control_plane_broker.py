@@ -5,7 +5,7 @@ from src.control_plane.execution import (
     ToolDefinition,
     ToolRegistry,
 )
-from src.control_plane.policy import PolicyEngine
+from src.control_plane.governance.policy import PolicyEngine
 from src.control_plane.storage import ControlPlaneStore
 from src.control_plane.storage import ConflictError
 

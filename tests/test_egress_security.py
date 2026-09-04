@@ -5,7 +5,7 @@ import time
 import unittest
 from unittest.mock import Mock, patch
 
-from src.control_plane.egress import (
+from src.control_plane.connectors.egress import (
     EgressDenied,
     EgressBroker,
     EgressRequestFailed,
@@ -15,7 +15,7 @@ from src.control_plane.egress import (
     validate_destination,
     validate_redirect,
 )
-from src.control_plane import egress as egress_module
+from src.control_plane.connectors import egress as egress_module
 
 
 class EgressSecurityTests(unittest.TestCase):
@@ -103,7 +103,7 @@ class EgressSecurityTests(unittest.TestCase):
                 total_timeout_sec=0.25,
             )
         )
-        with patch("src.control_plane.egress.socket.socket", return_value=fake_socket):
+        with patch("src.control_plane.connectors.egress.socket.socket", return_value=fake_socket):
             broker._connect(destination, deadline=time.monotonic() + 0.25)
         self.assertLessEqual(fake_socket.settimeout.call_args.args[0], 0.25)
 
@@ -122,7 +122,7 @@ class EgressSecurityTests(unittest.TestCase):
             total_timeout_sec=0.01,
         )
         try:
-            with patch("src.control_plane.egress._default_resolver", side_effect=slow_resolver):
+            with patch("src.control_plane.connectors.egress._default_resolver", side_effect=slow_resolver):
                 with self.assertRaises(EgressRequestFailed):
                     validate_destination("https://public.example/hook", policy)
         finally:
@@ -144,7 +144,7 @@ class EgressSecurityTests(unittest.TestCase):
         )
         broker = EgressBroker(policy)
         try:
-            with patch("src.control_plane.egress._default_resolver", side_effect=slow_resolver):
+            with patch("src.control_plane.connectors.egress._default_resolver", side_effect=slow_resolver):
                 with patch.object(broker, "_connect", side_effect=AssertionError("connect must not run")):
                     with self.assertRaises(EgressRequestFailed):
                         broker.post_json("https://public.example/hook", {}, "idem-1")

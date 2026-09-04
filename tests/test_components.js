@@ -151,7 +151,7 @@ assert(!content.includes("/api/rsi/upgrade"), 'cockpit must not expose legacy RS
 const scriptSources = [...productionHtml.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["']/gi)].map((match) => match[1]);
 const localOrigin = 'https://zasi.invalid';
 assert(scriptSources.every((source) => new URL(source, localOrigin).origin === localOrigin), 'production page must load scripts from the local bundle only');
-const legacyApi = fs.readFileSync(path.join(__dirname, '../src/api_server.py'), 'utf8');
+const legacyApi = fs.readFileSync(path.join(__dirname, '../src/legacy/api_server.py'), 'utf8');
 assert(legacyApi.includes('integrity="sha384-CI3ELBVUz9XQO+97x6nwMDPosPR5XvsxW2ua7N1Xeygeh1IxtgqtCkGfQY9WWdHu"'), 'legacy CDN script must use the pinned SRI digest');
 assert(!fs.readFileSync(path.join(__dirname, '../web/static/app.js'), 'utf8').includes('innerHTML'), 'legacy dashboard must remain inert');
 

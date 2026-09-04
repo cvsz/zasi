@@ -3,7 +3,7 @@ import unittest
 from datetime import datetime, timezone
 
 from src.control_plane.storage import ControlPlaneStore
-from src.control_plane.worker import OutboxWorker
+from src.control_plane.execution.worker import OutboxWorker
 
 
 class OutboxWorkerTests(unittest.TestCase):

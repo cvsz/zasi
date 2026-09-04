@@ -23,7 +23,7 @@ from .agent_models import (
     canonicalize_action_payload,
 )
 from .execution import ToolDefinition, ToolRegistry
-from .policy import PolicyEngine
+from .governance.policy import PolicyEngine
 from .storage import ControlPlaneStore
 
 

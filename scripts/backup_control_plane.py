@@ -34,8 +34,8 @@ from src.control_plane.backup import (
     encrypt_file,
     open_sealed,
 )
-from src.control_plane.postgres_storage import PostgresControlPlaneStore
-from src.control_plane.secrets import SecretProviderError, read_secret
+from src.control_plane.storage.postgres_storage import PostgresControlPlaneStore
+from src.control_plane.config.secrets import SecretProviderError, read_secret
 from src.control_plane.storage import _prepare_private_sqlite_path
 
 

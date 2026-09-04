@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import FrozenSet, Mapping, Tuple
 
-from .contracts import RiskTier
+from ..contracts import RiskTier
 
 
 _RISK_ORDER = {f"R{index}": index for index in range(6)}

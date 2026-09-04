@@ -33,7 +33,7 @@ from scripts.backup_control_plane import (
     _validate_postgresql_archive,
 )
 from src.control_plane.backup import encrypt_file, open_sealed
-from src.control_plane.postgres_storage import PostgresControlPlaneStore
+from src.control_plane.storage.postgres_storage import PostgresControlPlaneStore
 
 
 _EPHEMERAL_DATABASE_RE = re.compile(r"^zasi_rollback_drill_[0-9a-f]{16}$")

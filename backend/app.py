@@ -52,7 +52,7 @@ from src.control_plane.multimodal import (
     parse_cad_artifact,
     verify_artifact_digest,
 )
-from src.control_plane.policy import PolicyEngine
+from src.control_plane.governance.policy import PolicyEngine
 from src.control_plane.redis_runtime import RedisRuntime
 from src.control_plane.storage import (
     CURRENT_SCHEMA_VERSION,
@@ -489,7 +489,7 @@ def create_app(
     settings = settings or Settings.from_mapping()
     if store is None:
         if settings.database_backend == "postgresql":
-            from src.control_plane.postgres_storage import PostgresControlPlaneStore
+            from src.control_plane.storage.postgres_storage import PostgresControlPlaneStore
 
             if not settings.database_url:
                 raise ConfigurationError("PostgreSQL profiles require ZASI_DATABASE_URL")

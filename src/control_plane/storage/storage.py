@@ -12,7 +12,7 @@ import time
 import hmac
 from typing import Any, Dict, List, Optional, Tuple
 
-from .identity import hash_token
+from ..identity import hash_token
 
 
 CURRENT_SCHEMA_VERSION = 12

@@ -719,7 +719,7 @@ class AgentPlannerTests(unittest.TestCase):
     def setUp(self):
         from src.control_plane.agent_planner import AgentPlanner
         from src.control_plane.execution import ToolDefinition, ToolRegistry
-        from src.control_plane.policy import PolicyEngine
+        from src.control_plane.governance.policy import PolicyEngine
 
         self.store = ControlPlaneStore(":memory:")
         self.store.initialize()

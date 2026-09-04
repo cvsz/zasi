@@ -30,7 +30,7 @@ for the required implementation/runtime/evidence state model.
 | 13 | NAS Optimizer | `src/nas_optimizer.py` | JIT Microkernel Synthesizer |
 | 14 | Compute Infrastructure | `src/infrastructure.py` | Cluster Interconnect |
 | 15 | Autonomous Daemon | `src/autonomous_daemon.py` | ASI Loop Daemon |
-| 16 | Holographic API Server | `src/api_server.py` | REST API & RBAC |
+| 16 | Holographic API Server | `src/legacy/api_server.py` | REST API & RBAC |
 | 17 | Distributed RPC | `src/distributed_rpc.py` | Raft Consensus |
 | 18 | LLM Adapter | `src/llm_connector.py` | Foundation Adapter |
 | 19 | Lean 4 Prover Bridge | `src/lean_bridge.py` | Formal Theorem Prover |

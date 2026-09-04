@@ -46,7 +46,7 @@ from src import (
     TransfiniteConstructiveTypeTheoryOracle, AbsoluteTranscendentOmniversalSuperintelligenceApexPrime,
     NeuralAudioVoiceEngine, MultiPersonaTacticalSwarm
 )
-from src.control_plane.egress import (
+from src.control_plane.connectors.egress import (
     EgressBroker,
     EgressPolicy,
     validate_destination,

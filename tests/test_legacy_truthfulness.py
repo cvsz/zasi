@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from backend import server as legacy_server
 from main import legacy_demo_main
-from src.api_server import ZASIWebServer
+from src.legacy.api_server import ZASIWebServer
 
 
 class LegacyTruthfulnessTests(unittest.TestCase):

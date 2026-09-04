@@ -18,7 +18,7 @@ if __package__ in {None, ""}:
 from backend.app import create_app
 from src.control_plane.config import ConfigurationError, Settings
 from src.control_plane.execution import ActionWorker
-from src.control_plane.postgres_storage import PostgresControlPlaneStore
+from src.control_plane.storage.postgres_storage import PostgresControlPlaneStore
 from src.control_plane.storage import ControlPlaneStore
 
 

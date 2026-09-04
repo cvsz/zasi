@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest.mock import Mock
 
-from src.control_plane.postgres_storage import (
+from src.control_plane.storage.postgres_storage import (
     _POSTGRES_SCHEMA_STATEMENTS,
     _PostgresConnection,
 )
@@ -72,7 +72,7 @@ class PostgresRedisRuntimeTests(unittest.TestCase):
         "set ZASI_TEST_POSTGRES_URL to run the live PostgreSQL integration check",
     )
     def test_live_postgres_schema_is_available(self):
-        from src.control_plane.postgres_storage import PostgresControlPlaneStore
+        from src.control_plane.storage.postgres_storage import PostgresControlPlaneStore
 
         store = PostgresControlPlaneStore(os.environ["ZASI_TEST_POSTGRES_URL"])
         try:

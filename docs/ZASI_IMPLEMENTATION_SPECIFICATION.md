@@ -103,7 +103,7 @@ There must be one authoritative runtime entry point after Phase P0. The followin
 | Existing surface | Current behavior | Required disposition |
 |---|---|---|
 | backend/server.py | Loopback-only ThreadingTCPServer compatibility API; status/host telemetry/catalog disclosures remain, side-effect routes return 410, and historical chat/subsystem/background workers are disabled | Retain only as an explicit read-only compatibility adapter; never a production owner |
-| src/api_server.py | Separate legacy HUD compatibility server with escaped HTML, no fixed token, loopback binding, and no start without an explicit token | Quarantine; no production startup path |
+| src/legacy/api_server.py | Separate legacy HUD compatibility server with escaped HTML, no fixed token, loopback binding, and no start without an explicit token | Quarantine; no production startup path |
 | main.py | `main()` launches the authoritative app; `legacy_demo_main()` exits with a simulation-only/disabled disclosure | Keep one lifecycle command; retain demo source only for continuity |
 | Electron main process | Source mode uses a configured Python interpreter; packaged mode resolves only a bundled per-platform runtime and externalized app resources | Use process supervision, readiness polling, origin restrictions, clean shutdown, and a fail-closed packaging contract |
 | web/static/app.tsx + web/static/cockpit.tsx + web/static/app.jsx | React 19 and React Router v7 cockpit with a strict TypeScript root entrypoint and fully checked TypeScript cockpit source; historical JSX path is a compatibility re-export | Keep the Vite bundle authoritative and retain the compatibility export while adding typed source coverage |

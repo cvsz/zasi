@@ -13,7 +13,7 @@ from src.control_plane.config import ConfigurationError, Settings
 from src.control_plane.contracts import Goal, IntentCreateRequest
 from src.control_plane.events import OutboxDispatcher
 from src.control_plane.identity import hash_token
-from src.control_plane.policy import PolicyEngine
+from src.control_plane.governance.policy import PolicyEngine
 from src.control_plane.storage import (
     CURRENT_SCHEMA_VERSION,
     ConflictError,

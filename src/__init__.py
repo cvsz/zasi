@@ -13,7 +13,7 @@ from .action_actuator import ActionActuatorEngine, ToolExecutionResult
 from .nas_optimizer import JITMicrokernelSynthesizer, KernelCandidate
 from .infrastructure import InterconnectFabric, ComputeNode
 from .autonomous_daemon import AutonomousSuperintelligenceDaemon
-from .api_server import ZASIWebServer
+from .legacy.api_server import ZASIWebServer
 from .distributed_rpc import DistributedWorkerPool, RaftConsensusCoordinator
 from .llm_connector import FoundationModelAdapter
 from .lean_bridge import LeanTheoremProverBridge, FormalProofResult

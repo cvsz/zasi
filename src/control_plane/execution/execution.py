@@ -7,10 +7,10 @@ import json
 import threading
 from typing import Any, Callable, Dict, FrozenSet, Mapping, Optional, Tuple
 
-from .contracts import RiskTier
-from .identity import issue_id
-from .policy import Capability, PolicyDecision, PolicyEngine
-from .storage import ControlPlaneStore
+from ..contracts import RiskTier
+from ..identity import issue_id
+from ..governance.policy import Capability, PolicyDecision, PolicyEngine
+from ..storage import ControlPlaneStore
 
 
 ToolHandler = Callable[..., Dict[str, Any]]

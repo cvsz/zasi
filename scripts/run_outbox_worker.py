@@ -10,9 +10,9 @@ import threading
 from typing import Optional, Sequence
 
 from src.control_plane.config import ConfigurationError, Settings
-from src.control_plane.postgres_storage import PostgresControlPlaneStore
+from src.control_plane.storage.postgres_storage import PostgresControlPlaneStore
 from src.control_plane.storage import ControlPlaneStore
-from src.control_plane.worker import OutboxWorker
+from src.control_plane.execution.worker import OutboxWorker
 
 
 def _build_store(settings: Settings):

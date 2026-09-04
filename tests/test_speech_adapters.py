@@ -4,7 +4,7 @@ import textwrap
 import unittest
 from pathlib import Path
 
-from src.control_plane.speech_adapters import (
+from src.control_plane.multimodal.speech_adapters import (
     FliteTTSAdapter,
     SpeechAdapterError,
     WhisperCppSTTAdapter,

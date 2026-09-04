@@ -32,7 +32,7 @@ from .agent_tools import register_agent_tools
 from .execution import ActionBroker, ActionWorker, ToolRegistry
 from .identity import issue_id
 from .model_gateway import ModelGateway
-from .policy import PolicyEngine
+from .governance.policy import PolicyEngine
 from .storage import ConflictError, ControlPlaneStore, NotFoundError
 
 

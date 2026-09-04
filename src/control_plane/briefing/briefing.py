@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
-from .connectors import ConnectorRegistry
+from ..connectors import ConnectorRegistry
 
 
 def _timestamp(value: datetime) -> str:

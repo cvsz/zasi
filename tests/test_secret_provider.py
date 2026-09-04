@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.control_plane.secrets import (
+from src.control_plane.config.secrets import (
     SecretProviderError,
     resolve_secret_mapping,
 )

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Dict, Optional
 
-from .storage import ControlPlaneStore
+from ..storage import ControlPlaneStore
 
 
 OutboxHandler = Callable[[Dict[str, object]], None]

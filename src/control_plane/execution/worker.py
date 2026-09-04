@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import threading
 from typing import Any, Optional
 
-from .events import DispatchReport, OutboxDispatcher, OutboxHandler
+from ..events import DispatchReport, OutboxDispatcher, OutboxHandler
 
 
 @dataclass(frozen=True)

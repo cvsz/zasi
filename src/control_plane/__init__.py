@@ -6,11 +6,11 @@ from .connectors import ConnectorRegistry, ConnectorStatus
 from .contracts import Goal, IntentCreateRequest
 from .events import DispatchReport, OutboxDispatcher
 from .identity import hash_token
-from .policy import PolicyDecision, PolicyEngine
-from .postgres_storage import PostgresControlPlaneStore
+from .governance.policy import PolicyDecision, PolicyEngine
+from .storage.postgres_storage import PostgresControlPlaneStore
 from .scheduler import DurableScheduler
-from .secrets import SecretProviderError, read_secret, resolve_secret_mapping
-from .speech_adapters import (
+from .config.secrets import SecretProviderError, read_secret, resolve_secret_mapping
+from .multimodal.speech_adapters import (
     FliteTTSAdapter,
     SpeechAdapterError,
     SpeechSynthesis,
@@ -18,7 +18,7 @@ from .speech_adapters import (
     WhisperCppSTTAdapter,
 )
 from .storage import ConflictError, ControlPlaneStore, ScopeViolation
-from .worker import OutboxWorker, WorkerReport
+from .execution.worker import OutboxWorker, WorkerReport
 
 __all__ = [
     "ConfigurationError",
