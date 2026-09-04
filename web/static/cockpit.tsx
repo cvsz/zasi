@@ -19,6 +19,7 @@ import {
     Route,
     Routes,
     useNavigate,
+    useLocation,
 } from 'react-router-dom';
 
 const API_ROOT = (import.meta.env.VITE_API_ROOT || '').replace(/\/$/, '');
@@ -1723,16 +1724,29 @@ function RightRail() {
     );
 }
 
+function modeFromPath(pathname: string): string {
+    if (pathname.startsWith('/do-this')) return 'Do This';
+    if (pathname.startsWith('/advanced')) return 'Advanced';
+    if (pathname.startsWith('/humanoid')) return 'Humanoid';
+    if (pathname.startsWith('/mobile-link')) return 'Mobile Link';
+    if (pathname.startsWith('/engineering')) return 'Engineering';
+    if (pathname.startsWith('/jarvis')) return 'Assist';
+    if (pathname.startsWith('/cockpit') || pathname.startsWith('/mcp')) return 'Safety';
+    return 'Observe';
+}
+
 function Shell() {
     const { session, logout } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const [paletteOpen, setPaletteOpen] = useState(false);
+    const location = useLocation();
     const feed = useEventFeed();
     const settings = useApi<JsonRecord>('/api/v2/settings', session?.access_token ?? null);
     const settingsData = settings.data as Record<string, any> | null;
     const profile = settingsData?.profile ?? 'local';
     const deviceId = session?.device_id ?? '—';
-    return <div className="shell"><header className="top-bar"><div className="logo"><span className="logo-z">Z</span>ASI <span className="logo-version">{profile} · {displayValue(deviceId)}</span></div><nav className="nav-links" aria-label="Primary navigation">{NAV.map((link) => <NavLink key={link.to} to={link.to} end={link.end} className={({ isActive }) => `nav-tab${isActive ? ' active' : ''}`}>{link.label}</NavLink>)}</nav><div className="header-actions"><StatusBadge status={feed.status}>{feed.status}</StatusBadge><span className="tenant-label">{session?.tenant_id ?? '—'}</span><button className="btn secondary small" onClick={() => setPaletteOpen(true)} title="Command palette" aria-label="Open command palette">⌘K</button><button className="btn secondary small" onClick={toggleTheme} aria-label={theme === 'dark' ? 'Use light theme' : 'Use dark theme'}>{theme === 'dark' ? '☀️' : '🌙'}</button><button className="btn secondary small" onClick={logout}>SIGN OUT</button></div></header><div className="shell-body"><main className="main-content"><Outlet /></main><RightRail /></div><footer className="footer">ZASI governed control plane · Observe / Assist · simulated and unavailable states are disclosed</footer><CommandPalette isOpen={paletteOpen} onClose={() => setPaletteOpen(false)} /></div>;
+    const mode = modeFromPath(location.pathname);
+    return <div className="shell"><header className="top-bar"><div className="logo"><span className="logo-z">Z</span>ASI <span className="logo-version">{profile} · {mode} · {displayValue(deviceId)}</span></div><nav className="nav-links" aria-label="Primary navigation">{NAV.map((link) => <NavLink key={link.to} to={link.to} end={link.end} className={({ isActive }) => `nav-tab${isActive ? ' active' : ''}`}>{link.label}</NavLink>)}</nav><div className="header-actions"><StatusBadge status={feed.status}>{feed.status}</StatusBadge><span className="tenant-label">{session?.tenant_id ?? '—'}</span><button className="btn secondary small" onClick={() => setPaletteOpen(true)} title="Command palette" aria-label="Open command palette">⌘K</button><button className="btn secondary small" onClick={toggleTheme} aria-label={theme === 'dark' ? 'Use light theme' : 'Use dark theme'}>{theme === 'dark' ? '☀️' : '🌙'}</button><button className="btn secondary small" onClick={logout}>SIGN OUT</button></div></header><div className="shell-body"><main className="main-content"><Outlet /></main><RightRail /></div><footer className="footer">ZASI governed control plane · Observe / Assist · simulated and unavailable states are disclosed</footer><CommandPalette isOpen={paletteOpen} onClose={() => setPaletteOpen(false)} /></div>;
 }
 
 function AuthenticatedApp() {

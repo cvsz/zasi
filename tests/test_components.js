@@ -78,6 +78,7 @@ assert(cockpitTsx.includes('COMMAND STREAM'), 'right rail must render a command 
 assert(cockpitTsx.includes('APPROVALS'), 'right rail must render an approvals panel');
 assert(cockpitTsx.includes('EVENT HEALTH'), 'right rail must render event health');
 assert(cockpitTsx.includes('PLAN PREVIEW'), 'right rail must render a plan preview');
+assert(cockpitTsx.includes('modeFromPath'), 'shell must derive mode from the active route');
 assert(cockpitTsx.includes('/api/v2/briefings'), 'briefings page must read the briefings endpoint');
 assert(cockpitTsx.includes('/api/v2/memory/search'), 'memory page must read the memory search endpoint');
 assert(cockpitTsx.includes('/api/v2/memory'), 'memory page must write through the governed memory route');
