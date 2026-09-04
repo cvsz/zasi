@@ -556,6 +556,7 @@ function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
         { label: 'Open Engineering Artifacts', path: '/engineering' },
         { label: 'Open Safety Cockpit', path: '/cockpit' },
         { label: 'Open Governed MCP Console', path: '/mcp' },
+        { label: 'Open Morning Brief', path: '/briefings' },
         { label: 'Open Do This', path: '/do-this' },
         { label: 'Open Advanced', path: '/advanced' },
         { label: 'Open Humanoid', path: '/humanoid' },
@@ -1630,6 +1631,7 @@ const NAV: NavigationLink[] = [
     { to: '/audit', label: '📜 Audit' },
     { to: '/models', label: '🤖 Models' },
     { to: '/memory', label: '💾 Memory' },
+    { to: '/briefings', label: '📰 Briefings' },
     { to: '/governance', label: '🛡 Governance' },
     { to: '/telemetry', label: '📊 Telemetry' },
     { to: '/settings', label: '⚙️ Settings' },
@@ -1644,6 +1646,42 @@ const NAV: NavigationLink[] = [
     { to: '/mcp', label: '🔌 MCP' },
 ];
 
+function BriefingsPage() {
+    const { session } = useAuth();
+    const token = session?.access_token ?? null;
+    const [briefings, setBriefings] = useState<JsonRecord[]>([]);
+    const [selected, setSelected] = useState<JsonRecord | null>(null);
+    const { addToast } = useToast();
+    useEffect(() => {
+        if (!token) return undefined;
+        void api.get<JsonRecord>('/api/v2/briefings', token).then((data) => setBriefings((data.briefings as JsonRecord[]) ?? [])).catch(() => addToast('Failed to load briefings', 'error'));
+        return undefined;
+    }, [token]);
+    const open = async (briefingId: string) => {
+        if (!token) return;
+        try {
+            const data = await api.get<JsonRecord>(`/api/v2/briefings/${encodeURIComponent(briefingId)}`, token);
+            setSelected(data);
+        } catch {
+            addToast('Failed to load briefing', 'error');
+        }
+    };
+    return (
+        <div className="page route-fade">
+            <h2 className="page-title">📰 Morning brief</h2>
+            <div className="notice">Every brief section carries source refs, observed time, freshness, and status. Missing data is rendered as missing or unavailable.</div>
+            <div className="card">
+                <div className="card-header">RECENT BRIEFS</div>
+                {briefings.length === 0 && <div className="empty">No briefings yet. Generate one to start.</div>}
+                {briefings.length > 0 && <table className="data-table"><thead><tr><th>ID</th><th>Generated</th><th></th></tr></thead><tbody>
+                    {briefings.map((briefing) => <tr key={String(briefing.briefing_id)}><td className="mono">{String(briefing.briefing_id).slice(0, 16)}…</td><td>{String(briefing.generated_at ?? '—')}</td><td><button className="btn secondary small" onClick={() => open(String(briefing.briefing_id))}>View</button></td></tr>)}
+                </tbody></table>}
+            </div>
+            {selected && <div className="card"><div className="card-header">BRIEF · {String(selected.briefing_id ?? '—')}</div><pre className="code-out">{JSON.stringify(selected, null, 2)}</pre></div>}
+        </div>
+    );
+}
+
 function RightRail() {
     const { session } = useAuth();
     const token = session?.access_token ?? null;
@@ -1653,6 +1691,8 @@ function RightRail() {
     const legacyApprovals = (approvals.data?.legacy_approvals ?? []) as any[];
     const pendingCount = agentApprovals.length + legacyApprovals.length;
     const recentEvents = feed.events.slice(-8);
+    const latestPlanEvent = recentEvents.find((event) => event.type === 'plan.created' || event.type === 'plan.updated');
+    const planPreview = latestPlanEvent ? (latestPlanEvent.payload as JsonRecord | undefined) : null;
     return (
         <aside className="right-rail" aria-label="Command stream and approvals">
             <div className="rail-card">
@@ -1660,6 +1700,13 @@ function RightRail() {
                 <div className="rail-event"><span className="rail-meta">status</span> <StatusBadge status={feed.status}>{feed.status}</StatusBadge></div>
                 <div className="rail-event"><span className="rail-meta">cursor</span> {feed.cursor}</div>
                 <div className="rail-event"><span className="rail-meta">events</span> {feed.events.length}</div>
+            </div>
+            <div className="rail-card">
+                <div className="rail-card-header">PLAN PREVIEW</div>
+                {!planPreview && <div className="rail-event">No active plan in this session.</div>}
+                {planPreview && <div className="rail-event"><span className="rail-meta">status</span> <StatusBadge status={String(planPreview.status ?? 'unknown')}>{String(planPreview.status ?? 'unknown')}</StatusBadge></div>}
+                {planPreview && <div className="rail-event"><span className="rail-meta">digest</span> <code>{String(planPreview.digest ?? '—').slice(0, 16)}…</code></div>}
+                {planPreview && <pre className="code-out">{JSON.stringify(planPreview, null, 2).slice(0, 600)}</pre>}
             </div>
             <div className="rail-card">
                 <div className="rail-card-header">COMMAND STREAM</div>
@@ -1691,7 +1738,7 @@ function Shell() {
 function AuthenticatedApp() {
     const { session } = useAuth();
     if (!session) return <LoginPage />;
-    return <Routes><Route path="/" element={<Shell />}><Route index element={<OverviewPage />} /><Route path="agents" element={<AgentsPage />} /><Route path="executions" element={<ExecutionsPage />} /><Route path="approvals" element={<ApprovalsPage />} /><Route path="audit" element={<AuditPage />} /><Route path="models" element={<ModelsPage />} /><Route path="memory" element={<MemoryPage />} /><Route path="governance" element={<GovernancePage />} /><Route path="telemetry" element={<TelemetryPage />} /><Route path="settings" element={<SettingsPage />} /><Route path="jarvis" element={<JarvisPage />} /><Route path="do-this" element={<DoThisPage />} /><Route path="advanced" element={<AdvancedPage />} /><Route path="humanoid" element={<HumanoidPage />} /><Route path="mobile-link" element={<MobileLinkPage />} /><Route path="engineering" element={<EngineeringPage />} /><Route path="subsystems" element={<SubsystemsPage />} /><Route path="cockpit" element={<CockpitPage />} /><Route path="mcp" element={<MCPPage />} /></Route></Routes>;
+    return <Routes><Route path="/" element={<Shell />}><Route index element={<OverviewPage />} /><Route path="agents" element={<AgentsPage />} /><Route path="executions" element={<ExecutionsPage />} /><Route path="approvals" element={<ApprovalsPage />} /><Route path="audit" element={<AuditPage />} /><Route path="models" element={<ModelsPage />} /><Route path="memory" element={<MemoryPage />} /><Route path="briefings" element={<BriefingsPage />} /><Route path="governance" element={<GovernancePage />} /><Route path="telemetry" element={<TelemetryPage />} /><Route path="settings" element={<SettingsPage />} /><Route path="jarvis" element={<JarvisPage />} /><Route path="do-this" element={<DoThisPage />} /><Route path="advanced" element={<AdvancedPage />} /><Route path="humanoid" element={<HumanoidPage />} /><Route path="mobile-link" element={<MobileLinkPage />} /><Route path="engineering" element={<EngineeringPage />} /><Route path="subsystems" element={<SubsystemsPage />} /><Route path="cockpit" element={<CockpitPage />} /><Route path="mcp" element={<MCPPage />} /></Route></Routes>;
 }
 
 function App() {
