@@ -237,7 +237,12 @@ def run_postgresql_rollback_drill(
             _create_database(admin, target_name)
             target_created = True
             target_url = _url_for_database(admin_url, target_name)
-            _restore_postgresql(raw_backup, target_url, replace=False)
+            _restore_postgresql(
+                raw_backup,
+                target_url,
+                replace=False,
+                no_owner=True,
+            )
 
             target_store = PostgresControlPlaneStore(target_url)
             target_store.initialize()

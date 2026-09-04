@@ -29,6 +29,7 @@ assert(appJsx.includes("export { default } from './cockpit';"), 'compatibility m
 assert(appTsx.includes('createRoot'), 'TypeScript entrypoint must own React root creation');
 const productionHtml = fs.readFileSync(path.join(__dirname, '../web/index.html'), 'utf8');
 assert(productionHtml.includes('./static/app.tsx'), 'production page must load the TypeScript entrypoint');
+assert(!productionHtml.includes('frame-ancestors'), 'frame-ancestors must be enforced by the response header, not an ignored HTML meta directive');
 const viteConfig = fs.readFileSync(path.join(__dirname, '../vite.config.js'), 'utf8');
 assert(viteConfig.includes('VITE_BASE_PATH'), 'build must expose an explicit static hosting base path');
 assert(viteConfig.includes("|| './'"), 'local and Electron builds must retain relative asset URLs by default');

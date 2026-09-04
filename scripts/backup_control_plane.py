@@ -310,7 +310,13 @@ def _redacted_postgres_url(database_url: str) -> Tuple[str, str]:
     )
 
 
-def _restore_postgresql(raw_path: Path, database_url: str, replace: bool) -> None:
+def _restore_postgresql(
+    raw_path: Path,
+    database_url: str,
+    replace: bool,
+    *,
+    no_owner: bool = False,
+) -> None:
     if not database_url.startswith(("postgresql://", "postgres://")):
         raise BackupError("PostgreSQL restore requires a PostgreSQL database URL")
     pg_restore = shutil.which("pg_restore")
@@ -323,6 +329,12 @@ def _restore_postgresql(raw_path: Path, database_url: str, replace: bool) -> Non
     command = [pg_restore, "--exit-on-error"]
     if replace:
         command.extend(["--clean", "--if-exists"])
+    if no_owner:
+        # A disposable rehearsal database may be owned by a temporary
+        # administrator rather than the application role recorded in the
+        # archive. Restore objects to the target owner without granting the
+        # temporary role membership in the application role.
+        command.append("--no-owner")
     command.extend(["--dbname", safe_url, str(raw_path)])
     try:
         subprocess.run(

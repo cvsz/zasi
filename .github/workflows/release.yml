@@ -28,13 +28,16 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "22.14.0"
 
       - name: Install build and SBOM tooling
         run: pip install '.[dev]' build
 
       - name: Build bundled cockpit before packaging
-        run: npm ci --ignore-scripts && npm run typecheck && npm run build
+        run: |
+          scripts/npm_ci_audit.sh
+          npm run typecheck
+          npm run build
 
       - name: Build Wheel & Tarball
         run: python3 -m build

@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from src.control_plane.backup import (
     BackupError,
@@ -16,6 +17,7 @@ from src.control_plane.backup import (
     seal,
 )
 from src.control_plane.storage import ControlPlaneStore
+from scripts.backup_control_plane import _restore_postgresql
 
 
 class EncryptedBackupTests(unittest.TestCase):
@@ -282,6 +284,25 @@ class EncryptedBackupTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn("secret provider", result.stderr)
         self.assertNotIn("backup authentication failed", result.stderr)
+
+    def test_postgresql_restore_can_skip_archive_ownership_for_rehearsal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            raw_backup = Path(directory) / "control-plane.dump"
+            raw_backup.write_bytes(b"archive")
+            with patch(
+                "scripts.backup_control_plane.shutil.which",
+                return_value="/usr/bin/pg_restore",
+            ), patch("scripts.backup_control_plane.subprocess.run") as run:
+                _restore_postgresql(
+                    raw_backup,
+                    "postgresql://restore-user:secret@127.0.0.1:5433/target",
+                    replace=False,
+                    no_owner=True,
+                )
+
+            command = run.call_args.args[0]
+            self.assertIn("--no-owner", command)
+            self.assertNotIn("secret", command)
 
     def test_backup_cli_does_not_clobber_restore_target_without_replace(self):
         with tempfile.TemporaryDirectory() as directory:

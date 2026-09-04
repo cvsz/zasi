@@ -10,7 +10,10 @@
     "typecheck": "tsc --noEmit",
     "electron": "electron electron/main.js",
     "electron-build": "electron-builder --config electron-builder.config.js --linux --mac --win",
-    "test": "node tests/test_components.js && node tests/test_electron_runtime.js && node tests/test_electron_integration.js && node tests/test_electron_packaging.js"
+    "test": "node tests/test_components.js && node --test tests/test_npm_bulk_audit.js && node tests/test_electron_runtime.js && node tests/test_electron_integration.js && node tests/test_electron_packaging.js"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   },
   "devDependencies": {
     "@types/react": "19.2.18",
@@ -18,6 +21,7 @@
     "@types/three": "^0.179.0",
     "electron": "44.1.0",
     "electron-builder": "26.15.3",
+    "semver": "7.8.5",
     "typescript": "7.0.2",
     "vite": "8.2.2"
   },
