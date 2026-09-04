@@ -18,9 +18,9 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from .agent_models import required_scopes_for
-from .execution import ToolDefinition, ToolExecutionContext, ToolRegistry
-from .storage import ControlPlaneStore
+from ..agent_models import required_scopes_for
+from ..execution import ToolDefinition, ToolExecutionContext, ToolRegistry
+from ..storage import ControlPlaneStore
 
 
 def _utcnow() -> datetime:

@@ -8,7 +8,7 @@ from .events import DispatchReport, OutboxDispatcher
 from .identity import hash_token
 from .governance.policy import PolicyDecision, PolicyEngine
 from .storage.postgres_storage import PostgresControlPlaneStore
-from .scheduler import DurableScheduler
+from .orchestration.scheduler import DurableScheduler
 from .config.secrets import SecretProviderError, read_secret, resolve_secret_mapping
 from .multimodal.speech_adapters import (
     FliteTTSAdapter,

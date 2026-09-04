@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.control_plane.scheduler import DurableScheduler
+from src.control_plane.orchestration.scheduler import DurableScheduler
 from src.control_plane.storage import CURRENT_SCHEMA_VERSION, ConflictError, ControlPlaneStore
 
 

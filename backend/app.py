@@ -33,7 +33,7 @@ from src.control_plane.connectors import ConnectorRegistry
 from src.control_plane.execution import ActionBroker, ToolDefinition, ToolRegistry
 from src.control_plane.events import OutboxDispatcher
 from src.control_plane.identity import hash_token, issue_id, issue_token, optional_bearer
-from src.control_plane.agent_runtime import (
+from src.control_plane.orchestration.agent_runtime import (
     AgentService,
     AgentServiceError,
     register_agent_runtime,

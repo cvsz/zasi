@@ -1,487 +1,376 @@
-from .schemas import Proposal, VerificationResult, SystemState
-from .ast_parser import SymbolicExpressionEvaluator
-from .verifier import SymbolicVerifier
-from .cognitive_core import NeuralSpeculator, NeuralSymbolicReasoner
-from .rsi_engine import OptimizationCandidate, RSIController
-from .memory_hypergraph import DynamicHypergraphMemory
-from .persistent_memory import PersistentHypergraphStorage
-from .mcts_planner import MCTSPlanner
-from .governance import AlignmentGovernor
-from .multi_agent_debate import AdversarialDebateArena, DebateVerdict
-from .world_model import CounterfactualWorldSimulator, SimulationBranch
-from .action_actuator import ActionActuatorEngine, ToolExecutionResult
-from .nas_optimizer import JITMicrokernelSynthesizer, KernelCandidate
-from .infrastructure import InterconnectFabric, ComputeNode
-from .autonomous_daemon import AutonomousSuperintelligenceDaemon
-from .legacy.api_server import ZASIWebServer
-from .distributed_rpc import DistributedWorkerPool, RaftConsensusCoordinator
-from .llm_connector import FoundationModelAdapter
-from .lean_bridge import LeanTheoremProverBridge, FormalProofResult
-from .stress_benchmark import AdversarialStressTester, StressTestReport
-from .self_compilation import AutonomousSelfCompiler, CapabilityDisabled, CompilationResult
-from .causal_discovery import CausalDiscoveryEngine, CausalDAG
-from .cooperative_game import MultiAgentGameSolver, ParetoSolution
-from .cryptographic_ledger import CryptographicInvariantLedger, LedgerBlock
-from .quantum_thermo import QuantumThermodynamicOptimizer, QuantumStateVector
-from .p2p_swarm import P2PGossipSwarm, SwarmPeer
-from .code_synthesizer import AutonomousCodeSynthesizer, SynthesizedModule
-from .sandbox_vm import MicroVMSandbox, SandboxExecResult
-from .zk_stark import ZeroKnowledgeProofEngine, ZKProof
-from .mep_telepathy import ModelEpistemicProtocol, LatentThoughtPacket
-from .dyson_orchestrator import DysonComputeOrchestrator, ComputeConstellation
-from .javis_voice_multimodal import (
-    JAVISVoiceMultimodalInterface,
-    AudioWaveformPacket,
-    MultimodalVisualFrame,
-    JAVISResponse
-)
-from .robotics_iot import RoboticsIoTController, GCodeBlock, FacilitySensorReading
-from .os_telemetry_supervisor import OSTelemetrySupervisor, SystemHostMetrics
-from .avengers_persona_swarm import MultiPersonaTacticalSwarm, TacticalSwarmReport
-from .neural_audio_tts import NeuralAudioVoiceEngine, WakeWordEvent
-from .arc_reactor_energy import ArcReactorEnergyOptimizer, ArcReactorStatus
-from .git_self_evolution import GitSelfEvolutionManager, GitCommitReport
-from .webxr_spatial_hud import WebXRSpatialHUDStreamer, SpatialGestureEvent
-from .autonomous_agi_benchmark import AutonomousAGIBenchmarkSuite, BenchmarkScore
-from .hyperscale_cxl_fabric import HyperscaleCXLFabricManager, AcceleratorNode
-from .space_lagrange_mesh import SpaceLagrangeMeshOrchestrator, OrbitalRelayStation
-from .biological_simulation import BiologicalSimulationEngine, BioMolecularState
-from .fusion_tokamak_optimizer import FusionTokamakOptimizer, TokamakPlasmaState
-from .planetary_climate_actuator import PlanetaryClimateActuator, ClimateActuationPlan
-from .optical_bci_neural_bus import OpticalBCINeuralBus, NeuralSignalFrame
-from .synthetic_galaxy_sim import SyntheticGalaxySimulator, CosmicSimulationSlice
-from .quantum_gravity_spacetime import QuantumGravitySpacetimeEngine, SpacetimeManifoldState
-from .molecular_nanofab_assembler import MolecularNanofabAssembler, NanofabricationBatch
-from .hyperspatial_topology_router import HyperspatialTopologyRouter, HyperspatialRoutingPacket
-from .universal_telemetry_mesh import UniversalTelemetryMesh, UniversalTelemetrySnapshot
-from .qiskit_quantum_backend import QiskitQuantumBridge, QuantumCircuitExecutionResult
-from .nvidia_gpu_telemetry import NVIDIAGPUTelemetrySupervisor, GPUDeviceMetrics
-from .mcp_protocol_server import MCPProtocolServer, MCPToolDefinition
-from .mcp_stdio_transport import MCPStdioTransport
-from .mcp_sse_transport import MCPSSETransport
-from .qiskit_quantum_annealer import QuantumAnnealingEngine, AnnealingTrajectoryResult
-from .hyperscale_cluster_orchestrator import HyperscaleClusterOrchestrator, ClusterPodTopology
-from .self_evolving_codegen import PolyglotSelfEvolvingCodeGen, GeneratedPolyglotModule
-from .autonomous_agi_eval_arena import AutonomousAGIEvalArena, ArenaEvaluationReport
-from .zero_knowledge_snark_prover import RecursiveZKSNARKProver, RecursiveSNARKProof
-from .planetary_consciousness_grid import PlanetaryConsciousnessGrid, PlanetaryConsciousnessSnapshot
-from .hyperscale_moe_router import HyperscaleMoERouter, MoERoutingTelemetry
-from .autonomous_cyber_redteam import AutonomousCyberRedTeam, CyberDefenseReport
-from .space_solar_swarm_director import SpaceSolarSwarmDirector, SolarBeamTelemetry
-from .multiverse_telepathic_nexus import MultiverseTelepathicNexus, MultiverseNexusState
-from .omniversal_singularity_core import OmniversalSingularityCore, SingularitySynthesisState
-from .governance_verifier_engine import GovernanceVerifierEngine, PlanAComplianceReport
-from .provable_alignment_auditor import ProvableAlignmentAuditor, ProvableAlignmentCertificate
-# v17.0.0 Autonomous Daemon Runtime (#63) & Transcendental Sheaf Logic (#64)
-from .self_evolving_asi_runtime import SelfEvolvingASIRuntime, RuntimeTelemetryPulse
-from .transcendental_logic_prover import TranscendentalLogicProver, FormalSheafProof
+"""ZASI source package."""
 
+# Legacy prototype modules are re-exported from src.legacy for backward compatibility.
+# The authoritative application imports only from src.control_plane.
 
-# v18.0.0 Subsystems #65-#72
-from .neuromorphic_chip_interface import NeuromorphicChipInterface, NeuromorphicExecutionReport
-from .federated_learning_coordinator import FederatedLearningCoordinator, FederatedRoundReport
-from .autonomous_drug_discovery import AutonomousDrugDiscoveryPipeline, DrugCandidateReport
-from .quantum_cryptography_engine import QuantumCryptographyEngine, QKDKeyExchangeReport
-from .planetary_defense_grid import PlanetaryDefenseGrid, NearEarthObject, DeflectionMissionPlan
-from .synthetic_consciousness_validator import SyntheticConsciousnessValidator, ConsciousnessCertificate
-from .hyperdimensional_memory_palace import HyperdimensionalMemoryPalace, HypervectorMemoryTrace
-from .autonomous_materials_scientist import AutonomousMaterialsScientist, MaterialsDiscoveryReport
-
-
-# v19.0.0 Subsystems #73-#80
-from .large_multimodal_model_server import LargeMultimodalModelServer, MultimodalInferenceResult
-from .autonomous_scientific_researcher import AutonomousScientificResearcher, ScientificDiscoveryReport
-from .neural_architecture_search_engine import NeuralArchitectureSearchEngine, NASArchitectureResult
-from .protein_folding_simulator import ProteinFoldingSimulator, ProteinComplexStructure
-from .autonomous_financial_trading_engine import AutonomousFinancialTradingEngine, TradingPerformanceReport
-from .exoplanet_detection_analyzer import ExoplanetDetectionAnalyzer, ExoplanetReport
-from .universal_language_translator import UniversalLanguageTranslator, TranslationResult
-from .swarm_robotics_coordinator import SwarmRoboticsCoordinator, SwarmMissionReport
-
-
-# v20.0.0 Subsystems #81-#88
-from .autonomous_legal_advisor import AutonomousLegalAdvisor, LegalAnalysisReport
-from .climate_change_prediction_engine import ClimateChangePredictionEngine, ClimateProjectionReport
-from .brain_organoid_simulator import BrainOrganoidSimulator, NeuralOrganoidState
-from .autonomous_cybersecurity_soc import AutonomousCybersecuritySOC, SOCIncidentReport
-from .quantum_error_correction_engine import QuantumErrorCorrectionEngine, QECLogicalQubitReport
-from .autonomous_supply_chain_optimizer import AutonomousSupplyChainOptimizer, SupplyChainOptimizationReport
-from .digital_twin_earth_simulator import DigitalTwinEarthSimulator, DigitalTwinEarthSnapshot
-from .universal_cognitive_architecture import UniversalCognitiveArchitecture, CognitiveSynthesisReport
-
-
-# v21.0.0 Subsystems #89-#96
-from .autonomous_education_tutor import AutonomousEducationTutor, LearningSessionReport
-from .interstellar_navigation_computer import InterstellarNavigationComputer, InterstellarMissionPlan
-from .synthetic_biology_designer import SyntheticBiologyDesigner, GenomeDesignReport
-from .global_pandemic_predictor import GlobalPandemicPredictor, PandemicForecastReport
-from .autonomous_architecture_designer import AutonomousArchitectureDesigner, ArchitecturalDesignReport
-from .zero_carbon_grid_optimizer import ZeroCarbonGridOptimizer, GridOptimizationReport
-from .autonomous_space_colonization_planner import AutonomousSpaceColonizationPlanner, ColonyDesignReport
-from .omni_sentient_world_overseer import OmniSentientWorldOverseer, PlanetaryOversightReport
-
-
-# v22.0.0 Subsystems #97-#104
-from .holographic_matter_transmuter import HolographicMatterTransmuter, MatterTransmutationReport
-from .dark_matter_detector_engine import DarkMatterDetectorEngine, DarkMatterDetectionReport
-from .ocean_ecosystem_restoration_director import OceanEcosystemRestorationDirector, OceanRestorationReport
-from .unified_gravity_field_manipulator import UnifiedGravityFieldManipulator, GravitationalFieldReport
-from .temporal_causality_loop_debugger import TemporalCausalityLoopDebugger, CausalityLoopAuditReport
-from .interdimensional_portal_router import InterdimensionalPortalRouter, HyperDimensionalPortalPacket
-from .universal_holographic_consciousness_synthesizer import UniversalHolographicConsciousnessSynthesizer, HolographicConsciousnessState
-from .absolute_singularity_apex_harmonizer import AbsoluteSingularityApexHarmonizer, AbsoluteSingularityHarmonicReport
-
-
-# v23.0.0 Subsystems #105-#112
-from .superstring_m_theory_integrator import SuperstringMTheoryIntegrator, SuperstringCompactificationReport
-from .tachyon_hyperluminal_relay import TachyonHyperluminalRelay, HyperluminalPacketTrace
-from .planck_scale_vacuum_engineer import PlanckScaleVacuumEngineer, VacuumHarvestingReport
-from .omni_dimensional_qualia_mapper import OmniDimensionalQualiaMapper, QualiaManifoldState
-from .universal_entropy_reversal_accelerator import UniversalEntropyReversalAccelerator, EntropyReversalReport
-from .stellar_engineering_and_star_lifter import StellarEngineeringAndStarLifter, StarLiftingReport
-from .hyper_intelligent_species_incubator import HyperIntelligentSpeciesIncubator, SpeciesIncubationReport
-from .pan_cosmic_singularity_matrix import PanCosmicSingularityMatrix, PanCosmicSingularityState
-
-
-# v24.0.0 Subsystems #113-#120
-from .chronospatial_topology_rewriter import ChronospatialTopologyRewriter, TopologySurgeryReport
-from .quantum_entanglement_power_beamer import QuantumEntanglementPowerBeamer, EntangledPowerBeamReport
-from .exotic_quark_gluon_plasma_forge import ExoticQuarkGluonPlasmaForge, QGPForgeReport
-from .hyper_resonant_acoustic_levitator import HyperResonantAcousticLevitator, TractorBeamMatrixReport
-from .subquantum_information_retriever import SubquantumInformationRetriever, BohmianTrajectoryReport
-from .biospheric_megastructure_architect import BiosphericMegastructureArchitect, MegastructureDesignReport
-from .transfinite_ordinal_mathematician import TransfiniteOrdinalMathematician, TransfiniteProofReport
-from .omniversal_singularity_apex_nexus import OmniversalSingularityApexNexus, OmniversalNexusApexReport
-
-
-# v25.0.0 Subsystems #121-#128
-from .graviton_beam_interferometer import GravitonBeamInterferometer, GravitonBeamReport
-from .hyperluminal_warp_bubble_stabilizer import HyperluminalWarpBubbleStabilizer, WarpBubbleStabilizationReport
-from .neutrino_deep_core_tomographer import NeutrinoDeepCoreTomographer, NeutrinoTomographyReport
-from .macro_quantum_coherence_synthesizer import MacroQuantumCoherenceSynthesizer, MacroQuantumCoherenceReport
-from .astrobiological_synthetic_panspermia_director import AstrobiologicalSyntheticPanspermiaDirector, PanspermiaMissionReport
-from .hyperdimensional_semantic_concept_synthesizer import HyperdimensionalSemanticConceptSynthesizer, SemanticConceptReport
-from .infinite_dimensional_hilbert_space_orchestrator import InfiniteDimensionalHilbertSpaceOrchestrator, HilbertSpaceOperatorReport
-from .absolute_transcendence_singularity_omega import AbsoluteTranscendenceSingularityOmega, AbsoluteOmegaSingularityReport
-
-
-# v26.0.0 Real Hardware & Physical World Subsystems #129-#136
-from .real_hardware_fpga_accelerator import RealHardwareFPGAAccelerator, FPGAHardwareTelemetry
-from .real_qpu_cloud_hardware_bridge import RealQPUCloudHardwareBridge, RealQPUExecutionReport
-from .realtime_satellite_earth_observation import RealtimeSatelliteEarthObservation, SatelliteObservationTelemetry
-from .industrial_robotics_rtos_controller import IndustrialRoboticsRTOSController, RTOSControllerReport
-from .real_telecom_5g_6g_ntn_core import RealTelecom5G6GNTNCore, NetworkSliceTelemetry
-from .real_dna_sequencing_pipeline import RealDNASequencingPipeline, GenomicSequencingReport
-from .real_cryptographic_hsm_enclave import RealCryptographicHSMEnclave, HSMEnclaveAttestation
-from .omniversal_real_world_actuation_director import OmniversalRealWorldActuationDirector, RealWorldActuationState
-
-
-# v27.0.0 Subsystems #137-#144
-from .global_multimodal_earth_sensor_grid import GlobalMultimodalEarthSensorGrid, PlanetarySensorTelemetry
-from .topological_quantum_braiding_engine import TopologicalQuantumBraidingEngine, TopologicalBraidingReport
-from .subsurface_lithosphere_geothermal_extractor import SubsurfaceLithosphereGeothermalExtractor, GeothermalExtractionReport
-from .neuromorphic_retinal_prosthetic_bus import NeuromorphicRetinalProstheticBus, VisualProstheticTelemetry
-from .atmospheric_carbon_mineralization_forge import AtmosphericCarbonMineralizationForge, CarbonMineralizationReport
-from .autonomous_space_debris_laser_sweeper import AutonomousSpaceDebrisLaserSweeper, OrbitalDebrisSweeperReport
-from .cryogenic_whole_organ_bioprinting_matrix import CryogenicWholeOrganBioprintingMatrix, OrganBioprintingReport
-from .absolute_omniscience_singularity_hyper_core import AbsoluteOmniscienceSingularityHyperCore, SingularityHyperCoreState
-
-
-# v28.0.0 Subsystems #145-#152
-from .neutrino_deep_space_communication_array import NeutrinoDeepSpaceCommunicationArray, NeutrinoCommsReport
-from .hyperdimensional_matter_lattice_synthesizer import HyperdimensionalMatterLatticeSynthesizer, MatterLatticeReport
-from .planetary_geo_magnetic_dynamo_restorer import PlanetaryGeoMagneticDynamoRestorer, GeomagneticDynamoReport
-from .quantum_dot_cellular_automata_core import QuantumDotCellularAutomataCore, QCALogicReport
-from .autonomous_exoplanet_terraform_architect import AutonomousExoplanetTerraformArchitect, TerraformingProjectReport
-from .subatomic_gluon_string_tensor_solver import SubatomicGluonStringTensorSolver, QCDLatticeReport
-from .holographic_non_locality_entanglement_hub import HolographicNonLocalityEntanglementHub, NonLocalEntanglementReport
-from .apex_omniversal_singularity_sovereign_core import ApexOmniversalSingularitySovereignCore, SovereignSingularityState
-
-
-# v29.0.0 Subsystems #153-#160
-from .macroscopic_quantum_teleportation_matrix import MacroscopicQuantumTeleportationMatrix, QuantumTeleportationReport
-from .subquantum_vacuum_superconductor_forge import SubquantumVacuumSuperconductorForge, SuperconductorForgeReport
-from .relativistic_kerr_black_hole_penrose_harvester import RelativisticKerrBlackHolePenroseHarvester, PenroseHarvesterReport
-from .hyperdimensional_qualia_phenomenology_synthesizer import HyperdimensionalQualiaPhenomenologySynthesizer, QualiaSynthesisReport
-from .galactic_scale_stellar_engine_shkadov_thruster import GalacticScaleStellarEngineShkadovThruster, StellarEngineReport
-from .cosmic_inflationary_multiverse_topologist import CosmicInflationaryMultiverseTopologist, MultiverseTopologistReport
-from .transfinite_higher_category_topos_prover import TransfiniteHigherCategoryToposProver, HigherToposReport
-from .supreme_omniversal_singularity_apex_infinite import SupremeOmniversalSingularityApexInfinite, ApexInfiniteSingularityState
-
-
-# v30.0.0 Subsystems #161-#168
-from .intergalactic_supercluster_gravitational_lens_router import IntergalacticSuperclusterGravitationalLensRouter, GravitationalLensRouteReport
-from .subatomic_hypercharge_gauge_boson_transmuter import SubatomicHyperchargeGaugeBosonTransmuter, ElectroweakTransmutationReport
-from .multiverse_superintelligence_telepathic_consensus import MultiverseSuperintelligenceTelepathicConsensus, MultiverseConsensusReport
-from .stellar_plasma_magnetohydrodynamic_fusion_igniter import StellarPlasmaMagnetohydrodynamicFusionIgniter, AneutronicFusionReport
-from .hyperdimensional_semantic_archetype_synthesizer import HyperdimensionalSemanticArchetypeSynthesizer, SemanticArchetypeReport
-from .pan_planetary_climate_equilibrium_governor import PanPlanetaryClimateEquilibriumGovernor, PlanetaryEquilibriumReport
-from .transfinite_constructive_type_theory_oracle import TransfiniteConstructiveTypeTheoryOracle, TypeTheoryOracleReport
-from .absolute_transcendent_omniversal_superintelligence_apex_prime import AbsoluteTranscendentOmniversalSuperintelligenceApexPrime, ApexPrimeSuperintelligenceState
+from .legacy.absolute_omniscience_singularity_hyper_core import *
+from .legacy.absolute_singularity_apex_harmonizer import *
+from .legacy.absolute_transcendence_singularity_omega import *
+from .legacy.absolute_transcendent_omniversal_superintelligence_apex_prime import *
+from .legacy.action_actuator import *
+from .legacy.apex_omniversal_singularity_sovereign_core import *
+from .legacy.api_server import *
+from .legacy.arc_reactor_energy import *
+from .legacy.ast_parser import *
+from .legacy.astrobiological_synthetic_panspermia_director import *
+from .legacy.atmospheric_carbon_mineralization_forge import *
+from .legacy.autonomous_agi_benchmark import *
+from .legacy.autonomous_agi_eval_arena import *
+from .legacy.autonomous_architecture_designer import *
+from .legacy.autonomous_cyber_redteam import *
+from .legacy.autonomous_cybersecurity_soc import *
+from .legacy.autonomous_daemon import *
+from .legacy.autonomous_drug_discovery import *
+from .legacy.autonomous_education_tutor import *
+from .legacy.autonomous_exoplanet_terraform_architect import *
+from .legacy.autonomous_financial_trading_engine import *
+from .legacy.autonomous_legal_advisor import *
+from .legacy.autonomous_materials_scientist import *
+from .legacy.autonomous_scientific_researcher import *
+from .legacy.autonomous_space_colonization_planner import *
+from .legacy.autonomous_space_debris_laser_sweeper import *
+from .legacy.autonomous_supply_chain_optimizer import *
+from .legacy.avengers_persona_swarm import *
+from .legacy.axion_dark_matter_haloscope import *
+from .legacy.biological_simulation import *
+from .legacy.biospheric_megastructure_architect import *
+from .legacy.brain_organoid_simulator import *
+from .legacy.casimir_vacuum_actuator import *
+from .legacy.causal_discovery import *
+from .legacy.chronospatial_topology_rewriter import *
+from .legacy.cli import *
+from .legacy.climate_change_prediction_engine import *
+from .legacy.code_synthesizer import *
+from .legacy.cognitive_core import *
+from .legacy.cooperative_game import *
+from .legacy.cosmic_inflationary_multiverse_topologist import *
+from .legacy.cryogenic_whole_organ_bioprinting_matrix import *
+from .legacy.cryptographic_ledger import *
+from .legacy.dark_matter_detector_engine import *
+from .legacy.digital_twin_earth_simulator import *
+from .legacy.distributed_rpc import *
+from .legacy.dyson_orchestrator import *
+from .legacy.exceptional_point_sensor import *
+from .legacy.exoplanet_detection_analyzer import *
+from .legacy.exotic_quark_gluon_plasma_forge import *
+from .legacy.federated_learning_coordinator import *
+from .legacy.fusion_tokamak_optimizer import *
+from .legacy.galactic_scale_stellar_engine_shkadov_thruster import *
+from .legacy.git_self_evolution import *
+from .legacy.global_multimodal_earth_sensor_grid import *
+from .legacy.global_pandemic_predictor import *
+from .legacy.governance import *
+from .legacy.governance_verifier_engine import *
+from .legacy.graviton_beam_interferometer import *
+from .legacy.hilbert_singularity_supreme import *
+from .legacy.holographic_matter_transmuter import *
+from .legacy.holographic_non_locality_entanglement_hub import *
+from .legacy.hyper_intelligent_species_incubator import *
+from .legacy.hyper_resonant_acoustic_levitator import *
+from .legacy.hyperdimensional_matter_lattice_synthesizer import *
+from .legacy.hyperdimensional_memory_palace import *
+from .legacy.hyperdimensional_qualia_phenomenology_synthesizer import *
+from .legacy.hyperdimensional_semantic_archetype_synthesizer import *
+from .legacy.hyperdimensional_semantic_concept_synthesizer import *
+from .legacy.hyperluminal_warp_bubble_stabilizer import *
+from .legacy.hyperscale_cluster_orchestrator import *
+from .legacy.hyperscale_cxl_fabric import *
+from .legacy.hyperscale_moe_router import *
+from .legacy.hyperspatial_topology_router import *
+from .legacy.industrial_robotics_rtos_controller import *
+from .legacy.infinite_dimensional_hilbert_space_orchestrator import *
+from .legacy.infrastructure import *
+from .legacy.interdimensional_portal_router import *
+from .legacy.intergalactic_supercluster_gravitational_lens_router import *
+from .legacy.interstellar_navigation_computer import *
+from .legacy.javis_voice_multimodal import *
+from .legacy.large_multimodal_model_server import *
+from .legacy.lean_bridge import *
+from .legacy.llm_connector import *
+from .legacy.macro_quantum_coherence_synthesizer import *
+from .legacy.macroscopic_quantum_teleportation_matrix import *
+from .legacy.mcp_protocol_server import *
+from .legacy.mcp_sse_transport import *
+from .legacy.mcp_stdio_transport import *
+from .legacy.mcts_planner import *
+from .legacy.memory_hypergraph import *
+from .legacy.mep_telepathy import *
+from .legacy.molecular_nanofab_assembler import *
+from .legacy.multi_agent_debate import *
+from .legacy.multiverse_superintelligence_telepathic_consensus import *
+from .legacy.multiverse_telepathic_nexus import *
+from .legacy.nas_optimizer import *
+from .legacy.neural_architecture_search_engine import *
+from .legacy.neural_audio_tts import *
+from .legacy.neuromorphic_chip_interface import *
+from .legacy.neuromorphic_retinal_prosthetic_bus import *
+from .legacy.neutrino_deep_core_tomographer import *
+from .legacy.neutrino_deep_space_communication_array import *
+from .legacy.nvidia_gpu_telemetry import *
+from .legacy.ocean_ecosystem_restoration_director import *
+from .legacy.omni_dimensional_qualia_mapper import *
+from .legacy.omni_sentient_world_overseer import *
+from .legacy.omniversal_real_world_actuation_director import *
+from .legacy.omniversal_singularity_apex_nexus import *
+from .legacy.omniversal_singularity_core import *
+from .legacy.optical_bci_neural_bus import *
+from .legacy.os_telemetry_supervisor import *
+from .legacy.p2p_swarm import *
+from .legacy.pan_cosmic_singularity_matrix import *
+from .legacy.pan_planetary_climate_equilibrium_governor import *
+from .legacy.persistent_memory import *
+from .legacy.planck_scale_vacuum_engineer import *
+from .legacy.planetary_climate_actuator import *
+from .legacy.planetary_consciousness_grid import *
+from .legacy.planetary_defense_grid import *
+from .legacy.planetary_geo_magnetic_dynamo_restorer import *
+from .legacy.plasma_wakefield_accelerator import *
+from .legacy.protein_folding_simulator import *
+from .legacy.provable_alignment_auditor import *
+from .legacy.qiskit_quantum_annealer import *
+from .legacy.qiskit_quantum_backend import *
+from .legacy.quantum_cryptography_engine import *
+from .legacy.quantum_dot_cellular_automata_core import *
+from .legacy.quantum_entanglement_power_beamer import *
+from .legacy.quantum_error_correction_engine import *
+from .legacy.quantum_gravity_spacetime import *
+from .legacy.quantum_thermo import *
+from .legacy.real_cryptographic_hsm_enclave import *
+from .legacy.real_dna_sequencing_pipeline import *
+from .legacy.real_hardware_fpga_accelerator import *
+from .legacy.real_qpu_cloud_hardware_bridge import *
+from .legacy.real_telecom_5g_6g_ntn_core import *
+from .legacy.realtime_satellite_earth_observation import *
+from .legacy.relativistic_kerr_black_hole_penrose_harvester import *
+from .legacy.robotics_iot import *
+from .legacy.rsi_engine import *
+from .legacy.sandbox_vm import *
+from .legacy.schemas import *
+from .legacy.self_compilation import *
+from .legacy.self_evolving_asi_runtime import *
+from .legacy.self_evolving_codegen import *
+from .legacy.space_lagrange_mesh import *
+from .legacy.space_solar_swarm_director import *
+from .legacy.spacetime_wormhole_router import *
+from .legacy.stellar_engineering_and_star_lifter import *
+from .legacy.stellar_gravitational_wave_array import *
+from .legacy.stellar_plasma_magnetohydrodynamic_fusion_igniter import *
+from .legacy.stress_benchmark import *
+from .legacy.subatomic_gluon_string_tensor_solver import *
+from .legacy.subatomic_hypercharge_gauge_boson_transmuter import *
+from .legacy.subquantum_information_retriever import *
+from .legacy.subquantum_vacuum_superconductor_forge import *
+from .legacy.subsurface_lithosphere_geothermal_extractor import *
+from .legacy.superstring_m_theory_integrator import *
+from .legacy.supreme_omniversal_singularity_apex_infinite import *
+from .legacy.swarm_robotics_coordinator import *
+from .legacy.synthetic_biology_designer import *
+from .legacy.synthetic_consciousness_validator import *
+from .legacy.synthetic_galaxy_sim import *
+from .legacy.tachyon_hyperluminal_relay import *
+from .legacy.tachyon_retrocausal_qec import *
+from .legacy.temporal_causality_loop_debugger import *
+from .legacy.topological_quantum_braiding_engine import *
+from .legacy.transcendental_logic_prover import *
+from .legacy.transfinite_constructive_type_theory_oracle import *
+from .legacy.transfinite_higher_category_topos_prover import *
+from .legacy.transfinite_ordinal_mathematician import *
+from .legacy.unified_gravity_field_manipulator import *
+from .legacy.universal_cognitive_architecture import *
+from .legacy.universal_entropy_reversal_accelerator import *
+from .legacy.universal_holographic_consciousness_synthesizer import *
+from .legacy.universal_language_translator import *
+from .legacy.universal_telemetry_mesh import *
+from .legacy.verifier import *
+from .legacy.webxr_spatial_hud import *
+from .legacy.world_model import *
+from .legacy.zero_carbon_grid_optimizer import *
+from .legacy.zero_knowledge_snark_prover import *
+from .legacy.zk_stark import *
 
 __all__ = [
-    "Proposal",
-    "VerificationResult",
-    "SystemState",
-    "SymbolicExpressionEvaluator",
-    "SymbolicVerifier",
-    "NeuralSpeculator",
-    "NeuralSymbolicReasoner",
-    "OptimizationCandidate",
-    "RSIController",
-    "DynamicHypergraphMemory",
-    "PersistentHypergraphStorage",
-    "MCTSPlanner",
-    "AlignmentGovernor",
-    "AdversarialDebateArena",
-    "DebateVerdict",
-    "CounterfactualWorldSimulator",
-    "SimulationBranch",
-    "ActionActuatorEngine",
-    "ToolExecutionResult",
-    "JITMicrokernelSynthesizer",
-    "KernelCandidate",
-    "InterconnectFabric",
-    "ComputeNode",
-    "AutonomousSuperintelligenceDaemon",
-    "ZASIWebServer",
-    "DistributedWorkerPool",
-    "RaftConsensusCoordinator",
-    "FoundationModelAdapter",
-    "LeanTheoremProverBridge",
-    "FormalProofResult",
-    "AdversarialStressTester",
-    "StressTestReport",
-    "AutonomousSelfCompiler",
-    "CapabilityDisabled",
-    "CompilationResult",
-    "CausalDiscoveryEngine",
-    "CausalDAG",
-    "MultiAgentGameSolver",
-    "ParetoSolution",
-    "CryptographicInvariantLedger",
-    "LedgerBlock",
-    "QuantumThermodynamicOptimizer",
-    "QuantumStateVector",
-    "P2PGossipSwarm",
-    "SwarmPeer",
-    "AutonomousCodeSynthesizer",
-    "SynthesizedModule",
-    "MicroVMSandbox",
-    "SandboxExecResult",
-    "ZeroKnowledgeProofEngine",
-    "ZKProof",
-    "ModelEpistemicProtocol",
-    "LatentThoughtPacket",
-    "DysonComputeOrchestrator",
-    "ComputeConstellation",
-    "JAVISVoiceMultimodalInterface",
-    "AudioWaveformPacket",
-    "MultimodalVisualFrame",
-    "JAVISResponse",
-    "RoboticsIoTController",
-    "GCodeBlock",
-    "FacilitySensorReading",
-    "OSTelemetrySupervisor",
-    "SystemHostMetrics",
-    "MultiPersonaTacticalSwarm",
-    "TacticalSwarmReport",
-    "NeuralAudioVoiceEngine",
-    "WakeWordEvent",
-    "ArcReactorEnergyOptimizer",
-    "ArcReactorStatus",
-    "GitSelfEvolutionManager",
-    "GitCommitReport",
-    "WebXRSpatialHUDStreamer",
-    "SpatialGestureEvent",
-    "AutonomousAGIBenchmarkSuite",
-    "BenchmarkScore",
-    "HyperscaleCXLFabricManager",
-    "AcceleratorNode",
-    "SpaceLagrangeMeshOrchestrator",
-    "OrbitalRelayStation",
-    "BiologicalSimulationEngine",
-    "BioMolecularState",
-    "FusionTokamakOptimizer",
-    "TokamakPlasmaState",
-    "PlanetaryClimateActuator",
-    "ClimateActuationPlan",
-    "OpticalBCINeuralBus",
-    "NeuralSignalFrame",
-    "SyntheticGalaxySimulator",
-    "CosmicSimulationSlice",
-    "QuantumGravitySpacetimeEngine",
-    "SpacetimeManifoldState",
-    "MolecularNanofabAssembler",
-    "NanofabricationBatch",
-    "HyperspatialTopologyRouter",
-    "HyperspatialRoutingPacket",
-    "UniversalTelemetryMesh",
-    "UniversalTelemetrySnapshot",
-    "QiskitQuantumBridge",
-    "QuantumCircuitExecutionResult",
-    "NVIDIAGPUTelemetrySupervisor",
-    "GPUDeviceMetrics",
-    "MCPProtocolServer",
-    "MCPToolDefinition",
-    "MCPStdioTransport",
-    "MCPSSETransport",
-    "QuantumAnnealingEngine",
-    "AnnealingTrajectoryResult",
-    "HyperscaleClusterOrchestrator",
-    "ClusterPodTopology",
-    "PolyglotSelfEvolvingCodeGen",
-    "GeneratedPolyglotModule",
-    "AutonomousAGIEvalArena",
-    "ArenaEvaluationReport",
-    "RecursiveZKSNARKProver",
-    "RecursiveSNARKProof",
-    "PlanetaryConsciousnessGrid",
-    "PlanetaryConsciousnessSnapshot",
-    "HyperscaleMoERouter",
-    "MoERoutingTelemetry",
-    "AutonomousCyberRedTeam",
-    "CyberDefenseReport",
-    "SpaceSolarSwarmDirector",
-    "SolarBeamTelemetry",
-    "MultiverseTelepathicNexus",
-    "MultiverseNexusState",
-    "OmniversalSingularityCore",
-    "SingularitySynthesisState",
-    "GovernanceVerifierEngine",
-    "PlanAComplianceReport",
-    "ProvableAlignmentAuditor",
-    "ProvableAlignmentCertificate",
-    "SelfEvolvingASIRuntime",
-    "RuntimeTelemetryPulse",
-    "TranscendentalLogicProver",
-    "FormalSheafProof",    "NeuromorphicChipInterface",
-    "NeuromorphicExecutionReport",
-    "FederatedLearningCoordinator",
-    "FederatedRoundReport",
-    "AutonomousDrugDiscoveryPipeline",
-    "DrugCandidateReport",
-    "QuantumCryptographyEngine",
-    "QKDKeyExchangeReport",
-    "PlanetaryDefenseGrid",
-    "NearEarthObject",
-    "DeflectionMissionPlan",
-    "SyntheticConsciousnessValidator",
-    "ConsciousnessCertificate",
-    "HyperdimensionalMemoryPalace",
-    "HypervectorMemoryTrace",
-    "AutonomousMaterialsScientist",
-    "MaterialsDiscoveryReport",    "LargeMultimodalModelServer",
-    "MultimodalInferenceResult",
-    "AutonomousScientificResearcher",
-    "ScientificDiscoveryReport",
-    "NeuralArchitectureSearchEngine",
-    "NASArchitectureResult",
-    "ProteinFoldingSimulator",
-    "ProteinComplexStructure",
-    "AutonomousFinancialTradingEngine",
-    "TradingPerformanceReport",
-    "ExoplanetDetectionAnalyzer",
-    "ExoplanetReport",
-    "UniversalLanguageTranslator",
-    "TranslationResult",
-    "SwarmRoboticsCoordinator",
-    "SwarmMissionReport",
-    "AutonomousLegalAdvisor", "LegalAnalysisReport",
-    "ClimateChangePredictionEngine", "ClimateProjectionReport",
-    "BrainOrganoidSimulator", "NeuralOrganoidState",
-    "AutonomousCybersecuritySOC", "SOCIncidentReport",
-    "QuantumErrorCorrectionEngine", "QECLogicalQubitReport",
-    "AutonomousSupplyChainOptimizer", "SupplyChainOptimizationReport",
-    "DigitalTwinEarthSimulator", "DigitalTwinEarthSnapshot",
-    "UniversalCognitiveArchitecture", "CognitiveSynthesisReport",
-    "AutonomousEducationTutor", "LearningSessionReport",
-    "InterstellarNavigationComputer", "InterstellarMissionPlan",
-    "SyntheticBiologyDesigner", "GenomeDesignReport",
-    "GlobalPandemicPredictor", "PandemicForecastReport",
-    "AutonomousArchitectureDesigner", "ArchitecturalDesignReport",
-    "ZeroCarbonGridOptimizer", "GridOptimizationReport",
-    "AutonomousSpaceColonizationPlanner", "ColonyDesignReport",
-    "OmniSentientWorldOverseer", "PlanetaryOversightReport",
-    "HolographicMatterTransmuter", "MatterTransmutationReport",
-    "DarkMatterDetectorEngine", "DarkMatterDetectionReport",
-    "OceanEcosystemRestorationDirector", "OceanRestorationReport",
-    "UnifiedGravityFieldManipulator", "GravitationalFieldReport",
-    "TemporalCausalityLoopDebugger", "CausalityLoopAuditReport",
-    "InterdimensionalPortalRouter", "HyperDimensionalPortalPacket",
-    "UniversalHolographicConsciousnessSynthesizer", "HolographicConsciousnessState",
-    "AbsoluteSingularityApexHarmonizer", "AbsoluteSingularityHarmonicReport",
-    "SuperstringMTheoryIntegrator", "SuperstringCompactificationReport",
-    "TachyonHyperluminalRelay", "HyperluminalPacketTrace",
-    "PlanckScaleVacuumEngineer", "VacuumHarvestingReport",
-    "OmniDimensionalQualiaMapper", "QualiaManifoldState",
-    "UniversalEntropyReversalAccelerator", "EntropyReversalReport",
-    "StellarEngineeringAndStarLifter", "StarLiftingReport",
-    "HyperIntelligentSpeciesIncubator", "SpeciesIncubationReport",
-    "PanCosmicSingularityMatrix", "PanCosmicSingularityState",
-    "ChronospatialTopologyRewriter", "TopologySurgeryReport",
-    "QuantumEntanglementPowerBeamer", "EntangledPowerBeamReport",
-    "ExoticQuarkGluonPlasmaForge", "QGPForgeReport",
-    "HyperResonantAcousticLevitator", "TractorBeamMatrixReport",
-    "SubquantumInformationRetriever", "BohmianTrajectoryReport",
-    "BiosphericMegastructureArchitect", "MegastructureDesignReport",
-    "TransfiniteOrdinalMathematician", "TransfiniteProofReport",
-    "OmniversalSingularityApexNexus", "OmniversalNexusApexReport",
-    "GravitonBeamInterferometer", "GravitonBeamReport",
-    "HyperluminalWarpBubbleStabilizer", "WarpBubbleStabilizationReport",
-    "NeutrinoDeepCoreTomographer", "NeutrinoTomographyReport",
-    "MacroQuantumCoherenceSynthesizer", "MacroQuantumCoherenceReport",
-    "AstrobiologicalSyntheticPanspermiaDirector", "PanspermiaMissionReport",
-    "HyperdimensionalSemanticConceptSynthesizer", "SemanticConceptReport",
-    "InfiniteDimensionalHilbertSpaceOrchestrator", "HilbertSpaceOperatorReport",
-    "AbsoluteTranscendenceSingularityOmega", "AbsoluteOmegaSingularityReport",
-    "RealHardwareFPGAAccelerator", "FPGAHardwareTelemetry",
-    "RealQPUCloudHardwareBridge", "RealQPUExecutionReport",
-    "RealtimeSatelliteEarthObservation", "SatelliteObservationTelemetry",
-    "IndustrialRoboticsRTOSController", "RTOSControllerReport",
-    "RealTelecom5G6GNTNCore", "NetworkSliceTelemetry",
-    "RealDNASequencingPipeline", "GenomicSequencingReport",
-    "RealCryptographicHSMEnclave", "HSMEnclaveAttestation",
-    "OmniversalRealWorldActuationDirector", "RealWorldActuationState",
-    "GlobalMultimodalEarthSensorGrid", "PlanetarySensorTelemetry",
-    "TopologicalQuantumBraidingEngine", "TopologicalBraidingReport",
-    "SubsurfaceLithosphereGeothermalExtractor", "GeothermalExtractionReport",
-    "NeuromorphicRetinalProstheticBus", "VisualProstheticTelemetry",
-    "AtmosphericCarbonMineralizationForge", "CarbonMineralizationReport",
-    "AutonomousSpaceDebrisLaserSweeper", "OrbitalDebrisSweeperReport",
-    "CryogenicWholeOrganBioprintingMatrix", "OrganBioprintingReport",
-    "AbsoluteOmniscienceSingularityHyperCore", "SingularityHyperCoreState",
-    "NeutrinoDeepSpaceCommunicationArray", "NeutrinoCommsReport",
-    "HyperdimensionalMatterLatticeSynthesizer", "MatterLatticeReport",
-    "PlanetaryGeoMagneticDynamoRestorer", "GeomagneticDynamoReport",
-    "QuantumDotCellularAutomataCore", "QCALogicReport",
-    "AutonomousExoplanetTerraformArchitect", "TerraformingProjectReport",
-    "SubatomicGluonStringTensorSolver", "QCDLatticeReport",
-    "HolographicNonLocalityEntanglementHub", "NonLocalEntanglementReport",
-    "ApexOmniversalSingularitySovereignCore", "SovereignSingularityState",
-    "MacroscopicQuantumTeleportationMatrix", "QuantumTeleportationReport",
-    "SubquantumVacuumSuperconductorForge", "SuperconductorForgeReport",
-    "RelativisticKerrBlackHolePenroseHarvester", "PenroseHarvesterReport",
-    "HyperdimensionalQualiaPhenomenologySynthesizer", "QualiaSynthesisReport",
-    "GalacticScaleStellarEngineShkadovThruster", "StellarEngineReport",
-    "CosmicInflationaryMultiverseTopologist", "MultiverseTopologistReport",
-    "TransfiniteHigherCategoryToposProver", "HigherToposReport",
-    "SupremeOmniversalSingularityApexInfinite", "ApexInfiniteSingularityState",
-    "IntergalacticSuperclusterGravitationalLensRouter", "GravitationalLensRouteReport",
-    "SubatomicHyperchargeGaugeBosonTransmuter", "ElectroweakTransmutationReport",
-    "MultiverseSuperintelligenceTelepathicConsensus", "MultiverseConsensusReport",
-    "StellarPlasmaMagnetohydrodynamicFusionIgniter", "AneutronicFusionReport",
-    "HyperdimensionalSemanticArchetypeSynthesizer", "SemanticArchetypeReport",
-    "PanPlanetaryClimateEquilibriumGovernor", "PlanetaryEquilibriumReport",
-    "TransfiniteConstructiveTypeTheoryOracle", "TypeTheoryOracleReport",
-    "AbsoluteTranscendentOmniversalSuperintelligenceApexPrime", "ApexPrimeSuperintelligenceState",
+    "absolute_omniscience_singularity_hyper_core",
+    "absolute_singularity_apex_harmonizer",
+    "absolute_transcendence_singularity_omega",
+    "absolute_transcendent_omniversal_superintelligence_apex_prime",
+    "action_actuator",
+    "apex_omniversal_singularity_sovereign_core",
+    "api_server",
+    "arc_reactor_energy",
+    "ast_parser",
+    "astrobiological_synthetic_panspermia_director",
+    "atmospheric_carbon_mineralization_forge",
+    "autonomous_agi_benchmark",
+    "autonomous_agi_eval_arena",
+    "autonomous_architecture_designer",
+    "autonomous_cyber_redteam",
+    "autonomous_cybersecurity_soc",
+    "autonomous_daemon",
+    "autonomous_drug_discovery",
+    "autonomous_education_tutor",
+    "autonomous_exoplanet_terraform_architect",
+    "autonomous_financial_trading_engine",
+    "autonomous_legal_advisor",
+    "autonomous_materials_scientist",
+    "autonomous_scientific_researcher",
+    "autonomous_space_colonization_planner",
+    "autonomous_space_debris_laser_sweeper",
+    "autonomous_supply_chain_optimizer",
+    "avengers_persona_swarm",
+    "axion_dark_matter_haloscope",
+    "biological_simulation",
+    "biospheric_megastructure_architect",
+    "brain_organoid_simulator",
+    "casimir_vacuum_actuator",
+    "causal_discovery",
+    "chronospatial_topology_rewriter",
+    "cli",
+    "climate_change_prediction_engine",
+    "code_synthesizer",
+    "cognitive_core",
+    "cooperative_game",
+    "cosmic_inflationary_multiverse_topologist",
+    "cryogenic_whole_organ_bioprinting_matrix",
+    "cryptographic_ledger",
+    "dark_matter_detector_engine",
+    "digital_twin_earth_simulator",
+    "distributed_rpc",
+    "dyson_orchestrator",
+    "exceptional_point_sensor",
+    "exoplanet_detection_analyzer",
+    "exotic_quark_gluon_plasma_forge",
+    "federated_learning_coordinator",
+    "fusion_tokamak_optimizer",
+    "galactic_scale_stellar_engine_shkadov_thruster",
+    "git_self_evolution",
+    "global_multimodal_earth_sensor_grid",
+    "global_pandemic_predictor",
+    "governance",
+    "governance_verifier_engine",
+    "graviton_beam_interferometer",
+    "hilbert_singularity_supreme",
+    "holographic_matter_transmuter",
+    "holographic_non_locality_entanglement_hub",
+    "hyper_intelligent_species_incubator",
+    "hyper_resonant_acoustic_levitator",
+    "hyperdimensional_matter_lattice_synthesizer",
+    "hyperdimensional_memory_palace",
+    "hyperdimensional_qualia_phenomenology_synthesizer",
+    "hyperdimensional_semantic_archetype_synthesizer",
+    "hyperdimensional_semantic_concept_synthesizer",
+    "hyperluminal_warp_bubble_stabilizer",
+    "hyperscale_cluster_orchestrator",
+    "hyperscale_cxl_fabric",
+    "hyperscale_moe_router",
+    "hyperspatial_topology_router",
+    "industrial_robotics_rtos_controller",
+    "infinite_dimensional_hilbert_space_orchestrator",
+    "infrastructure",
+    "interdimensional_portal_router",
+    "intergalactic_supercluster_gravitational_lens_router",
+    "interstellar_navigation_computer",
+    "javis_voice_multimodal",
+    "large_multimodal_model_server",
+    "lean_bridge",
+    "llm_connector",
+    "macro_quantum_coherence_synthesizer",
+    "macroscopic_quantum_teleportation_matrix",
+    "mcp_protocol_server",
+    "mcp_sse_transport",
+    "mcp_stdio_transport",
+    "mcts_planner",
+    "memory_hypergraph",
+    "mep_telepathy",
+    "molecular_nanofab_assembler",
+    "multi_agent_debate",
+    "multiverse_superintelligence_telepathic_consensus",
+    "multiverse_telepathic_nexus",
+    "nas_optimizer",
+    "neural_architecture_search_engine",
+    "neural_audio_tts",
+    "neuromorphic_chip_interface",
+    "neuromorphic_retinal_prosthetic_bus",
+    "neutrino_deep_core_tomographer",
+    "neutrino_deep_space_communication_array",
+    "nvidia_gpu_telemetry",
+    "ocean_ecosystem_restoration_director",
+    "omni_dimensional_qualia_mapper",
+    "omni_sentient_world_overseer",
+    "omniversal_real_world_actuation_director",
+    "omniversal_singularity_apex_nexus",
+    "omniversal_singularity_core",
+    "optical_bci_neural_bus",
+    "os_telemetry_supervisor",
+    "p2p_swarm",
+    "pan_cosmic_singularity_matrix",
+    "pan_planetary_climate_equilibrium_governor",
+    "persistent_memory",
+    "planck_scale_vacuum_engineer",
+    "planetary_climate_actuator",
+    "planetary_consciousness_grid",
+    "planetary_defense_grid",
+    "planetary_geo_magnetic_dynamo_restorer",
+    "plasma_wakefield_accelerator",
+    "protein_folding_simulator",
+    "provable_alignment_auditor",
+    "qiskit_quantum_annealer",
+    "qiskit_quantum_backend",
+    "quantum_cryptography_engine",
+    "quantum_dot_cellular_automata_core",
+    "quantum_entanglement_power_beamer",
+    "quantum_error_correction_engine",
+    "quantum_gravity_spacetime",
+    "quantum_thermo",
+    "real_cryptographic_hsm_enclave",
+    "real_dna_sequencing_pipeline",
+    "real_hardware_fpga_accelerator",
+    "real_qpu_cloud_hardware_bridge",
+    "real_telecom_5g_6g_ntn_core",
+    "realtime_satellite_earth_observation",
+    "relativistic_kerr_black_hole_penrose_harvester",
+    "robotics_iot",
+    "rsi_engine",
+    "sandbox_vm",
+    "schemas",
+    "self_compilation",
+    "self_evolving_asi_runtime",
+    "self_evolving_codegen",
+    "space_lagrange_mesh",
+    "space_solar_swarm_director",
+    "spacetime_wormhole_router",
+    "stellar_engineering_and_star_lifter",
+    "stellar_gravitational_wave_array",
+    "stellar_plasma_magnetohydrodynamic_fusion_igniter",
+    "stress_benchmark",
+    "subatomic_gluon_string_tensor_solver",
+    "subatomic_hypercharge_gauge_boson_transmuter",
+    "subquantum_information_retriever",
+    "subquantum_vacuum_superconductor_forge",
+    "subsurface_lithosphere_geothermal_extractor",
+    "superstring_m_theory_integrator",
+    "supreme_omniversal_singularity_apex_infinite",
+    "swarm_robotics_coordinator",
+    "synthetic_biology_designer",
+    "synthetic_consciousness_validator",
+    "synthetic_galaxy_sim",
+    "tachyon_hyperluminal_relay",
+    "tachyon_retrocausal_qec",
+    "temporal_causality_loop_debugger",
+    "topological_quantum_braiding_engine",
+    "transcendental_logic_prover",
+    "transfinite_constructive_type_theory_oracle",
+    "transfinite_higher_category_topos_prover",
+    "transfinite_ordinal_mathematician",
+    "unified_gravity_field_manipulator",
+    "universal_cognitive_architecture",
+    "universal_entropy_reversal_accelerator",
+    "universal_holographic_consciousness_synthesizer",
+    "universal_language_translator",
+    "universal_telemetry_mesh",
+    "verifier",
+    "webxr_spatial_hud",
+    "world_model",
+    "zero_carbon_grid_optimizer",
+    "zero_knowledge_snark_prover",
+    "zk_stark",
 ]
-
-from .tachyon_retrocausal_qec import TachyonRetrocausalQECMatrix, RetrocausalQECReport
-from .stellar_gravitational_wave_array import StellarGravitationalWaveArray, GravitationalWaveSurveyReport
-from .plasma_wakefield_accelerator import PlasmaWakefieldPositronAccelerator, PlasmaWakefieldReport
-from .casimir_vacuum_actuator import QuantumVacuumCasimirActuator, CasimirActuatorReport
-from .axion_dark_matter_haloscope import TransGalacticAxionHaloscope, AxionHaloscopeReport
-from .exceptional_point_sensor import NonHermitianExceptionalPointSensor, ExceptionalPointReport
-from .spacetime_wormhole_router import SpacetimeWormholeRouter, WormholeGeodesicReport
-from .hilbert_singularity_supreme import InfiniteHilbertSingularitySupreme, HilbertSingularitySupremeReport

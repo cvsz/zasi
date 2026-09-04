@@ -717,7 +717,7 @@ class ModelGatewayTests(unittest.TestCase):
 
 class AgentPlannerTests(unittest.TestCase):
     def setUp(self):
-        from src.control_plane.agent_planner import AgentPlanner
+        from src.control_plane.orchestration.agent_planner import AgentPlanner
         from src.control_plane.execution import ToolDefinition, ToolRegistry
         from src.control_plane.governance.policy import PolicyEngine
 
@@ -728,7 +728,7 @@ class AgentPlannerTests(unittest.TestCase):
         self.registry = ToolRegistry()
         self.policy = PolicyEngine(self.registry.capabilities())
         self.planner = AgentPlanner(registry=self.registry, policy=self.policy, store=self.store)
-        from src.control_plane.agent_tools import register_agent_tools
+        from src.control_plane.orchestration.agent_tools import register_agent_tools
         register_agent_tools(self.registry, self.store)
 
     def tearDown(self):
@@ -807,7 +807,7 @@ class AgentToolsTests(unittest.TestCase):
         self.store.create_tenant("tenant-a")
         self.store.create_principal("principal-a", "tenant-a")
         from src.control_plane.execution import ToolRegistry
-        from src.control_plane.agent_tools import register_agent_tools
+        from src.control_plane.orchestration.agent_tools import register_agent_tools
 
         self.registry = ToolRegistry()
         register_agent_tools(self.registry, self.store)
@@ -921,7 +921,7 @@ class AgentRuntimeTests(unittest.TestCase):
         os.environ.setdefault("ZASI_HOST", "127.0.0.1")
         os.environ.setdefault("ZASI_PORT", "8080")
         os.environ.setdefault("ZASI_API_KEY", "test-key")
-        from src.control_plane.agent_runtime import register_agent_runtime
+        from src.control_plane.orchestration.agent_runtime import register_agent_runtime
         from src.control_plane.config import Settings
         from src.control_plane.execution import ToolRegistry
 

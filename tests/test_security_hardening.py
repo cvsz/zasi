@@ -1,13 +1,13 @@
 import unittest
 
 from backend import server as legacy_server
-from src.javis_voice_multimodal import (
+from src.legacy.javis_voice_multimodal import (
     AudioWaveformPacket,
     JAVISVoiceMultimodalInterface,
     MultimodalVisualFrame,
 )
-from src.sandbox_vm import MicroVMSandbox
-from src.self_compilation import AutonomousSelfCompiler, CapabilityDisabled
+from src.legacy.sandbox_vm import MicroVMSandbox
+from src.legacy.self_compilation import AutonomousSelfCompiler, CapabilityDisabled
 
 
 class SecurityHardeningTests(unittest.TestCase):

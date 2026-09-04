@@ -15,16 +15,16 @@ from __future__ import annotations
 
 from typing import Any, Dict, FrozenSet, Mapping, Tuple
 
-from .agent_models import (
+from ..agent_models import (
     AgentVersionSpec,
     PlanStep,
     TypedAgentPlan,
     action_digest,
     canonicalize_action_payload,
 )
-from .execution import ToolDefinition, ToolRegistry
-from .governance.policy import PolicyEngine
-from .storage import ControlPlaneStore
+from ..execution import ToolDefinition, ToolRegistry
+from ..governance.policy import PolicyEngine
+from ..storage import ControlPlaneStore
 
 
 _RISK_BY_TOOL = {
