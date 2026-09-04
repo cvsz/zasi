@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from .identity import hash_token
 
 
-CURRENT_SCHEMA_VERSION = 11
+CURRENT_SCHEMA_VERSION = 12
 
 
 class NotFoundError(LookupError):
@@ -505,6 +505,68 @@ class ControlPlaneStore:
                     UNIQUE (tenant_id, idempotency_key),
                     UNIQUE (tenant_id, schedule_id, occurrence_key)
                 );
+                CREATE TABLE IF NOT EXISTS agents (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    principal_id TEXT NOT NULL REFERENCES principals(id),
+                    name TEXT NOT NULL,
+                    description TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL DEFAULT 'active',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS agent_versions (
+                    id TEXT PRIMARY KEY,
+                    agent_id TEXT NOT NULL,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    version TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'draft',
+                    system_prompt TEXT NOT NULL DEFAULT '',
+                    allowed_tools_json TEXT NOT NULL DEFAULT '[]',
+                    model_policy_json TEXT NOT NULL DEFAULT '{}',
+                    budget_json TEXT NOT NULL DEFAULT '{}',
+                    digest TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    published_at TEXT,
+                    UNIQUE (agent_id, version)
+                );
+                CREATE TABLE IF NOT EXISTS agent_executions (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    principal_id TEXT NOT NULL REFERENCES principals(id),
+                    agent_id TEXT NOT NULL,
+                    agent_version_id TEXT NOT NULL,
+                    idempotency_key TEXT NOT NULL,
+                    task TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    plan_json TEXT NOT NULL DEFAULT '{}',
+                    model_json TEXT NOT NULL DEFAULT '{}',
+                    knowledge_run_id TEXT,
+                    ticket_run_id TEXT,
+                    result_json TEXT NOT NULL DEFAULT '{}',
+                    error_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    started_at TEXT,
+                    finished_at TEXT,
+                    UNIQUE (tenant_id, idempotency_key)
+                );
+                CREATE TABLE IF NOT EXISTS agent_approvals (
+                    id TEXT PRIMARY KEY,
+                    tenant_id TEXT NOT NULL REFERENCES tenants(id),
+                    execution_id TEXT NOT NULL,
+                    agent_version_id TEXT NOT NULL,
+                    run_id TEXT NOT NULL,
+                    tool_id TEXT NOT NULL,
+                    tool_version TEXT NOT NULL,
+                    action_digest TEXT NOT NULL,
+                    decision TEXT NOT NULL DEFAULT 'pending',
+                    reason TEXT NOT NULL DEFAULT '',
+                    approver_id TEXT,
+                    created_at TEXT NOT NULL,
+                    resolved_at TEXT,
+                    expires_at TEXT NOT NULL,
+                    UNIQUE (tenant_id, execution_id, action_digest)
+                );
                 CREATE INDEX IF NOT EXISTS idx_sessions_tenant
                     ON sessions(tenant_id, status, expires_at);
                 CREATE INDEX IF NOT EXISTS idx_events_tenant_sequence
@@ -537,7 +599,15 @@ class ControlPlaneStore:
                     ON task_runs(tenant_id, task_id, created_at, id);
                 CREATE INDEX IF NOT EXISTS idx_task_runs_claimable
                     ON task_runs(tenant_id, status, lease_until, scheduled_for);
-                """
+                CREATE INDEX IF NOT EXISTS idx_agents_tenant
+                    ON agents(tenant_id, status, created_at);
+                CREATE INDEX IF NOT EXISTS idx_agent_versions_agent
+                    ON agent_versions(agent_id, status, created_at);
+                CREATE INDEX IF NOT EXISTS idx_agent_executions_tenant_status
+                    ON agent_executions(tenant_id, status, created_at);
+                CREATE INDEX IF NOT EXISTS idx_agent_approvals_tenant_decision
+                    ON agent_approvals(tenant_id, decision, expires_at);
+                    """
             )
             tenant_columns = {
                 row["name"]
@@ -616,6 +686,34 @@ class ControlPlaneStore:
                 connection.execute(
                     "ALTER TABLE events ADD COLUMN schema_version INTEGER NOT NULL DEFAULT 1"
                 )
+            if "execution_id" not in event_columns:
+                connection.execute(
+                    "ALTER TABLE events ADD COLUMN execution_id TEXT"
+                )
+            if "agent_version" not in event_columns:
+                connection.execute(
+                    "ALTER TABLE events ADD COLUMN agent_version TEXT"
+                )
+            if "correlation_id" not in event_columns:
+                connection.execute(
+                    "ALTER TABLE events ADD COLUMN correlation_id TEXT"
+                )
+            if "causation_id" not in event_columns:
+                connection.execute(
+                    "ALTER TABLE events ADD COLUMN causation_id TEXT"
+                )
+            if "sensitivity" not in event_columns:
+                connection.execute(
+                    "ALTER TABLE events ADD COLUMN sensitivity TEXT NOT NULL DEFAULT 'tenant'"
+                )
+            if "idempotency_key" not in event_columns:
+                connection.execute(
+                    "ALTER TABLE events ADD COLUMN idempotency_key TEXT"
+                )
+            connection.execute(
+                "CREATE INDEX IF NOT EXISTS idx_events_tenant_execution "
+                "ON events(tenant_id, execution_id, sequence)"
+            )
             outbox_columns = {
                 row["name"]
                 for row in connection.execute("PRAGMA table_info(outbox)").fetchall()
@@ -1379,6 +1477,14 @@ class ControlPlaneStore:
         aggregate_kind: str,
         aggregate_id: str,
         payload: Dict[str, Any],
+        *,
+        execution_id: Optional[str] = None,
+        agent_version: Optional[str] = None,
+        correlation_id: Optional[str] = None,
+        causation_id: Optional[str] = None,
+        sensitivity: str = "tenant",
+        idempotency_key: Optional[str] = None,
+        schema_version: int = 1,
     ) -> Dict[str, Any]:
         payload_json = json.dumps(
             payload,
@@ -1408,6 +1514,14 @@ class ControlPlaneStore:
                     payload=payload,
                     now=now,
                     event_id=event_id,
+                    visibility="tenant",
+                    schema_version=schema_version,
+                    execution_id=execution_id,
+                    agent_version=agent_version,
+                    correlation_id=correlation_id,
+                    causation_id=causation_id,
+                    sensitivity=sensitivity,
+                    idempotency_key=idempotency_key,
                 )
                 connection.execute("COMMIT")
             except Exception:
@@ -1433,11 +1547,19 @@ class ControlPlaneStore:
         event_id: str,
         visibility: str = "tenant",
         schema_version: int = 1,
+        execution_id: Optional[str] = None,
+        agent_version: Optional[str] = None,
+        correlation_id: Optional[str] = None,
+        causation_id: Optional[str] = None,
+        sensitivity: str = "tenant",
+        idempotency_key: Optional[str] = None,
     ) -> Dict[str, Any]:
         if visibility not in {"tenant", "workspace", "principal"}:
             raise ValueError("invalid event visibility")
         if not 1 <= schema_version <= 100:
             raise ValueError("invalid event schema version")
+        if sensitivity not in {"tenant", "workspace", "principal"}:
+            raise ValueError("invalid event sensitivity")
         sequence_lock = getattr(connection, "lock_event_sequence", None)
         if sequence_lock is not None:
             sequence_lock(tenant_id)
@@ -1448,6 +1570,8 @@ class ControlPlaneStore:
             (tenant_id,),
         ).fetchone()
         sequence = int(row["next_sequence"])
+        if not correlation_id:
+            correlation_id = event_id
         connection.execute(
             "INSERT INTO audit_records("
             "id, tenant_id, actor_kind, actor_id, action, target, outcome, metadata_json, created_at"
@@ -1467,8 +1591,9 @@ class ControlPlaneStore:
         connection.execute(
             "INSERT INTO events("
             "id, tenant_id, sequence, type, aggregate_kind, aggregate_id, "
-            "actor_kind, actor_id, payload_json, visibility, schema_version, created_at"
-            ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "actor_kind, actor_id, payload_json, visibility, schema_version, created_at, "
+            "execution_id, agent_version, correlation_id, causation_id, sensitivity, idempotency_key"
+            ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 event_id,
                 tenant_id,
@@ -1482,6 +1607,12 @@ class ControlPlaneStore:
                 visibility,
                 schema_version,
                 now,
+                execution_id,
+                agent_version,
+                correlation_id,
+                causation_id,
+                sensitivity,
+                idempotency_key,
             ),
         )
         connection.execute(
@@ -1500,6 +1631,12 @@ class ControlPlaneStore:
             "payload": payload,
             "visibility": visibility,
             "schema_version": schema_version,
+            "execution_id": execution_id,
+            "agent_version": agent_version,
+            "correlation_id": correlation_id,
+            "causation_id": causation_id,
+            "sensitivity": sensitivity,
+            "idempotency_key": idempotency_key,
             "occurred_at": now,
         }
 
@@ -2019,12 +2156,50 @@ class ControlPlaneStore:
         return row is not None
 
     def list_audit(
-        self, tenant_id: str, limit: int = 100, after: Optional[str] = None
+        self,
+        tenant_id: str,
+        limit: int = 100,
+        after: Optional[str] = None,
+        execution_id: Optional[str] = None,
+        event_type: Optional[str] = None,
+        sensitivity: Optional[str] = None,
+        since: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         if not 1 <= limit <= 1000:
             raise ValueError("invalid audit limit")
-        query = "SELECT * FROM audit_records WHERE tenant_id = ?"
+        if sensitivity is not None and sensitivity not in {"tenant", "workspace", "principal"}:
+            raise ValueError("invalid sensitivity filter")
+        if since is not None:
+            try:
+                datetime.fromisoformat(since)
+            except ValueError as exc:
+                raise ValueError("invalid audit since timestamp") from exc
+        if execution_id is not None and not isinstance(execution_id, str):
+            raise ValueError("invalid execution_id filter")
+        if event_type is not None and (
+            not isinstance(event_type, str) or not event_type or len(event_type) > 128
+        ):
+            raise ValueError("invalid event_type filter")
+        query = (
+            "SELECT a.id, a.tenant_id, a.actor_kind, a.actor_id, a.action, a.target, "
+            "a.outcome, a.metadata_json, a.created_at, e.execution_id, e.type, "
+            "e.sensitivity FROM audit_records a "
+            "LEFT JOIN events e ON e.id = 'evt_' || substr(a.id, 5) AND e.tenant_id = a.tenant_id "
+            "WHERE a.tenant_id = ?"
+        )
         parameters: List[Any] = [tenant_id]
+        if execution_id is not None:
+            query += " AND e.execution_id = ?"
+            parameters.append(execution_id)
+        if event_type is not None:
+            query += " AND e.type = ?"
+            parameters.append(event_type)
+        if sensitivity is not None:
+            query += " AND e.sensitivity = ?"
+            parameters.append(sensitivity)
+        if since is not None:
+            query += " AND a.created_at >= ?"
+            parameters.append(since)
         if after:
             if "|" in after:
                 after_created_at, after_id = after.rsplit("|", 1)
@@ -2034,7 +2209,7 @@ class ControlPlaneStore:
                     datetime.fromisoformat(after_created_at)
                 except ValueError as exc:
                     raise ValueError("invalid audit cursor") from exc
-                query += " AND (created_at < ? OR (created_at = ? AND id < ?))"
+                query += " AND (a.created_at < ? OR (a.created_at = ? AND a.id < ?))"
                 parameters.extend([after_created_at, after_created_at, after_id])
             else:
                 # Accept the pre-cursor timestamp form during migration. New
@@ -2043,9 +2218,9 @@ class ControlPlaneStore:
                     datetime.fromisoformat(after)
                 except ValueError as exc:
                     raise ValueError("invalid audit cursor") from exc
-                query += " AND created_at < ?"
+                query += " AND a.created_at < ?"
                 parameters.append(after)
-        query += " ORDER BY created_at DESC, id DESC LIMIT ?"
+        query += " ORDER BY a.created_at DESC, a.id DESC LIMIT ?"
         parameters.append(limit)
         with self._lock:
             rows = self._conn().execute(query, parameters).fetchall()
@@ -2058,6 +2233,9 @@ class ControlPlaneStore:
                 "target": row["target"],
                 "outcome": row["outcome"],
                 "metadata": json.loads(row["metadata_json"]),
+                "execution_id": row["execution_id"] if "execution_id" in row.keys() else None,
+                "event_type": row["type"] if "type" in row.keys() else None,
+                "sensitivity": row["sensitivity"] if "sensitivity" in row.keys() else None,
                 "created_at": row["created_at"],
             }
             for row in rows
@@ -4909,6 +5087,12 @@ class ControlPlaneStore:
                     "payload": json.loads(row["payload_json"]),
                     "visibility": row["visibility"],
                     "schema_version": row["schema_version"],
+                    "execution_id": row["execution_id"],
+                    "agent_version": row["agent_version"],
+                    "correlation_id": row["correlation_id"] or row["id"],
+                    "causation_id": row["causation_id"],
+                    "sensitivity": row["sensitivity"],
+                    "idempotency_key": row["idempotency_key"],
                     "occurred_at": row["created_at"],
                 }
             )
@@ -6276,3 +6460,628 @@ class ControlPlaneStore:
             except Exception:
                 connection.execute("ROLLBACK")
                 raise
+
+    # ------------------------------------------------------------------ agents
+    @staticmethod
+    def _agent_record(row: sqlite3.Row) -> Dict[str, Any]:
+        return {
+            "agent_id": row["id"],
+            "tenant_id": row["tenant_id"],
+            "principal_id": row["principal_id"],
+            "name": row["name"],
+            "description": row["description"],
+            "status": row["status"],
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        }
+
+    @staticmethod
+    def _agent_version_record(row: sqlite3.Row) -> Dict[str, Any]:
+        return {
+            "version_id": row["id"],
+            "agent_id": row["agent_id"],
+            "tenant_id": row["tenant_id"],
+            "version": row["version"],
+            "status": row["status"],
+            "system_prompt": row["system_prompt"],
+            "allowed_tools": json.loads(row["allowed_tools_json"]),
+            "model_policy": json.loads(row["model_policy_json"]),
+            "budget": json.loads(row["budget_json"]),
+            "digest": row["digest"],
+            "created_at": row["created_at"],
+            "published_at": row["published_at"],
+        }
+
+    @staticmethod
+    def _agent_execution_record(row: sqlite3.Row) -> Dict[str, Any]:
+        return {
+            "execution_id": row["id"],
+            "tenant_id": row["tenant_id"],
+            "principal_id": row["principal_id"],
+            "agent_id": row["agent_id"],
+            "agent_version_id": row["agent_version_id"],
+            "idempotency_key": row["idempotency_key"],
+            "task": row["task"],
+            "status": row["status"],
+            "plan": json.loads(row["plan_json"]),
+            "model": json.loads(row["model_json"]),
+            "knowledge_run_id": row["knowledge_run_id"],
+            "ticket_run_id": row["ticket_run_id"],
+            "result": json.loads(row["result_json"]),
+            "error": json.loads(row["error_json"]),
+            "created_at": row["created_at"],
+            "started_at": row["started_at"],
+            "finished_at": row["finished_at"],
+        }
+
+    @staticmethod
+    def _agent_approval_record(row: sqlite3.Row) -> Dict[str, Any]:
+        return {
+            "approval_id": row["id"],
+            "tenant_id": row["tenant_id"],
+            "execution_id": row["execution_id"],
+            "agent_version_id": row["agent_version_id"],
+            "run_id": row["run_id"],
+            "tool_id": row["tool_id"],
+            "tool_version": row["tool_version"],
+            "action_digest": row["action_digest"],
+            "decision": row["decision"],
+            "reason": row["reason"],
+            "approver_id": row["approver_id"],
+            "created_at": row["created_at"],
+            "resolved_at": row["resolved_at"],
+            "expires_at": row["expires_at"],
+        }
+
+    def create_agent(
+        self,
+        *,
+        agent_id: str,
+        tenant_id: str,
+        principal_id: str,
+        name: str,
+        description: str,
+    ) -> Dict[str, Any]:
+        if not name or len(name) > 128:
+            raise ValueError("agent name must be 1-128 chars")
+        now = _timestamp(_utcnow())
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    "INSERT INTO agents(id, tenant_id, principal_id, name, description, "
+                    "status, created_at, updated_at) "
+                    "VALUES(?, ?, ?, ?, ?, 'active', ?, ?)",
+                    (agent_id, tenant_id, principal_id, name, description, now, now),
+                )
+                payload = {
+                    "agent_id": agent_id,
+                    "name": name,
+                    "status": "active",
+                }
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{agent_id}:created:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="principal",
+                    actor_id=principal_id,
+                    action="agent.created",
+                    target=agent_id,
+                    outcome="success",
+                    event_type="agent.created",
+                    aggregate_kind="agent",
+                    aggregate_id=agent_id,
+                    payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        return self.get_agent(agent_id, tenant_id)
+
+    def get_agent(self, agent_id: str, tenant_id: str) -> Dict[str, Any]:
+        with self._lock:
+            row = self._conn().execute(
+                "SELECT * FROM agents WHERE id = ? AND tenant_id = ?",
+                (agent_id, tenant_id),
+            ).fetchone()
+        if row is None:
+            raise NotFoundError("agent not found")
+        return self._agent_record(row)
+
+    def list_agents(self, tenant_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+        if not 1 <= limit <= 1000:
+            raise ValueError("invalid agent limit")
+        with self._lock:
+            rows = self._conn().execute(
+                "SELECT * FROM agents WHERE tenant_id = ? ORDER BY created_at DESC LIMIT ?",
+                (tenant_id, limit),
+            ).fetchall()
+        return [self._agent_record(row) for row in rows]
+
+    def create_agent_version(
+        self,
+        *,
+        version_id: str,
+        agent_id: str,
+        tenant_id: str,
+        version: str,
+        system_prompt: str,
+        allowed_tools: List[str],
+        model_policy: Dict[str, Any],
+        budget: Dict[str, Any],
+        digest: str,
+    ) -> Dict[str, Any]:
+        if not version or not isinstance(version, str):
+            raise ValueError("version must be a non-empty string")
+        if not isinstance(allowed_tools, list) or not allowed_tools:
+            raise ValueError("allowed_tools must be a non-empty list")
+        if not isinstance(system_prompt, str):
+            raise ValueError("system_prompt must be a string")
+        if not isinstance(model_policy, dict):
+            raise ValueError("model_policy must be an object")
+        if not isinstance(budget, dict):
+            raise ValueError("budget must be an object")
+        if not isinstance(digest, str) or not digest:
+            raise ValueError("digest must be a non-empty string")
+        now = _timestamp(_utcnow())
+        allowed_tools_json = json.dumps(
+            list(allowed_tools), sort_keys=False, separators=(",", ":"), allow_nan=False
+        )
+        model_policy_json = json.dumps(
+            dict(model_policy), sort_keys=True, separators=(",", ":"), allow_nan=False
+        )
+        budget_json = json.dumps(dict(budget), sort_keys=True, separators=(",", ":"), allow_nan=False)
+        with self._lock:
+            connection = self._conn()
+            agent_row = connection.execute(
+                "SELECT id FROM agents WHERE id = ? AND tenant_id = ?",
+                (agent_id, tenant_id),
+            ).fetchone()
+            if agent_row is None:
+                raise NotFoundError("agent not found")
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    "INSERT INTO agent_versions(id, agent_id, tenant_id, version, status, "
+                    "system_prompt, allowed_tools_json, model_policy_json, budget_json, "
+                    "digest, created_at) "
+                    "VALUES(?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?)",
+                    (
+                        version_id,
+                        agent_id,
+                        tenant_id,
+                        version,
+                        system_prompt,
+                        allowed_tools_json,
+                        model_policy_json,
+                        budget_json,
+                        digest,
+                        now,
+                    ),
+                )
+                payload = {
+                    "version_id": version_id,
+                    "agent_id": agent_id,
+                    "version": version,
+                    "digest": digest,
+                    "status": "draft",
+                }
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{version_id}:created:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="system",
+                    actor_id="agent",
+                    action="agent.version.created",
+                    target=version_id,
+                    outcome="success",
+                    event_type="agent.version.created",
+                    aggregate_kind="agent_version",
+                    aggregate_id=version_id,
+                    payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                    agent_version=version,
+                )
+                connection.execute("COMMIT")
+            except Exception as error:
+                connection.execute("ROLLBACK")
+                if _is_unique_integrity_error(error):
+                    raise ConflictError("agent version conflicts with an existing record") from error
+                raise
+        return self.get_agent_version(version_id, tenant_id)
+
+    def get_agent_version(self, version_id: str, tenant_id: str) -> Dict[str, Any]:
+        with self._lock:
+            row = self._conn().execute(
+                "SELECT * FROM agent_versions WHERE id = ? AND tenant_id = ?",
+                (version_id, tenant_id),
+            ).fetchone()
+        if row is None:
+            raise NotFoundError("agent version not found")
+        return self._agent_version_record(row)
+
+    def list_agent_versions(self, agent_id: str, tenant_id: str) -> List[Dict[str, Any]]:
+        with self._lock:
+            rows = self._conn().execute(
+                "SELECT * FROM agent_versions WHERE agent_id = ? AND tenant_id = ? "
+                "ORDER BY created_at DESC",
+                (agent_id, tenant_id),
+            ).fetchall()
+        return [self._agent_version_record(row) for row in rows]
+
+    def publish_agent_version(
+        self,
+        *,
+        agent_id: str,
+        version_id: str,
+        tenant_id: str,
+        principal_id: str,
+    ) -> Dict[str, Any]:
+        now = _timestamp(_utcnow())
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                row = connection.execute(
+                    "SELECT * FROM agent_versions WHERE id = ? AND tenant_id = ? AND agent_id = ?",
+                    (version_id, tenant_id, agent_id),
+                ).fetchone()
+                if row is None:
+                    raise NotFoundError("agent version not found")
+                if row["status"] == "published":
+                    connection.execute("COMMIT")
+                    return self._agent_version_record(row)
+                if row["status"] != "draft":
+                    raise ConflictError("agent version is not in draft status")
+                connection.execute(
+                    "UPDATE agent_versions SET status = 'published', published_at = ? "
+                    "WHERE id = ? AND tenant_id = ? AND status = 'draft'",
+                    (now, version_id, tenant_id),
+                )
+                payload = {
+                    "version_id": version_id,
+                    "agent_id": agent_id,
+                    "version": row["version"],
+                    "status": "published",
+                }
+                event_id = "evt_" + hash_token(
+                    f"{tenant_id}:{version_id}:published:{os.urandom(16).hex()}"
+                )[:26]
+                self._append_audited_event_locked(
+                    connection=connection,
+                    tenant_id=tenant_id,
+                    actor_kind="principal",
+                    actor_id=principal_id,
+                    action="agent.version.published",
+                    target=version_id,
+                    outcome="success",
+                    event_type="agent.version.published",
+                    aggregate_kind="agent_version",
+                    aggregate_id=version_id,
+                    payload_json=json.dumps(payload, sort_keys=True, separators=(",", ":")),
+                    payload=payload,
+                    now=now,
+                    event_id=event_id,
+                    agent_version=row["version"],
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        return self.get_agent_version(version_id, tenant_id)
+
+    def create_agent_execution(
+        self,
+        *,
+        execution_id: str,
+        tenant_id: str,
+        principal_id: str,
+        agent_id: str,
+        agent_version_id: str,
+        idempotency_key: str,
+        task: str,
+        plan: Dict[str, Any],
+        model: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        if not idempotency_key or len(idempotency_key) > 256:
+            raise ValueError("idempotency_key must be 1-256 chars")
+        now = _timestamp(_utcnow())
+        plan_json = json.dumps(dict(plan), sort_keys=True, separators=(",", ":"), allow_nan=False)
+        model_json = json.dumps(dict(model), sort_keys=True, separators=(",", ":"), allow_nan=False)
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                version_row = connection.execute(
+                    "SELECT status FROM agent_versions WHERE id = ? AND tenant_id = ?",
+                    (agent_version_id, tenant_id),
+                ).fetchone()
+                if version_row is None:
+                    raise NotFoundError("agent version not found")
+                if version_row["status"] != "published":
+                    raise ConflictError("agent version is not published")
+                connection.execute(
+                    "INSERT INTO agent_executions(id, tenant_id, principal_id, agent_id, "
+                    "agent_version_id, idempotency_key, task, status, plan_json, model_json, "
+                    "created_at) "
+                    "VALUES(?, ?, ?, ?, ?, ?, ?, 'created', ?, ?, ?)",
+                    (
+                        execution_id,
+                        tenant_id,
+                        principal_id,
+                        agent_id,
+                        agent_version_id,
+                        idempotency_key,
+                        task,
+                        plan_json,
+                        model_json,
+                        now,
+                    ),
+                )
+                connection.execute("COMMIT")
+            except Exception as error:
+                connection.execute("ROLLBACK")
+                if _is_unique_integrity_error(error):
+                    raise ConflictError("agent execution idempotency_key has already been used") from error
+                raise
+        return self.get_agent_execution(execution_id, tenant_id)
+
+    def update_agent_execution(
+        self,
+        *,
+        execution_id: str,
+        tenant_id: str,
+        status: str,
+        knowledge_run_id: Optional[str] = None,
+        ticket_run_id: Optional[str] = None,
+        result: Optional[Dict[str, Any]] = None,
+        error: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        now = _timestamp(_utcnow())
+        sets: List[str] = ["status = ?"]
+        params: List[Any] = [status]
+        if knowledge_run_id is not None:
+            sets.append("knowledge_run_id = ?")
+            params.append(knowledge_run_id)
+        if ticket_run_id is not None:
+            sets.append("ticket_run_id = ?")
+            params.append(ticket_run_id)
+        if result is not None:
+            sets.append("result_json = ?")
+            params.append(json.dumps(dict(result), sort_keys=True, separators=(",", ":"), allow_nan=False))
+        if error is not None:
+            sets.append("error_json = ?")
+            params.append(json.dumps(dict(error), sort_keys=True, separators=(",", ":"), allow_nan=False))
+        if status in {"running"} and "started_at" not in sets:
+            sets.append("started_at = ?")
+            params.append(now)
+        if status in {"completed", "rejected", "failed"}:
+            sets.append("finished_at = ?")
+            params.append(now)
+        params.extend([execution_id, tenant_id])
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    f"UPDATE agent_executions SET {', '.join(sets)} "
+                    "WHERE id = ? AND tenant_id = ?",
+                    params,
+                )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+        return self.get_agent_execution(execution_id, tenant_id)
+
+    def get_agent_execution(self, execution_id: str, tenant_id: str) -> Dict[str, Any]:
+        with self._lock:
+            row = self._conn().execute(
+                "SELECT * FROM agent_executions WHERE id = ? AND tenant_id = ?",
+                (execution_id, tenant_id),
+            ).fetchone()
+        if row is None:
+            raise NotFoundError("agent execution not found")
+        return self._agent_execution_record(row)
+
+    def get_agent_execution_by_idempotency(
+        self, tenant_id: str, idempotency_key: str
+    ) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            row = self._conn().execute(
+                "SELECT * FROM agent_executions WHERE tenant_id = ? AND idempotency_key = ?",
+                (tenant_id, idempotency_key),
+            ).fetchone()
+        if row is None:
+            return None
+        return self._agent_execution_record(row)
+
+    def list_agent_executions(
+        self, tenant_id: str, agent_id: Optional[str] = None, limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        if not 1 <= limit <= 1000:
+            raise ValueError("invalid execution limit")
+        with self._lock:
+            if agent_id is not None:
+                rows = self._conn().execute(
+                    "SELECT * FROM agent_executions WHERE tenant_id = ? AND agent_id = ? "
+                    "ORDER BY created_at DESC LIMIT ?",
+                    (tenant_id, agent_id, limit),
+                ).fetchall()
+            else:
+                rows = self._conn().execute(
+                    "SELECT * FROM agent_executions WHERE tenant_id = ? "
+                    "ORDER BY created_at DESC LIMIT ?",
+                    (tenant_id, limit),
+                ).fetchall()
+        return [self._agent_execution_record(row) for row in rows]
+
+    def create_agent_approval(
+        self,
+        *,
+        approval_id: str,
+        tenant_id: str,
+        execution_id: str,
+        agent_version_id: str,
+        run_id: str,
+        tool_id: str,
+        tool_version: str,
+        action_digest: str,
+        expires_at: datetime,
+    ) -> Dict[str, Any]:
+        if not action_digest or not isinstance(action_digest, str):
+            raise ValueError("action_digest must be a non-empty string")
+        now = _timestamp(_utcnow())
+        expires = _timestamp(expires_at)
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                connection.execute(
+                    "INSERT INTO agent_approvals(id, tenant_id, execution_id, agent_version_id, "
+                    "run_id, tool_id, tool_version, action_digest, decision, reason, "
+                    "created_at, expires_at) "
+                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?, 'pending', '', ?, ?)",
+                    (
+                        approval_id,
+                        tenant_id,
+                        execution_id,
+                        agent_version_id,
+                        run_id,
+                        tool_id,
+                        tool_version,
+                        action_digest,
+                        now,
+                        expires,
+                    ),
+                )
+                connection.execute("COMMIT")
+            except Exception as error:
+                connection.execute("ROLLBACK")
+                if _is_unique_integrity_error(error):
+                    raise ConflictError("agent approval conflicts with an existing record") from error
+                raise
+        return self.get_agent_approval(approval_id, tenant_id)
+
+    def get_agent_approval(self, approval_id: str, tenant_id: str) -> Dict[str, Any]:
+        with self._lock:
+            row = self._conn().execute(
+                "SELECT * FROM agent_approvals WHERE id = ? AND tenant_id = ?",
+                (approval_id, tenant_id),
+            ).fetchone()
+        if row is None:
+            raise NotFoundError("agent approval not found")
+        return self._agent_approval_record(row)
+
+    def resolve_agent_approval(
+        self,
+        *,
+        approval_id: str,
+        tenant_id: str,
+        approver_id: str,
+        decision: str,
+        reason: str,
+    ) -> Dict[str, Any]:
+        if decision not in {"approved", "rejected"}:
+            raise ValueError("decision must be approved or rejected")
+        if not reason or not isinstance(reason, str) or len(reason) > 2000:
+            raise ValueError("reason must be 1-2000 chars")
+        now = _timestamp(_utcnow())
+        with self._lock:
+            connection = self._conn()
+            connection.execute("BEGIN IMMEDIATE")
+            expired = False
+            try:
+                row = connection.execute(
+                    "SELECT * FROM agent_approvals WHERE id = ? AND tenant_id = ?",
+                    (approval_id, tenant_id),
+                ).fetchone()
+                if row is None:
+                    raise NotFoundError("agent approval not found")
+                if row["decision"] != "pending":
+                    raise ConflictError("agent approval has already been resolved")
+                if _parse_utc_timestamp(row["expires_at"], "approval.expires_at") <= _utcnow():
+                    connection.execute(
+                        "UPDATE agent_approvals SET decision = 'revoked', reason = ?, "
+                        "approver_id = ?, resolved_at = ? WHERE id = ? AND tenant_id = ? "
+                        "AND decision = 'pending'",
+                        ("expired", approver_id, now, approval_id, tenant_id),
+                    )
+                    expired = True
+                else:
+                    connection.execute(
+                        "UPDATE agent_approvals SET decision = ?, reason = ?, approver_id = ?, "
+                        "resolved_at = ? WHERE id = ? AND tenant_id = ? AND decision = 'pending'",
+                        (decision, reason, approver_id, now, approval_id, tenant_id),
+                    )
+                connection.execute("COMMIT")
+            except Exception:
+                connection.execute("ROLLBACK")
+                raise
+            if expired:
+                raise ConflictError("agent approval has expired")
+        return self.get_agent_approval(approval_id, tenant_id)
+
+    def list_agent_approvals(
+        self,
+        tenant_id: str,
+        decision: Optional[str] = "pending",
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        if not 1 <= limit <= 1000:
+            raise ValueError("invalid approval limit")
+        if decision is not None and decision not in {
+            "pending",
+            "approved",
+            "rejected",
+            "revoked",
+        }:
+            raise ValueError("invalid decision filter")
+        with self._lock:
+            if decision is None:
+                rows = self._conn().execute(
+                    "SELECT * FROM agent_approvals WHERE tenant_id = ? "
+                    "ORDER BY created_at DESC LIMIT ?",
+                    (tenant_id, limit),
+                ).fetchall()
+            else:
+                rows = self._conn().execute(
+                    "SELECT * FROM agent_approvals WHERE tenant_id = ? AND decision = ? "
+                    "ORDER BY created_at DESC LIMIT ?",
+                    (tenant_id, decision, limit),
+                ).fetchall()
+        return [self._agent_approval_record(row) for row in rows]
+
+    def agent_summary(self, tenant_id: str) -> Dict[str, Any]:
+        with self._lock:
+            row = self._conn().execute(
+                """
+                SELECT
+                    (SELECT COUNT(*) FROM agents WHERE tenant_id = ?) AS total_agents,
+                    (SELECT COUNT(*) FROM agent_versions WHERE tenant_id = ? AND status = 'published') AS published_versions,
+                    (SELECT COUNT(*) FROM agent_executions WHERE tenant_id = ? AND status IN ('running', 'awaiting_approval')) AS active_executions,
+                    (SELECT COUNT(*) FROM agent_approvals WHERE tenant_id = ? AND decision = 'pending') AS pending_approvals,
+                    (SELECT COUNT(*) FROM agent_executions WHERE tenant_id = ? AND status = 'completed') AS completed_executions,
+                    (SELECT MAX(created_at) FROM agent_executions WHERE tenant_id = ?) AS latest_execution_at
+                """,
+                (tenant_id,) * 6,
+            ).fetchone()
+        return {
+            "total_agents": int(row["total_agents"] or 0),
+            "published_versions": int(row["published_versions"] or 0),
+            "active_executions": int(row["active_executions"] or 0),
+            "pending_approvals": int(row["pending_approvals"] or 0),
+            "completed_executions": int(row["completed_executions"] or 0),
+            "latest_execution_at": row["latest_execution_at"],
+        }
