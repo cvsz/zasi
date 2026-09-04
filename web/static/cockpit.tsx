@@ -1462,7 +1462,18 @@ function DoThisPage() {
     const [planId, setPlanId] = useState('');
     const [idempotencyKey, setIdempotencyKey] = useState('');
     const [result, setResult] = useState<RunResponse | null>(null);
+    const [plan, setPlan] = useState<JsonRecord | null>(null);
     const { addToast } = useToast();
+    const loadPlan = async (): Promise<void> => {
+        if (!token || !planId.trim()) return;
+        try {
+            const data = await api.get<JsonRecord>(`/api/v2/plans/${encodeURIComponent(planId.trim())}`, token);
+            setPlan(data);
+        } catch (error: unknown) {
+            setPlan(null);
+            addToast('Plan not found or unavailable', 'error');
+        }
+    };
     const runPlan = async (): Promise<void> => {
         if (!token || !planId.trim()) return;
         try {
@@ -1480,10 +1491,18 @@ function DoThisPage() {
             <h2 className="page-title">🛠 Do This</h2>
             <div className="notice">Risk-bearing plans require an exact plan digest, approval when policy demands, and an idempotency key. The reference profile disables R2-R5 execution unless a separately governed worker exists.</div>
             <div className="card">
-                <div className="card-header">EXECUTE APPROVED PLAN</div>
+                <div className="card-header">REVIEW PLAN BEFORE ACTION</div>
                 <div className="form-row">
                     <label htmlFor="plan-id">Plan ID</label>
-                    <input id="plan-id" value={planId} onChange={(event) => setPlanId(event.target.value)} placeholder="pln_…" />
+                    <input id="plan-id" value={planId} onChange={(event) => { setPlanId(event.target.value); setPlan(null); setResult(null); }} placeholder="pln_…" />
+                    <button className="btn secondary small" onClick={loadPlan} disabled={!planId.trim()}>LOAD PLAN</button>
+                </div>
+                {plan && <div className="state-row"><StatusBadge status={String(plan.status ?? 'unknown')}>{String(plan.status ?? 'unknown')}</StatusBadge><span className="muted">digest: {displayValue(plan.digest, '—')}</span></div>}
+                {plan && <pre className="code-out">{JSON.stringify(plan, null, 2)}</pre>}
+            </div>
+            <div className="card">
+                <div className="card-header">EXECUTE APPROVED PLAN</div>
+                <div className="form-row">
                     <label htmlFor="idempotency-key">Idempotency key</label>
                     <input id="idempotency-key" value={idempotencyKey} onChange={(event) => setIdempotencyKey(event.target.value)} placeholder="client-generated unique key" />
                     <button className="btn primary" onClick={runPlan} disabled={!planId.trim()}>RUN PLAN</button>
