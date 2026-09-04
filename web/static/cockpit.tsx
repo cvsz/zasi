@@ -556,6 +556,10 @@ function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
         { label: 'Open Engineering Artifacts', path: '/engineering' },
         { label: 'Open Safety Cockpit', path: '/cockpit' },
         { label: 'Open Governed MCP Console', path: '/mcp' },
+        { label: 'Open Do This', path: '/do-this' },
+        { label: 'Open Advanced', path: '/advanced' },
+        { label: 'Open Humanoid', path: '/humanoid' },
+        { label: 'Open Mobile Link', path: '/mobile-link' },
     ];
     useEffect(() => {
         const onKey = (event: KeyboardEvent) => {
@@ -1452,6 +1456,153 @@ function formatBytes(value: number): string {
     return `${scaled.toFixed(1)} ${units[exponent]}`;
 }
 
+function DoThisPage() {
+    const { session } = useAuth();
+    const token = session?.access_token ?? null;
+    const [planId, setPlanId] = useState('');
+    const [idempotencyKey, setIdempotencyKey] = useState('');
+    const [result, setResult] = useState<RunResponse | null>(null);
+    const { addToast } = useToast();
+    const runPlan = async (): Promise<void> => {
+        if (!token || !planId.trim()) return;
+        try {
+            const key = idempotencyKey.trim() || `do-this-${Date.now()}`;
+            const run = await api.post<RunResponse>(`/api/v2/plans/${encodeURIComponent(planId.trim())}/run`, token, {}, { 'Idempotency-Key': key });
+            setResult(run);
+            addToast('Plan run recorded', 'success');
+        } catch (error: unknown) {
+            setResult({ status: 'unavailable', disclosure: errorMessage(error) });
+            addToast('Plan run rejected', 'error');
+        }
+    };
+    return (
+        <div className="page route-fade">
+            <h2 className="page-title">🛠 Do This</h2>
+            <div className="notice">Risk-bearing plans require an exact plan digest, approval when policy demands, and an idempotency key. The reference profile disables R2-R5 execution unless a separately governed worker exists.</div>
+            <div className="card">
+                <div className="card-header">EXECUTE APPROVED PLAN</div>
+                <div className="form-row">
+                    <label htmlFor="plan-id">Plan ID</label>
+                    <input id="plan-id" value={planId} onChange={(event) => setPlanId(event.target.value)} placeholder="pln_…" />
+                    <label htmlFor="idempotency-key">Idempotency key</label>
+                    <input id="idempotency-key" value={idempotencyKey} onChange={(event) => setIdempotencyKey(event.target.value)} placeholder="client-generated unique key" />
+                    <button className="btn primary" onClick={runPlan} disabled={!planId.trim()}>RUN PLAN</button>
+                </div>
+                {result && <div className="state-row"><StatusBadge status={String(result.status ?? 'unknown')}>{String(result.status ?? 'unknown')}</StatusBadge><span className="muted">evidence: {displayValue(result.evidence?.status, 'unavailable')}</span></div>}
+                {result && <pre className="code-out">{JSON.stringify(result, null, 2)}</pre>}
+            </div>
+        </div>
+    );
+}
+
+function AdvancedPage() {
+    const { session } = useAuth();
+    const token = session?.access_token ?? null;
+    const capabilities = useApi<CapabilitiesResponse>('/api/v2/capabilities', token);
+    const items = (capabilities.data?.capabilities ?? []) as Capability[];
+    const disabled = items.filter((item) => item.availability === 'disabled' || item.runtime_state === 'offline');
+    const research = items.filter((item) => item.availability === 'research_only');
+    return (
+        <div className="page route-fade">
+            <h2 className="page-title">🧪 Advanced</h2>
+            <div className="notice">Advanced mode does not grant implicit power. Disabled and research capabilities remain separated from verified runtime capabilities.</div>
+            <div className="card">
+                <div className="card-header">DISABLED CAPABILITIES · {disabled.length}</div>
+                {disabled.length === 0 && <div className="empty">No disabled capabilities.</div>}
+                {disabled.length > 0 && <table className="data-table"><thead><tr><th>Capability</th><th>Availability</th><th>Risk</th><th>Disclosure</th></tr></thead><tbody>
+                    {disabled.map((capability) => <tr key={capability.capability_id}><td className="mono">{String(capability.capability_id)}</td><td><StatusBadge status={String(capability.availability)}>{String(capability.availability)}</StatusBadge></td><td>{String(capability.risk_tier)}</td><td>{String(capability.disclosure)}</td></tr>)}
+                </tbody></table>}
+            </div>
+            <div className="card">
+                <div className="card-header">RESEARCH CAPABILITIES · {research.length}</div>
+                {research.length === 0 && <div className="empty">No research-only capabilities.</div>}
+                {research.length > 0 && <table className="data-table"><thead><tr><th>Capability</th><th>Availability</th><th>Risk</th><th>Disclosure</th></tr></thead><tbody>
+                    {research.map((capability) => <tr key={capability.capability_id}><td className="mono">{String(capability.capability_id)}</td><td><StatusBadge status={String(capability.availability)}>{String(capability.availability)}</StatusBadge></td><td>{String(capability.risk_tier)}</td><td>{String(capability.disclosure)}</td></tr>)}
+                </tbody></table>}
+            </div>
+        </div>
+    );
+}
+
+function HumanoidPage() {
+    const { session } = useAuth();
+    const token = session?.access_token ?? null;
+    const [simulation, setSimulation] = useState<JsonRecord | null>(null);
+    useEffect(() => {
+        if (!token) return undefined;
+        void api.get<JsonRecord>('/api/v2/devices', token).then((data) => setSimulation({ ...data, disclosure: 'Humanoid mode is simulator-only in the reference profile. No actuator endpoint is exposed.' })).catch(() => setSimulation({ status: 'unavailable', disclosure: 'Humanoid simulator is unavailable in this runtime.' }));
+        return undefined;
+    }, [token]);
+    return (
+        <div className="page route-fade">
+            <h2 className="page-title">🦾 Humanoid</h2>
+            <div className="notice">Physical actuation is disabled in the reference profile. Humanoid mode exposes only visualization, telemetry fixtures, and simulation.</div>
+            <div className="card">
+                <div className="card-header">SIMULATOR / ADVISORY DISCLOSURE</div>
+                <pre className="code-out">{simulation ? JSON.stringify(simulation, null, 2) : 'Loading…'}</pre>
+            </div>
+        </div>
+    );
+}
+
+function MobileLinkPage() {
+    const { session } = useAuth();
+    const token = session?.access_token ?? null;
+    const [devices, setDevices] = useState<JsonRecord | null>(null);
+    const [pairLabel, setPairLabel] = useState('');
+    const [pairResult, setPairResult] = useState<JsonRecord | null>(null);
+    const { addToast } = useToast();
+    useEffect(() => {
+        if (!token) return undefined;
+        void api.get<JsonRecord>('/api/v2/devices', token).then(setDevices).catch(() => setDevices({ devices: [] }));
+        return undefined;
+    }, [token]);
+    const pair = async (): Promise<void> => {
+        if (!token || !pairLabel.trim()) return;
+        try {
+            const result = await api.post<JsonRecord>('/api/v2/devices', token, { device_label: pairLabel.trim() });
+            setPairResult(result);
+            addToast('Pairing challenge created', 'success');
+            setPairLabel('');
+        } catch (error: unknown) {
+            addToast(`Pairing failed: ${errorMessage(error)}`, 'error');
+        }
+    };
+    const revoke = async (deviceId: string): Promise<void> => {
+        if (!token) return;
+        try {
+            await api.post(`/api/v2/devices/${encodeURIComponent(deviceId)}/revoke`, token);
+            addToast('Device revoked', 'success');
+            if (devices) setDevices({ ...devices, devices: (devices.devices as any[])?.filter((item: any) => item.device_id !== deviceId) ?? [] });
+        } catch (error: unknown) {
+            addToast(`Revoke failed: ${errorMessage(error)}`, 'error');
+        }
+    };
+    return (
+        <div className="page route-fade">
+            <h2 className="page-title">📱 Mobile Link</h2>
+            <div className="notice">Pairing uses a server-generated one-time challenge with short expiration. QR contents never contain reusable API secrets.</div>
+            <div className="card">
+                <div className="card-header">PAIR NEW DEVICE</div>
+                <div className="form-row">
+                    <label htmlFor="pair-label">Device label</label>
+                    <input id="pair-label" value={pairLabel} onChange={(event) => setPairLabel(event.target.value)} placeholder="desk phone" />
+                    <button className="btn primary" onClick={pair} disabled={!pairLabel.trim()}>CREATE CHALLENGE</button>
+                </div>
+                {pairResult && <pre className="code-out">{JSON.stringify(pairResult, null, 2)}</pre>}
+            </div>
+            <div className="card">
+                <div className="card-header">REGISTERED DEVICES</div>
+                {!devices && <div className="empty">Loading…</div>}
+                {devices && (devices.devices as any[])?.length === 0 && <div className="empty">No registered devices.</div>}
+                {devices && (devices.devices as any[])?.length > 0 && <table className="data-table"><thead><tr><th>Device</th><th>Status</th><th>Enrollment</th><th>Last seen</th><th></th></tr></thead><tbody>
+                    {(devices.devices as any[]).map((device: any) => <tr key={device.device_id}><td className="mono">{device.device_id}</td><td><StatusBadge status={device.status}>{device.status}</StatusBadge></td><td className="mono">{device.enrollment_hash ? device.enrollment_hash.slice(0, 16) + '…' : '—'}</td><td>{device.last_seen_at ?? '—'}</td><td><button className="btn secondary small" onClick={() => revoke(device.device_id)}>Revoke</button></td></tr>)}
+                </tbody></table>}
+            </div>
+        </div>
+    );
+}
+
 const NAV: NavigationLink[] = [
     { to: '/', label: '⚡ Overview', end: true },
     { to: '/agents', label: '🧠 Agents' },
@@ -1464,24 +1615,64 @@ const NAV: NavigationLink[] = [
     { to: '/telemetry', label: '📊 Telemetry' },
     { to: '/settings', label: '⚙️ Settings' },
     { to: '/jarvis', label: '🤖 J.A.R.V.I.S.' },
+    { to: '/do-this', label: '🛠 Do This' },
+    { to: '/advanced', label: '🧪 Advanced' },
+    { to: '/humanoid', label: '🦾 Humanoid' },
+    { to: '/mobile-link', label: '📱 Mobile Link' },
     { to: '/engineering', label: '🧩 Engineering' },
     { to: '/subsystems', label: '🔬 Registry' },
     { to: '/cockpit', label: '🛡 Safety' },
     { to: '/mcp', label: '🔌 MCP' },
 ];
 
+function RightRail() {
+    const { session } = useAuth();
+    const token = session?.access_token ?? null;
+    const feed = useEventFeed();
+    const approvals = useApi<JsonRecord>('/api/v2/governance/approvals', token);
+    const agentApprovals = (approvals.data?.agent_approvals ?? []) as any[];
+    const legacyApprovals = (approvals.data?.legacy_approvals ?? []) as any[];
+    const pendingCount = agentApprovals.length + legacyApprovals.length;
+    const recentEvents = feed.events.slice(-8);
+    return (
+        <aside className="right-rail" aria-label="Command stream and approvals">
+            <div className="rail-card">
+                <div className="rail-card-header">EVENT HEALTH</div>
+                <div className="rail-event"><span className="rail-meta">status</span> <StatusBadge status={feed.status}>{feed.status}</StatusBadge></div>
+                <div className="rail-event"><span className="rail-meta">cursor</span> {feed.cursor}</div>
+                <div className="rail-event"><span className="rail-meta">events</span> {feed.events.length}</div>
+            </div>
+            <div className="rail-card">
+                <div className="rail-card-header">COMMAND STREAM</div>
+                {recentEvents.length === 0 && <div className="rail-event">No events received in this session.</div>}
+                {recentEvents.map((event, index) => <div className="rail-event" key={event.event_id ?? `${event.sequence ?? 'event'}-${index}`}><span className="rail-meta">{displayValue(event.sequence)}</span> · {displayValue(event.type)} · {displayValue(event.payload?.status ?? event.aggregate?.id)}</div>)}
+            </div>
+            <div className="rail-card">
+                <div className="rail-card-header">APPROVALS</div>
+                <div className="rail-approval">Pending: <span className="rail-meta">{pendingCount}</span></div>
+                {pendingCount > 0 && <NavLink to="/approvals" className="rail-link">Review approvals</NavLink>}
+                {pendingCount === 0 && <div className="rail-event">No pending approvals.</div>}
+            </div>
+        </aside>
+    );
+}
+
 function Shell() {
     const { session, logout } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const [paletteOpen, setPaletteOpen] = useState(false);
     const feed = useEventFeed();
-    return <div className="shell"><header className="top-bar"><div className="logo"><span className="logo-z">Z</span>ASI <span className="logo-version">governed reference profile</span></div><nav className="nav-links" aria-label="Primary navigation">{NAV.map((link) => <NavLink key={link.to} to={link.to} end={link.end} className={({ isActive }) => `nav-tab${isActive ? ' active' : ''}`}>{link.label}</NavLink>)}</nav><div className="header-actions"><StatusBadge status={feed.status}>{feed.status}</StatusBadge><span className="tenant-label">{session?.tenant_id ?? '—'}</span><button className="btn secondary small" onClick={() => setPaletteOpen(true)} title="Command palette" aria-label="Open command palette">⌘K</button><button className="btn secondary small" onClick={toggleTheme} aria-label={theme === 'dark' ? 'Use light theme' : 'Use dark theme'}>{theme === 'dark' ? '☀️' : '🌙'}</button><button className="btn secondary small" onClick={logout}>SIGN OUT</button></div></header><main className="main-content"><Outlet /></main><footer className="footer">ZASI governed control plane · Observe / Assist · simulated and unavailable states are disclosed</footer><CommandPalette isOpen={paletteOpen} onClose={() => setPaletteOpen(false)} /></div>;
+    const settings = useApi<JsonRecord>('/api/v2/settings', session?.access_token ?? null);
+    const settingsData = settings.data as Record<string, any> | null;
+    const profile = settingsData?.profile ?? 'local';
+    const deviceId = session?.device_id ?? '—';
+    return <div className="shell"><header className="top-bar"><div className="logo"><span className="logo-z">Z</span>ASI <span className="logo-version">{profile} · {displayValue(deviceId)}</span></div><nav className="nav-links" aria-label="Primary navigation">{NAV.map((link) => <NavLink key={link.to} to={link.to} end={link.end} className={({ isActive }) => `nav-tab${isActive ? ' active' : ''}`}>{link.label}</NavLink>)}</nav><div className="header-actions"><StatusBadge status={feed.status}>{feed.status}</StatusBadge><span className="tenant-label">{session?.tenant_id ?? '—'}</span><button className="btn secondary small" onClick={() => setPaletteOpen(true)} title="Command palette" aria-label="Open command palette">⌘K</button><button className="btn secondary small" onClick={toggleTheme} aria-label={theme === 'dark' ? 'Use light theme' : 'Use dark theme'}>{theme === 'dark' ? '☀️' : '🌙'}</button><button className="btn secondary small" onClick={logout}>SIGN OUT</button></div></header><div className="shell-body"><main className="main-content"><Outlet /></main><RightRail /></div><footer className="footer">ZASI governed control plane · Observe / Assist · simulated and unavailable states are disclosed</footer><CommandPalette isOpen={paletteOpen} onClose={() => setPaletteOpen(false)} /></div>;
 }
 
 function AuthenticatedApp() {
     const { session } = useAuth();
     if (!session) return <LoginPage />;
-    return <Routes><Route path="/" element={<Shell />}><Route index element={<OverviewPage />} /><Route path="agents" element={<AgentsPage />} /><Route path="executions" element={<ExecutionsPage />} /><Route path="approvals" element={<ApprovalsPage />} /><Route path="audit" element={<AuditPage />} /><Route path="models" element={<ModelsPage />} /><Route path="memory" element={<MemoryPage />} /><Route path="governance" element={<GovernancePage />} /><Route path="telemetry" element={<TelemetryPage />} /><Route path="settings" element={<SettingsPage />} /><Route path="jarvis" element={<JarvisPage />} /><Route path="engineering" element={<EngineeringPage />} /><Route path="subsystems" element={<SubsystemsPage />} /><Route path="cockpit" element={<CockpitPage />} /><Route path="mcp" element={<MCPPage />} /></Route></Routes>;
+    return <Routes><Route path="/" element={<Shell />}><Route index element={<OverviewPage />} /><Route path="agents" element={<AgentsPage />} /><Route path="executions" element={<ExecutionsPage />} /><Route path="approvals" element={<ApprovalsPage />} /><Route path="audit" element={<AuditPage />} /><Route path="models" element={<ModelsPage />} /><Route path="memory" element={<MemoryPage />} /><Route path="governance" element={<GovernancePage />} /><Route path="telemetry" element={<TelemetryPage />} /><Route path="settings" element={<SettingsPage />} /><Route path="jarvis" element={<JarvisPage />} /><Route path="do-this" element={<DoThisPage />} /><Route path="advanced" element={<AdvancedPage />} /><Route path="humanoid" element={<HumanoidPage />} /><Route path="mobile-link" element={<MobileLinkPage />} /><Route path="engineering" element={<EngineeringPage />} /><Route path="subsystems" element={<SubsystemsPage />} /><Route path="cockpit" element={<CockpitPage />} /><Route path="mcp" element={<MCPPage />} /></Route></Routes>;
 }
 
 function App() {
