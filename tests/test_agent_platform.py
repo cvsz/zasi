@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 
 from pydantic import ValidationError
 
-from src.control_plane.agent_contracts import (
+from src.control_plane.orchestration.agent_contracts import (
     AgentApprovalDecisionRequest,
     AgentCreateRequest,
     AgentExecutionRequest,
@@ -19,7 +19,7 @@ from src.control_plane.agent_contracts import (
     AgentVersionCreateRequest,
     BudgetRequest,
 )
-from src.control_plane.agent_models import (
+from src.control_plane.orchestration.agent_models import (
     AgentEventContext,
     AgentVersionSpec,
     BudgetPolicy,
@@ -673,7 +673,7 @@ class AgentRepositoryTests(unittest.TestCase):
 
 class ModelGatewayTests(unittest.TestCase):
     def test_default_gateway_is_deterministic_simulator(self):
-        from src.control_plane.model_gateway import ModelGateway
+        from src.control_plane.connectors.model_gateway import ModelGateway
 
         gateway = ModelGateway()
         status = gateway.status()
@@ -683,7 +683,7 @@ class ModelGatewayTests(unittest.TestCase):
         self.assertEqual(selection.mode, "deterministic_simulator")
 
     def test_invalid_ollama_url_is_rejected(self):
-        from src.control_plane.model_gateway import ModelGateway
+        from src.control_plane.connectors.model_gateway import ModelGateway
 
         with self.assertRaises(ValueError):
             ModelGateway(base_url="http://example.com")
@@ -695,7 +695,7 @@ class ModelGatewayTests(unittest.TestCase):
             ModelGateway(base_url="http://localhost", timeout_seconds=99)
 
     def test_proposal_digest_changes_with_input(self):
-        from src.control_plane.model_gateway import ModelGateway
+        from src.control_plane.connectors.model_gateway import ModelGateway
 
         gateway = ModelGateway()
         proposal_a = gateway.propose(
@@ -708,7 +708,7 @@ class ModelGatewayTests(unittest.TestCase):
         self.assertTrue(proposal_a["proposal_digest"].startswith("sha256:"))
 
     def test_proposal_reports_simulator_disclosure(self):
-        from src.control_plane.model_gateway import ModelGateway
+        from src.control_plane.connectors.model_gateway import ModelGateway
 
         gateway = ModelGateway()
         proposal = gateway.propose(task="t", context={}, policy={})
@@ -941,7 +941,7 @@ class AgentRuntimeTests(unittest.TestCase):
         self.store.close()
 
     def test_sandbox_does_not_create_execution(self):
-        from src.control_plane.agent_contracts import AgentCreateRequest, AgentSandboxRequest
+        from src.control_plane.orchestration.agent_contracts import AgentCreateRequest, AgentSandboxRequest
 
         created = self.service.create_agent(
             tenant_id="tenant-a",
@@ -967,7 +967,7 @@ class AgentRuntimeTests(unittest.TestCase):
         self.assertEqual(len(self.store.list_agent_executions("tenant-a")), 0)
 
     def test_start_execution_creates_pending_approval(self):
-        from src.control_plane.agent_contracts import (
+        from src.control_plane.orchestration.agent_contracts import (
             AgentCreateRequest,
             AgentExecutionRequest,
         )
@@ -997,7 +997,7 @@ class AgentRuntimeTests(unittest.TestCase):
         self.assertEqual(result["approval"]["decision"], "pending")
 
     def test_approval_replay_returns_original(self):
-        from src.control_plane.agent_contracts import (
+        from src.control_plane.orchestration.agent_contracts import (
             AgentApprovalDecisionRequest,
             AgentCreateRequest,
             AgentExecutionRequest,
@@ -1046,7 +1046,7 @@ class AgentRuntimeTests(unittest.TestCase):
         self.assertEqual(replay["approval"]["decision"], "approved")
 
     def test_rejection_marks_execution_rejected_without_handler(self):
-        from src.control_plane.agent_contracts import (
+        from src.control_plane.orchestration.agent_contracts import (
             AgentCreateRequest,
             AgentExecutionRequest,
         )
@@ -1077,7 +1077,7 @@ class AgentRuntimeTests(unittest.TestCase):
             tenant_id="tenant-a",
             principal_id="principal-a",
             approval_id=result["approval"]["approval_id"],
-            request=__import__("src.control_plane.agent_contracts", fromlist=["AgentApprovalDecisionRequest"]).AgentApprovalDecisionRequest.model_validate({"reason": "no"}),
+            request=__import__("src.control_plane.orchestration.agent_contracts", fromlist=["AgentApprovalDecisionRequest"]).AgentApprovalDecisionRequest.model_validate({"reason": "no"}),
             scopes=self.scopes,
         )
         # Re-issuing the resolve on an already-rejected approval replays.
@@ -1085,13 +1085,13 @@ class AgentRuntimeTests(unittest.TestCase):
             tenant_id="tenant-a",
             principal_id="principal-a",
             approval_id=result["approval"]["approval_id"],
-            request=__import__("src.control_plane.agent_contracts", fromlist=["AgentApprovalDecisionRequest"]).AgentApprovalDecisionRequest.model_validate({"reason": "no"}),
+            request=__import__("src.control_plane.orchestration.agent_contracts", fromlist=["AgentApprovalDecisionRequest"]).AgentApprovalDecisionRequest.model_validate({"reason": "no"}),
             scopes=self.scopes,
         )
         self.assertTrue(replay.get("replay", False))
 
     def test_tenant_isolation_in_service(self):
-        from src.control_plane.agent_contracts import AgentCreateRequest
+        from src.control_plane.orchestration.agent_contracts import AgentCreateRequest
         from src.control_plane.storage import NotFoundError
 
         self.service.create_agent(
@@ -1103,7 +1103,7 @@ class AgentRuntimeTests(unittest.TestCase):
             self.service.get_agent(tenant_id="tenant-b", agent_id="any")
 
     def test_idempotency_replay_returns_existing_execution(self):
-        from src.control_plane.agent_contracts import (
+        from src.control_plane.orchestration.agent_contracts import (
             AgentCreateRequest,
             AgentExecutionRequest,
         )

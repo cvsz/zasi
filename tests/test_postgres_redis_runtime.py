@@ -7,7 +7,7 @@ from src.control_plane.storage.postgres_storage import (
     _PostgresConnection,
 )
 from src.control_plane.storage import CURRENT_SCHEMA_VERSION
-from src.control_plane.redis_runtime import RedisRuntime
+from src.control_plane.storage.redis_runtime import RedisRuntime
 
 
 class PostgresRedisRuntimeTests(unittest.TestCase):

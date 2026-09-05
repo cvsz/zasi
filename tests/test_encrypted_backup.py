@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from src.control_plane.backup import (
+from src.control_plane.storage.backup import (
     BackupError,
     decrypt_file,
     encrypt_file,

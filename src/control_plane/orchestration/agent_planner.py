@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, FrozenSet, Mapping, Tuple
 
-from ..agent_models import (
+from .agent_models import (
     AgentVersionSpec,
     PlanStep,
     TypedAgentPlan,

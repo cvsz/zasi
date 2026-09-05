@@ -6,7 +6,7 @@ import re
 import time
 from typing import Any, Tuple
 
-from .identity import hash_token
+from ..identity import hash_token
 
 
 _FIXED_WINDOW_SCRIPT = """

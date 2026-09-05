@@ -32,7 +32,7 @@ from scripts.backup_control_plane import (
     _restore_postgresql,
     _validate_postgresql_archive,
 )
-from src.control_plane.backup import encrypt_file, open_sealed
+from src.control_plane.storage.backup import encrypt_file, open_sealed
 from src.control_plane.storage.postgres_storage import PostgresControlPlaneStore
 
 

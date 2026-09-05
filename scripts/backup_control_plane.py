@@ -28,7 +28,7 @@ from urllib.parse import quote, unquote, urlsplit, urlunsplit
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from src.control_plane.backup import (
+from src.control_plane.storage.backup import (
     BackupError,
     BackupMetadata,
     encrypt_file,

@@ -14,24 +14,24 @@ import json
 import os
 from typing import Any, Dict, FrozenSet, Optional, Tuple
 
-from ..agent_contracts import (
+from .agent_contracts import (
     AgentApprovalDecisionRequest,
     AgentCreateRequest,
     AgentExecutionRequest,
     AgentSandboxRequest,
     AgentVersionCreateRequest,
 )
-from ..agent_models import (
+from .agent_models import (
     AgentVersionSpec,
     BudgetPolicy,
     ModelSelection,
     action_digest,
 )
-from ..orchestration.agent_planner import AgentPlanner
-from ..orchestration.agent_tools import register_agent_tools
+from .agent_planner import AgentPlanner
+from .agent_tools import register_agent_tools
 from ..execution import ActionBroker, ActionWorker, ToolRegistry
 from ..identity import issue_id
-from ..model_gateway import ModelGateway
+from ..connectors.model_gateway import ModelGateway
 from ..governance.policy import PolicyEngine
 from ..storage import ConflictError, ControlPlaneStore, NotFoundError
 

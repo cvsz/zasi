@@ -18,7 +18,7 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from ..agent_models import required_scopes_for
+from .agent_models import required_scopes_for
 from ..execution import ToolDefinition, ToolExecutionContext, ToolRegistry
 from ..storage import ControlPlaneStore
 

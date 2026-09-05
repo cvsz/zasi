@@ -13,7 +13,7 @@ from typing import Any, Dict, Mapping
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
-from .agent_models import ModelSelection, canonicalize_action_payload
+from ..orchestration.agent_models import ModelSelection, canonicalize_action_payload
 
 
 _SIMULATOR_NAME = "deterministic_simulator"

@@ -38,7 +38,7 @@ from src.control_plane.orchestration.agent_runtime import (
     AgentServiceError,
     register_agent_runtime,
 )
-from src.control_plane.agent_contracts import (
+from src.control_plane.orchestration.agent_contracts import (
     AgentApprovalDecisionRequest,
     AgentCreateRequest,
     AgentExecutionRequest,
@@ -53,7 +53,7 @@ from src.control_plane.multimodal import (
     verify_artifact_digest,
 )
 from src.control_plane.governance.policy import PolicyEngine
-from src.control_plane.redis_runtime import RedisRuntime
+from src.control_plane.storage.redis_runtime import RedisRuntime
 from src.control_plane.storage import (
     CURRENT_SCHEMA_VERSION,
     ConflictError,
@@ -3070,7 +3070,7 @@ def create_app(
                 }
             )
         try:
-            from src.control_plane.research import list_research_capabilities
+            from src.control_plane.evidence.research import list_research_capabilities
             research = list_research_capabilities()
         except Exception:
             research = []
