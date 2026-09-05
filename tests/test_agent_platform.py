@@ -822,13 +822,13 @@ class AgentToolsTests(unittest.TestCase):
             "INSERT INTO memory_items(id, tenant_id, principal_id, content, scope, "
             "memory_type, status, created_at) VALUES(?, ?, ?, ?, ?, ?, 'active', ?)",
             ("mem-1", "tenant-a", "principal-a", "hello zasi", "workspace", "fact",
-             "2026-09-04T00:00:00+00:00"),
+             "2026-09-05T10:36:03+00:00"),
         )
         self.store._conn().execute(
             "INSERT INTO memory_items(id, tenant_id, principal_id, content, scope, "
             "memory_type, status, created_at) VALUES(?, ?, ?, ?, ?, ?, 'active', ?)",
             ("mem-2", "tenant-b", "principal-b", "other tenant", "workspace", "fact",
-             "2026-09-04T00:00:00+00:00"),
+             "2026-09-05T10:36:03+00:00"),
         )
         from src.control_plane.execution import ToolExecutionContext
         context = ToolExecutionContext(

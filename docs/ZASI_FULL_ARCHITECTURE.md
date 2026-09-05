@@ -3,7 +3,7 @@
 > **Repository:** `cvsz/zasi`
 > **Target:** ZASI v33 Autonomous Chief-of-Staff architecture
 > **Current implementation baseline:** ZASI v32.0 governed reference transition with AI Futures Project Superintelligence agent platform (schema v12)
-> **Revision:** 2026-09-04 — implementation-status reconciliation after re-reading `docs/javis`, the implementation specification, and GitHub issues #9–#18
+> **Revision:** 2026-09-05 — implementation-status reconciliation after re-reading `docs/javis`, the implementation specification, and GitHub issues #9–#18
 > **Purpose:** End-to-end architecture for the J.A.R.V.I.S. / F.R.I.D.A.Y. / E.D.I.T.H. command system, upgraded into a production-oriented **Autonomous Chief-of-Staff runtime** that combines on-device voice intelligence, local-first execution, goal/task orchestration, evidence-grounded executive briefing, ZASI cognitive planning, formal verification, memory routing, MCP/tool fabric, durable scheduling, distributed services, and a next-generation operational cockpit.
 
 > **Runtime authority:** The design below is a target architecture. The
