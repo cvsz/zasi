@@ -1,5 +1,16 @@
 """ZASI source package."""
 
+import warnings
+
+warnings.warn(
+    "The 'src' package re-exports quarantined legacy modules from 'src.legacy' "
+    "for backward compatibility only. The authoritative application imports "
+    "only from 'src.control_plane'. Legacy re-exports are deprecated and may "
+    "be removed in a future release.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
 # Legacy prototype modules are re-exported from src.legacy for backward compatibility.
 # The authoritative application imports only from src.control_plane.
 
