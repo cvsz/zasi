@@ -875,6 +875,80 @@ class ControlPlaneAPITests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(reconciled.status_code, 200)
             self.assertEqual(reconciled.json()["status"], "queued")
 
+    async def test_tenant_crossing_is_denied_for_read_and_write(self):
+        async with self.client() as client:
+            local_session = await client.post(
+                "/api/v2/sessions", json={"api_key": "test-bootstrap-secret"}
+            )
+            self.assertEqual(local_session.status_code, 201)
+            local_token = local_session.json()["access_token"]
+            local_headers = {"Authorization": f"Bearer {local_token}"}
+
+            memory = await client.post(
+                "/api/v2/memory",
+                json={"content": "local-tenant note"},
+                headers=local_headers,
+            )
+            self.assertEqual(memory.status_code, 201)
+            memory_id = memory.json()["memory_id"]
+
+            foreign_settings = Settings.from_mapping(
+                {
+                    "ZASI_PROFILE": "local",
+                    "ZASI_API_KEY": "test-bootstrap-secret",
+                    "ZASI_CORS_ORIGINS": "http://localhost:5173",
+                    "ZASI_DATABASE_PATH": str(Path(self.tempdir.name) / "control-plane-foreign.db"),
+                }
+            )
+            foreign_store = ControlPlaneStore(foreign_settings.database_path)
+            foreign_app = create_app(settings=foreign_settings, store=foreign_store)
+            async with foreign_app.router.lifespan_context(foreign_app):
+                transport = httpx.ASGITransport(app=foreign_app)
+                async with httpx.AsyncClient(
+                    transport=transport, base_url="http://testserver"
+                ) as foreign_client:
+                    foreign_session = await foreign_client.post(
+                        "/api/v2/sessions", json={"api_key": "test-bootstrap-secret"}
+                    )
+                    self.assertEqual(foreign_session.status_code, 201)
+                    foreign_token = foreign_session.json()["access_token"]
+                    foreign_headers = {"Authorization": f"Bearer {foreign_token}"}
+
+                    foreign_memory = await foreign_client.post(
+                        "/api/v2/memory",
+                        json={"content": "foreign-tenant note"},
+                        headers=foreign_headers,
+                    )
+                    self.assertEqual(foreign_memory.status_code, 201)
+
+                    foreign_search = await foreign_client.get(
+                        "/api/v2/memory/search?q=local-tenant",
+                        headers=foreign_headers,
+                    )
+                    self.assertEqual(foreign_search.status_code, 200)
+                    self.assertFalse(any(
+                        item.get("memory_id") == memory_id
+                        for item in foreign_search.json().get("items", [])
+                    ))
+
+                    local_search = await foreign_client.get(
+                        "/api/v2/memory/search?q=local-tenant",
+                        headers=foreign_headers,
+                    )
+                    self.assertEqual(local_search.status_code, 200)
+                    self.assertFalse(any(
+                        item.get("memory_id") == memory_id
+                        for item in local_search.json().get("items", [])
+                    ))
+
+                    local_goals = await foreign_client.get(
+                        "/api/v2/goals",
+                        headers=foreign_headers,
+                    )
+                    self.assertEqual(local_goals.status_code, 200)
+                    self.assertEqual(local_goals.json().get("goals", []), [])
+            foreign_store.close()
+
 
 if __name__ == "__main__":
     unittest.main()
