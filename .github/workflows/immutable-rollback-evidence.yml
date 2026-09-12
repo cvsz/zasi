@@ -35,13 +35,14 @@ jobs:
         run: |
           set -euo pipefail
           candidate_id="$(cat "$RUNNER_TEMP/candidate-image-id.txt")"
-          docker run -d --rm --name zasi-candidate -p 18081:8080 "$candidate_id"
+          docker run -d --rm --name zasi-candidate -p 18081:8080 -e ZASI_PROFILE=local -e ZASI_ALLOW_PUBLIC_BIND=yes -e ZASI_API_KEY=test-bootstrap-secret -e ZASI_CORS_ORIGINS=http://localhost -e ZASI_DATABASE_PATH=/app/data/zasi_control_plane.db -e ZASI_ARTIFACT_DIRECTORY=/app/data/artifacts "$candidate_id"
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:18081/health/ready > "$RUNNER_TEMP/candidate-health.json"; then
               break
             fi
             if [ "$attempt" -eq 30 ]; then
-              docker logs zasi-candidate
+              docker ps -a
+              docker logs zasi-candidate || true
               exit 1
             fi
             sleep 2
@@ -53,13 +54,14 @@ jobs:
           base_id="$(cat "$RUNNER_TEMP/base-image-id.txt")"
           started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           start_epoch="$(date +%s)"
-          docker run -d --rm --name zasi-rollback -p 18082:8080 "$base_id"
+          docker run -d --rm --name zasi-rollback -p 18082:8080 -e ZASI_PROFILE=local -e ZASI_ALLOW_PUBLIC_BIND=yes -e ZASI_API_KEY=test-bootstrap-secret -e ZASI_CORS_ORIGINS=http://localhost -e ZASI_DATABASE_PATH=/app/data/zasi_control_plane.db -e ZASI_ARTIFACT_DIRECTORY=/app/data/artifacts "$base_id"
           for attempt in $(seq 1 30); do
             if curl --fail --silent http://127.0.0.1:18082/health/ready > "$RUNNER_TEMP/rollback-health.json"; then
               break
             fi
             if [ "$attempt" -eq 30 ]; then
-              docker logs zasi-rollback
+              docker ps -a
+              docker logs zasi-rollback || true
               exit 1
             fi
             sleep 2
