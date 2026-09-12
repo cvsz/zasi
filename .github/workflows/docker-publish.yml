@@ -39,6 +39,15 @@ jobs:
           sudo install -m 0755 trivy /usr/local/bin/trivy
           trivy --version
 
+      - name: Capture complete vulnerability evidence
+        run: >-
+          trivy image
+          --scanners vuln
+          --severity HIGH,CRITICAL
+          --format json
+          --output trivy-image-high-critical.json
+          zasi:ci
+
       - name: Scan repository for secrets
         run: >-
           trivy fs
@@ -47,14 +56,24 @@ jobs:
           --no-progress
           .
 
-      - name: Scan image for HIGH and CRITICAL vulnerabilities
+      - name: Enforce fixable HIGH and CRITICAL vulnerability gate
         run: >-
           trivy image
           --scanners vuln
           --severity HIGH,CRITICAL
+          --ignore-unfixed
           --exit-code 1
           --no-progress
           zasi:ci
+
+      - name: Upload vulnerability evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-image-evidence-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 30
+          path: trivy-image-high-critical.json
 
   docker-publish:
     name: Publish GHCR Docker Image
