@@ -13,7 +13,8 @@
     "world-room:server": "node scripts/world_room_server.mjs",
     "world-room:dev": "vite --config vite.world-room.config.js",
     "world-room:build": "vite build --config vite.world-room.config.js",
-    "test": "node tests/test_components.js && node --test tests/test_npm_bulk_audit.js && node tests/test_electron_runtime.js && node tests/test_electron_integration.js && node tests/test_electron_packaging.js"
+    "test:world-room": "node --test tests/test_world_room_static.mjs",
+    "test": "node tests/test_components.js && node --test tests/test_npm_bulk_audit.js && npm run test:world-room && node tests/test_electron_runtime.js && node tests/test_electron_integration.js && node tests/test_electron_packaging.js"
   },
   "engines": {
     "node": ">=22.12.0"
