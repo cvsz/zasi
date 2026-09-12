@@ -19,8 +19,14 @@ COPY src /app/src
 COPY scripts /app/scripts
 COPY --from=cockpit-build /frontend/web/dist /app/web/dist
 
-RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin zasi \
-    && pip install --no-cache-dir . \
+RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --uid 10001 --shell /usr/sbin/nologin zasi \
+    && python -m pip install --no-cache-dir --upgrade pip setuptools wheel \
+    && python -m pip install --no-cache-dir --no-build-isolation . \
+    && python -m pip uninstall -y pip setuptools wheel jaraco.context backports.tarfile \
+    && rm -rf /usr/local/lib/python3.11/ensurepip/_bundled \
     && install -d -m 700 /app/data \
     && chown -R 10001:10001 /app
 
