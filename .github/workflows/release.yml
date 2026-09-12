@@ -19,11 +19,51 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
           python-version: "3.11"
+
+      - name: Enforce production GO evidence
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          RELEASE_COMMIT="$(git rev-parse HEAD)"
+          git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main || {
+            echo "release commit is not contained in origin/main" >&2
+            exit 2
+          }
+
+          MAIN_PROTECTED="$({
+            curl --fail --silent --show-error \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/branches/main"
+          } | python -c 'import json,sys; print("true" if json.load(sys.stdin).get("protected") else "false")')"
+
+          test -f evidence/staging/latest.json || {
+            echo "missing evidence/staging/latest.json; production release remains NO-GO" >&2
+            exit 2
+          }
+
+          python scripts/production_go_gate.py \
+            --evidence evidence/staging/latest.json \
+            --expected-commit "$RELEASE_COMMIT" \
+            --main-protected "$MAIN_PROTECTED" \
+            --output production-go-decision.json
+
+      - name: Upload production GO decision
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-go-decision-${{ github.sha }}
+          path: production-go-decision.json
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -83,6 +123,7 @@ jobs:
             dist/SHA256SUMS
             dist/*.asc
             dist/ZASI_RELEASE_SIGNING_KEY.asc
+            production-go-decision.json
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
