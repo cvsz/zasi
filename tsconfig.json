@@ -18,6 +18,11 @@
     "jsx": "react-jsx",
     "types": ["vite/client"]
   },
-  "include": ["web/static/app.tsx", "web/static/cockpit.tsx", "web/static/vite-env.d.ts"],
+  "include": [
+    "web/static/app.tsx",
+    "web/static/cockpit.tsx",
+    "web/static/vite-env.d.ts",
+    "world-room/main.tsx"
+  ],
   "exclude": ["node_modules", "web/dist"]
 }
