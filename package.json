@@ -10,6 +10,9 @@
     "typecheck": "tsc --noEmit",
     "electron": "electron electron/main.js",
     "electron-build": "electron-builder --config electron-builder.config.js --linux --mac --win",
+    "world-room:server": "node scripts/world_room_server.mjs",
+    "world-room:dev": "vite --config vite.world-room.config.js",
+    "world-room:build": "vite build --config vite.world-room.config.js",
     "test": "node tests/test_components.js && node --test tests/test_npm_bulk_audit.js && node tests/test_electron_runtime.js && node tests/test_electron_integration.js && node tests/test_electron_packaging.js"
   },
   "engines": {
@@ -37,7 +40,9 @@
     "jarvis",
     "zasi",
     "react",
-    "react-router"
+    "react-router",
+    "realtime",
+    "worldbuilding"
   ],
   "license": "MIT"
 }
