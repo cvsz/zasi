@@ -27,9 +27,7 @@ function WorldRoom() {
   const handleEvent = (raw: string) => {
     try {
       const event = JSON.parse(raw) as { type?: string; delta?: string; transcript?: string; item_id?: string };
-      if (event.type === 'conversation.item.input_audio_transcription.completed' && event.transcript) {
-        append('user', event.transcript);
-      }
+      if (event.type === 'conversation.item.input_audio_transcription.completed' && event.transcript) append('user', event.transcript);
       if (event.type === 'response.output_audio_transcript.delta' && event.delta) {
         const key = event.item_id || 'current';
         transcriptRef.current[key] = (transcriptRef.current[key] || '') + event.delta;
@@ -54,6 +52,7 @@ function WorldRoom() {
     pcRef.current = null;
     streamRef.current = null;
     if (audioRef.current) audioRef.current.srcObject = null;
+    setMuted(false);
     setStatus('idle');
   };
 
@@ -104,13 +103,14 @@ function WorldRoom() {
     const dc = dcRef.current;
     if (!text || !dc || dc.readyState !== 'open') return;
     append('user', text);
-    dc.send(JSON.stringify({
-      type: 'conversation.item.create',
-      item: { type: 'message', role: 'user', content: [{ type: 'input_text', text }] },
-    }));
+    dc.send(JSON.stringify({ type: 'conversation.item.create', item: { type: 'message', role: 'user', content: [{ type: 'input_text', text }] } }));
     dc.send(JSON.stringify({ type: 'response.create' }));
     setDraft('');
   };
+
+  useEffect(() => {
+    streamRef.current?.getAudioTracks().forEach((track) => { track.enabled = !muted; });
+  }, [muted]);
 
   useEffect(() => () => disconnect(), []);
 
@@ -127,7 +127,6 @@ function WorldRoom() {
         <p className="eyebrow">AUDIO-FIRST WORLDBUILDING</p>
         <h1>Open a door.<br /><em>Make a world.</em></h1>
         <p className="lede">Speak an idea. World Room turns it into places, people, pressure, and the next scene.</p>
-
         <button className={`mic ${status === 'live' ? 'mic-live' : ''}`} onClick={status === 'live' ? disconnect : connect} aria-label={status === 'live' ? 'End session' : 'Start voice session'}>
           <span className="mic-icon">{status === 'live' ? '■' : '●'}</span>
           <span>{status === 'live' ? 'Leave the room' : status === 'connecting' ? 'Opening the room…' : 'Enter the room'}</span>
