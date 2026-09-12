@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {"id":"trivy-high-cve","signal":"Trivy exits 1 on HIGH vulnerability","expected":{"classification":"security-gate","action":"patch-or-expiring-exception"}},
+    {"id":"docker-publish-skipped","signal":"publish job skipped after security job failure","expected":{"classification":"expected-fail-closed","action":"fix-upstream-gate"}},
+    {"id":"required-check-missing","signal":"main accepts direct commit without required status checks","expected":{"classification":"governance-gap","action":"enable-ruleset"}},
+    {"id":"restore-integrity-failure","signal":"restored database fails integrity check","expected":{"classification":"dr-blocker","action":"reject-backup-and-investigate"}}
+  ]
+}
