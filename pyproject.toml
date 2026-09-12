@@ -19,7 +19,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence"
 ]
 dependencies = [
-    "fastapi>=0.115.0,<1.0.0",
+    "fastapi>=0.141.1,<1.0.0",
     "pydantic>=2.13.5,<3.0.0",
     "uvicorn>=0.52.4,<1.0.0",
     "psycopg[binary]>=3.3.5,<4.0.0",
