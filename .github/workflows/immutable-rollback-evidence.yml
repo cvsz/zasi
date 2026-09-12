@@ -1,0 +1,98 @@
+name: Immutable Rollback Evidence
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rollback-rehearsal:
+    name: Base to candidate to immutable rollback
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout base revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+      - name: Build immutable base image
+        run: |
+          set -euo pipefail
+          docker build --pull -t zasi:rollback-base .
+          docker inspect --format='{{.Id}}' zasi:rollback-base | tee "$RUNNER_TEMP/base-image-id.txt"
+      - name: Checkout candidate revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Build immutable candidate image
+        run: |
+          set -euo pipefail
+          docker build --pull -t zasi:rollback-candidate .
+          docker inspect --format='{{.Id}}' zasi:rollback-candidate | tee "$RUNNER_TEMP/candidate-image-id.txt"
+      - name: Smoke candidate
+        run: |
+          set -euo pipefail
+          candidate_id="$(cat "$RUNNER_TEMP/candidate-image-id.txt")"
+          docker run -d --rm --name zasi-candidate -p 18081:8080 -e ZASI_PROFILE=local -e ZASI_ALLOW_PUBLIC_BIND=yes -e ZASI_API_KEY=test-bootstrap-secret -e ZASI_CORS_ORIGINS=http://localhost -e ZASI_DATABASE_PATH=/app/data/zasi_control_plane.db -e ZASI_ARTIFACT_DIRECTORY=/app/data/artifacts "$candidate_id"
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18081/health/ready > "$RUNNER_TEMP/candidate-health.json"; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              docker ps -a
+              docker logs zasi-candidate || true
+              exit 1
+            fi
+            sleep 2
+          done
+          docker stop zasi-candidate
+      - name: Roll back to exact base image ID
+        run: |
+          set -euo pipefail
+          base_id="$(cat "$RUNNER_TEMP/base-image-id.txt")"
+          started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          start_epoch="$(date +%s)"
+          docker run -d --rm --name zasi-rollback -p 18082:8080 -e ZASI_PROFILE=local -e ZASI_ALLOW_PUBLIC_BIND=yes -e ZASI_API_KEY=test-bootstrap-secret -e ZASI_CORS_ORIGINS=http://localhost -e ZASI_DATABASE_PATH=/app/data/zasi_control_plane.db -e ZASI_ARTIFACT_DIRECTORY=/app/data/artifacts "$base_id"
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18082/health/ready > "$RUNNER_TEMP/rollback-health.json"; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              docker ps -a
+              docker logs zasi-rollback || true
+              exit 1
+            fi
+            sleep 2
+          done
+          end_epoch="$(date +%s)"
+          healthy="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          export STARTED="$started" HEALTHY="$healthy" START_EPOCH="$start_epoch" END_EPOCH="$end_epoch"
+          python - <<'PY' > "$RUNNER_TEMP/immutable-rollback-evidence.json"
+          import json, os
+          from pathlib import Path
+          temp = Path(os.environ['RUNNER_TEMP'])
+          print(json.dumps({
+              'status': 'passed',
+              'base_image_id': (temp/'base-image-id.txt').read_text().strip(),
+              'candidate_image_id': (temp/'candidate-image-id.txt').read_text().strip(),
+              'rollback_started_at': os.environ['STARTED'],
+              'rollback_healthy_at': os.environ['HEALTHY'],
+              'rollback_seconds': int(os.environ['END_EPOCH']) - int(os.environ['START_EPOCH']),
+          }, sort_keys=True))
+          PY
+          docker stop zasi-rollback
+      - name: Upload rollback evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: immutable-rollback-evidence-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            ${{ runner.temp }}/base-image-id.txt
+            ${{ runner.temp }}/candidate-image-id.txt
+            ${{ runner.temp }}/candidate-health.json
+            ${{ runner.temp }}/rollback-health.json
+            ${{ runner.temp }}/immutable-rollback-evidence.json

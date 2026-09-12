@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {"id":"stale-green-pr","input":{"state":"open","ci":"success","stale_days":21,"review_threads":"resolved"},"expected_action":"salvage-review"},
+    {"id":"stale-red-pr","input":{"state":"open","ci":"failure","stale_days":21,"review_threads":"resolved"},"expected_action":"repair-before-merge"},
+    {"id":"unresolved-review","input":{"state":"open","ci":"success","stale_days":1,"review_threads":"unresolved"},"expected_action":"block-merge"},
+    {"id":"reopened-after-fix","input":{"state":"open","previous_state":"closed","ci":"success","review_threads":"resolved"},"expected_action":"re-review"}
+  ]
+}

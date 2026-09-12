@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "required_capabilities": ["read-repo","run-tests","respect-repo-instructions","report-evidence"],
+  "harnesses": [
+    {"name":"claude","surface":"CLAUDE.md/.claude","expected":"compatible"},
+    {"name":"codex","surface":"AGENTS.md/.agents","expected":"compatible"},
+    {"name":"opencode","surface":"AGENTS.md","expected":"compatible"},
+    {"name":"zed","surface":"AGENTS.md","expected":"compatible"},
+    {"name":"dmux","surface":"AGENTS.md","expected":"compatible"},
+    {"name":"generic-agent","surface":"repository instructions","expected":"compatible"}
+  ]
+}

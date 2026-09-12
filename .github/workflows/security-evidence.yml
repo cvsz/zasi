@@ -1,0 +1,67 @@
+name: Security Evidence Pack
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  evidence:
+    name: Build security evidence
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install checksum-pinned Trivy
+        env:
+          TRIVY_VERSION: 0.74.0
+          TRIVY_SHA256: 2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a
+        run: |
+          set -euo pipefail
+          archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl --fail --location --silent --show-error \
+            --output "$archive" \
+            "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${archive}"
+          echo "${TRIVY_SHA256}  ${archive}" | sha256sum --check --strict
+          tar -xzf "$archive" trivy
+          sudo install -m 0755 trivy /usr/local/bin/trivy
+
+      - name: Generate repository SBOM
+        run: trivy fs --format cyclonedx --output security-evidence-sbom.cdx.json .
+
+      - name: Generate vulnerability SARIF
+        run: trivy fs --scanners vuln --format sarif --output security-evidence-vulnerabilities.sarif .
+
+      - name: Generate secret-scan JSON
+        run: trivy fs --scanners secret --format json --output security-evidence-secrets.json .
+
+      - name: Enforce secret gate
+        run: trivy fs --scanners secret --exit-code 1 --no-progress .
+
+      - name: Enforce fixable HIGH/CRITICAL vulnerability gate
+        run: trivy fs --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --no-progress .
+
+      - name: Upload security evidence pack
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-evidence-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            security-evidence-sbom.cdx.json
+            security-evidence-vulnerabilities.sarif
+            security-evidence-secrets.json
+
+      - name: Upload SARIF to code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: security-evidence-vulnerabilities.sarif

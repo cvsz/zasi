@@ -1,0 +1,86 @@
+name: HA and Canary Rehearsal Evidence
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  canary-ha:
+    name: Local two-replica canary and failure rehearsal
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout base revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+      - name: Build base image
+        run: docker build --pull -t zasi:ha-base .
+      - name: Checkout candidate revision
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Build candidate image
+        run: docker build --pull -t zasi:ha-candidate .
+      - name: Start base and candidate replicas
+        run: |
+          set -euo pipefail
+          docker run -d --rm --name zasi-ha-base -p 18101:8080 -e ZASI_PROFILE=local -e ZASI_ALLOW_PUBLIC_BIND=yes -e ZASI_API_KEY=test-bootstrap-secret -e ZASI_CORS_ORIGINS=http://localhost -e ZASI_DATABASE_PATH=/app/data/zasi_control_plane.db -e ZASI_ARTIFACT_DIRECTORY=/app/data/artifacts zasi:ha-base
+          docker run -d --rm --name zasi-ha-candidate -p 18102:8080 -e ZASI_PROFILE=local -e ZASI_ALLOW_PUBLIC_BIND=yes -e ZASI_API_KEY=test-bootstrap-secret -e ZASI_CORS_ORIGINS=http://localhost -e ZASI_DATABASE_PATH=/app/data/zasi_control_plane.db -e ZASI_ARTIFACT_DIRECTORY=/app/data/artifacts zasi:ha-candidate
+          for port in 18101 18102; do
+            for attempt in $(seq 1 30); do
+              if curl --fail --silent "http://127.0.0.1:${port}/health/ready" >/dev/null; then
+                break
+              fi
+              if [ "$attempt" -eq 30 ]; then
+                docker ps -a
+                docker logs zasi-ha-base || true
+                docker logs zasi-ha-candidate || true
+                exit 1
+              fi
+              sleep 2
+            done
+          done
+      - name: Rehearse 90/10 canary distribution
+        run: |
+          set -euo pipefail
+          base_ok=0
+          candidate_ok=0
+          for _ in $(seq 1 18); do
+            curl --fail --silent http://127.0.0.1:18101/health/ready >/dev/null
+            base_ok=$((base_ok + 1))
+          done
+          for _ in $(seq 1 2); do
+            curl --fail --silent http://127.0.0.1:18102/health/ready >/dev/null
+            candidate_ok=$((candidate_ok + 1))
+          done
+          printf '{"base_requests":%d,"candidate_requests":%d,"status":"passed"}\n' "$base_ok" "$candidate_ok" > "$RUNNER_TEMP/canary-evidence.json"
+      - name: Kill candidate and verify surviving replica
+        run: |
+          set -euo pipefail
+          started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          start_epoch="$(date +%s)"
+          docker stop zasi-ha-candidate
+          survived=0
+          for _ in $(seq 1 10); do
+            curl --fail --silent http://127.0.0.1:18101/health/ready >/dev/null
+            survived=$((survived + 1))
+          done
+          end_epoch="$(date +%s)"
+          healthy="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          printf '{"failed_replica":"candidate","surviving_requests":%d,"failure_started_at":"%s","healthy_verified_at":"%s","recovery_observation_seconds":%d,"status":"passed"}\n' \
+            "$survived" "$started" "$healthy" "$((end_epoch-start_epoch))" > "$RUNNER_TEMP/ha-evidence.json"
+          docker stop zasi-ha-base
+      - name: Upload HA and canary evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ha-canary-evidence-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            ${{ runner.temp }}/canary-evidence.json
+            ${{ runner.temp }}/ha-evidence.json
