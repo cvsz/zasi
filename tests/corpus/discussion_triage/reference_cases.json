@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {"id":"informational","input":{"body":"Sharing benchmark results; no action requested.","accepted_answer":false,"responses":0},"expected_class":"informational"},
+    {"id":"answered","input":{"body":"How do I enable the local rollback drill?","accepted_answer":true,"responses":2},"expected_class":"answered"},
+    {"id":"needs-response","input":{"body":"World Room disconnects after deploy; can someone help?","accepted_answer":false,"responses":0},"expected_class":"no-response"}
+  ]
+}
