@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 const port = Number(process.env.WORLD_ROOM_PORT || 8090);
 const host = process.env.WORLD_ROOM_HOST || '127.0.0.1';
 const apiKey = process.env.OPENAI_API_KEY;
-const model = process.env.WORLD_ROOM_MODEL || 'gpt-realtime-2';
+const model = process.env.WORLD_ROOM_MODEL || 'gpt-realtime-2.1';
 
 const instructions = [
   'You are World Room, a playful live worldbuilding companion.',
