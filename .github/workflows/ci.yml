@@ -29,6 +29,7 @@ jobs:
           npm ci --ignore-scripts --no-audit
           npm run typecheck
           npm run build
+          npm run world-room:build
       - name: Install dependencies
         run: pip install '.[dev]' build coverage
       - name: Audit project Python dependencies
@@ -46,7 +47,7 @@ jobs:
           coverage report --fail-under=60
           COVERAGE_PCT=$(coverage report | tail -1 | awk '{print $NF}')
           echo "### Coverage: $COVERAGE_PCT" >> $GITHUB_STEP_SUMMARY
-      - name: Run cockpit and Electron boundary tests
+      - name: Run cockpit, World Room, and Electron boundary tests
         run: npm test
 
   build:
@@ -66,6 +67,7 @@ jobs:
           npm ci --ignore-scripts --no-audit
           npm run typecheck
           npm run build
+          npm run world-room:build
       - run: pip install '.[dev]' build
       - name: Build wheel and sdist
         run: python3 -m build
