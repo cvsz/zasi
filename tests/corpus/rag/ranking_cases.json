@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {"id":"rag-production-readiness","query":"production readiness rollback evidence","documents":[{"id":"d1","text":"immutable digest rollback rehearsal with health checks"},{"id":"d2","text":"frontend color palette"},{"id":"d3","text":"backup restore integrity evidence"}],"expected_order":["d1","d3","d2"]},
+    {"id":"rag-security","query":"container vulnerability evidence","documents":[{"id":"s1","text":"Trivy SARIF vulnerability scan"},{"id":"s2","text":"discussion template"},{"id":"s3","text":"SBOM CycloneDX artifact"}],"expected_order":["s1","s3","s2"]}
+  ]
+}
