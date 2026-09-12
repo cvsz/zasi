@@ -31,6 +31,9 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -55,6 +58,7 @@ jobs:
             type=semver,pattern={{version}}
             type=sha,format=short
       - name: Build and Push Docker Image
+        id: push
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -62,3 +66,11 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Attest published image provenance
+        uses: actions/attest@v4
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
