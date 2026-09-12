@@ -10,17 +10,51 @@ on:
 permissions:
   contents: read
 
+env:
+  TRIVY_VERSION: 0.74.0
+  TRIVY_LINUX_AMD64_SHA256: 2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a
+
 jobs:
   docker-build:
-    name: Build Docker Image
+    name: Build and Security Scan Docker Image
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+
       - name: Build Docker image
         run: docker build --pull -t zasi:ci .
+
+      - name: Install checksum-pinned Trivy
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          url="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${archive}"
+          curl --fail --location --silent --show-error --output "${archive}" "${url}"
+          echo "${TRIVY_LINUX_AMD64_SHA256}  ${archive}" | sha256sum --check --strict
+          tar -xzf "${archive}" trivy
+          sudo install -m 0755 trivy /usr/local/bin/trivy
+          trivy --version
+
+      - name: Scan repository for secrets
+        run: >-
+          trivy fs
+          --scanners secret
+          --exit-code 1
+          --no-progress
+          .
+
+      - name: Scan image for HIGH and CRITICAL vulnerabilities
+        run: >-
+          trivy image
+          --scanners vuln
+          --severity HIGH,CRITICAL
+          --exit-code 1
+          --no-progress
+          zasi:ci
 
   docker-publish:
     name: Publish GHCR Docker Image
@@ -42,12 +76,12 @@ jobs:
         uses: docker/setup-buildx-action@v4
 
       - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v6
@@ -57,6 +91,7 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=semver,pattern={{version}}
             type=sha,format=short
+
       - name: Build and Push Docker Image
         id: push
         uses: docker/build-push-action@v7
