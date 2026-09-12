@@ -10,7 +10,7 @@ const files = [
   'docs/WORLD_ROOM.md',
 ];
 
-test('World Room surface is complete', async () => {
+test('World Room surface is complete and local-only by default', async () => {
   const contents = await Promise.all(files.map((file) => readFile(file, 'utf8')));
   for (let i = 0; i < files.length; i += 1) assert.ok(contents[i].length > 100, `${files[i]} is unexpectedly small`);
   const frontend = contents[1];
@@ -21,4 +21,7 @@ test('World Room surface is complete', async () => {
   assert.match(server, /OPENAI_API_KEY/);
   assert.match(server, /\/v1\/realtime\/calls/);
   assert.match(server, /gpt-realtime-2\.1/);
+  assert.match(server, /loopbackHosts/);
+  assert.match(server, /rejects wildcard CORS/);
+  assert.match(server, /World Room proxy is local-only/);
 });

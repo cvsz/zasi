@@ -4,6 +4,15 @@ const port = Number(process.env.WORLD_ROOM_PORT || 8090);
 const host = process.env.WORLD_ROOM_HOST || '127.0.0.1';
 const apiKey = process.env.OPENAI_API_KEY;
 const model = process.env.WORLD_ROOM_MODEL || 'gpt-realtime-2.1';
+const corsOrigin = process.env.WORLD_ROOM_CORS_ORIGIN || 'http://127.0.0.1:5174';
+
+const loopbackHosts = new Set(['127.0.0.1', 'localhost', '::1']);
+if (!loopbackHosts.has(host)) {
+  throw new Error('World Room proxy is local-only: WORLD_ROOM_HOST must resolve to a loopback host.');
+}
+if (corsOrigin === '*') {
+  throw new Error('World Room proxy rejects wildcard CORS. Set WORLD_ROOM_CORS_ORIGIN to the exact local UI origin.');
+}
 
 const instructions = [
   'You are World Room, a playful live worldbuilding companion.',
@@ -20,7 +29,7 @@ function send(res, status, body, headers = {}) {
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
     'cache-control': 'no-store',
-    'access-control-allow-origin': process.env.WORLD_ROOM_CORS_ORIGIN || 'http://127.0.0.1:5174',
+    'access-control-allow-origin': corsOrigin,
     ...headers,
   });
   res.end(payload);
@@ -40,7 +49,7 @@ async function readJson(req) {
 const server = createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
-      'access-control-allow-origin': process.env.WORLD_ROOM_CORS_ORIGIN || 'http://127.0.0.1:5174',
+      'access-control-allow-origin': corsOrigin,
       'access-control-allow-methods': 'POST, OPTIONS',
       'access-control-allow-headers': 'content-type',
     });
@@ -93,7 +102,7 @@ const server = createServer(async (req, res) => {
     res.writeHead(upstream.status, {
       'content-type': upstream.headers.get('content-type') || 'application/sdp',
       'cache-control': 'no-store',
-      'access-control-allow-origin': process.env.WORLD_ROOM_CORS_ORIGIN || 'http://127.0.0.1:5174',
+      'access-control-allow-origin': corsOrigin,
     });
     return res.end(text);
   } catch (error) {
