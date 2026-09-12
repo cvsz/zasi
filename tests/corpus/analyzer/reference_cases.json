@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {"id":"analyzer-missing-timeout","input":{"artifact":"workflow","signals":["external-call","no-timeout"]},"expected":{"severity":"high","findings":["missing-timeout"]}},
+    {"id":"analyzer-secret-safe","input":{"artifact":"config","signals":["secret-provider","redacted-log"]},"expected":{"severity":"none","findings":[]}},
+    {"id":"analyzer-unsafe-latest-tag","input":{"artifact":"deployment","signals":["mutable-image-tag:latest"]},"expected":{"severity":"high","findings":["mutable-artifact"]}}
+  ]
+}
