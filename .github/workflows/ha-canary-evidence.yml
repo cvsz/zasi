@@ -28,14 +28,15 @@ jobs:
       - name: Start base and candidate replicas
         run: |
           set -euo pipefail
-          docker run -d --rm --name zasi-ha-base -p 18101:8080 zasi:ha-base
-          docker run -d --rm --name zasi-ha-candidate -p 18102:8080 zasi:ha-candidate
+          docker run -d --rm --name zasi-ha-base -p 18101:8080 -e ZASI_PROFILE=local -e ZASI_ALLOW_PUBLIC_BIND=yes -e ZASI_API_KEY=test-bootstrap-secret -e ZASI_CORS_ORIGINS=http://localhost -e ZASI_DATABASE_PATH=/app/data/zasi_control_plane.db -e ZASI_ARTIFACT_DIRECTORY=/app/data/artifacts zasi:ha-base
+          docker run -d --rm --name zasi-ha-candidate -p 18102:8080 -e ZASI_PROFILE=local -e ZASI_ALLOW_PUBLIC_BIND=yes -e ZASI_API_KEY=test-bootstrap-secret -e ZASI_CORS_ORIGINS=http://localhost -e ZASI_DATABASE_PATH=/app/data/zasi_control_plane.db -e ZASI_ARTIFACT_DIRECTORY=/app/data/artifacts zasi:ha-candidate
           for port in 18101 18102; do
             for attempt in $(seq 1 30); do
               if curl --fail --silent "http://127.0.0.1:${port}/health/ready" >/dev/null; then
                 break
               fi
               if [ "$attempt" -eq 30 ]; then
+                docker ps -a
                 docker logs zasi-ha-base || true
                 docker logs zasi-ha-candidate || true
                 exit 1
