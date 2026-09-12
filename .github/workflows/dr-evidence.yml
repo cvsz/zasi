@@ -16,11 +16,11 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:17-alpine
+        image: postgres:16-alpine
         env:
           POSTGRES_USER: zasi
-          POSTGRES_PASSWORD: zasi-ci-password
           POSTGRES_DB: zasi_source
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
@@ -31,9 +31,9 @@ jobs:
     env:
       ZASI_PROFILE: local
       ZASI_SECRET_PROVIDER: environment
-      ZASI_DATABASE_URL: postgresql://zasi:zasi-ci-password@127.0.0.1:5432/zasi_source
-      ZASI_ROLLBACK_SOURCE_URL: postgresql://zasi:zasi-ci-password@127.0.0.1:5432/zasi_source
-      ZASI_ROLLBACK_ADMIN_URL: postgresql://zasi:zasi-ci-password@127.0.0.1:5432/postgres
+      ZASI_DATABASE_URL: postgresql://zasi@127.0.0.1:5432/zasi_source
+      ZASI_ROLLBACK_SOURCE_URL: postgresql://zasi@127.0.0.1:5432/zasi_source
+      ZASI_ROLLBACK_ADMIN_URL: postgresql://zasi@127.0.0.1:5432/postgres
       ZASI_BACKUP_KEY_B64: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
     steps:
       - uses: actions/checkout@v7
@@ -43,6 +43,12 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: "22.14.0"
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends postgresql-client
+          pg_dump --version
+          pg_restore --version
       - name: Build bundled cockpit and install project
         run: |
           npm ci --ignore-scripts --no-audit
@@ -77,7 +83,7 @@ jobs:
         run: |
           python - <<'PY'
           import psycopg
-          conn = psycopg.connect('postgresql://zasi:zasi-ci-password@127.0.0.1:5432/postgres', autocommit=True)
+          conn = psycopg.connect('postgresql://zasi@127.0.0.1:5432/postgres', autocommit=True)
           try:
               conn.execute('DROP DATABASE IF EXISTS zasi_restore_ci')
               conn.execute('CREATE DATABASE zasi_restore_ci')
@@ -86,7 +92,7 @@ jobs:
           PY
       - name: Restore into clean target and verify integrity
         env:
-          RESTORE_URL: postgresql://zasi:zasi-ci-password@127.0.0.1:5432/zasi_restore_ci
+          RESTORE_URL: postgresql://zasi@127.0.0.1:5432/zasi_restore_ci
         run: |
           set -euo pipefail
           python scripts/backup_control_plane.py restore \
