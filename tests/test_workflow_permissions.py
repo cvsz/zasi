@@ -41,7 +41,9 @@ class WorkflowPermissionTests(unittest.TestCase):
                 self.assertIn('node-version: "22.14.0"', workflow)
 
         ci = (WORKFLOW_DIR / "ci.yml").read_text(encoding="utf-8")
-        self.assertIn("actions/dependency-review-action@v4", ci)
+        # Accept current and future major versions of the dependency-review
+        # action so Dependabot bumps (v4 -> v5, ...) stay green. Pin floor at v4.
+        self.assertRegex(ci, r"actions/dependency-review-action@v([4-9][0-9]*)")
         self.assertIn("npm ci --ignore-scripts --no-audit", ci)
         install_audit_script = Path(__file__).parents[1] / "scripts" / "npm_ci_audit.sh"
         self.assertIn("npm_bulk_audit.mjs", install_audit_script.read_text(encoding="utf-8"))

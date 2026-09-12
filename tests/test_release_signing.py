@@ -84,7 +84,9 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("workflow_run:", publish_workflow)
         self.assertIn('workflows: ["Create GitHub Release"]', publish_workflow)
         self.assertIn("      actions: read\n      id-token: write", publish_workflow)
-        self.assertIn("actions/download-artifact@v4", publish_workflow)
+        # Accept current and future majors so Dependabot bumps (v4 -> v8, ...)
+        # stay green. Pin floor at v4 to keep the signed-artifact contract.
+        self.assertRegex(publish_workflow, r"actions/download-artifact@v([4-9][0-9]*)")
         self.assertIn(
             "run-id: ${{ github.event.workflow_run.id }}", publish_workflow
         )
