@@ -26,7 +26,7 @@ The browser never receives `OPENAI_API_KEY`. The local proxy owns the API creden
 
 ## Model
 
-The default is `gpt-realtime-2`, the current reasoning-capable Realtime model used by this implementation. Override with `WORLD_ROOM_MODEL` when testing another supported Realtime model.
+The default is `gpt-realtime-2.1`, the current reasoning-capable Realtime model used by this implementation. Override with `WORLD_ROOM_MODEL` when testing another supported Realtime model.
 
 ## Local setup
 
@@ -76,7 +76,7 @@ The proxy listens on `127.0.0.1:8090` by default. `WORLD_ROOM_HOST`, `WORLD_ROOM
 
 ## Latency notes
 
-WebRTC is used because the experience depends on low-latency audio and natural interruption. Keep prompts concise, avoid unnecessary client round trips, and let server VAD manage turn boundaries. `gpt-realtime-2` can trade additional reasoning for latency; keep the default interaction lightweight and only change the model when testing a deliberate quality/latency tradeoff.
+WebRTC is used because the experience depends on low-latency audio and natural interruption. Keep prompts concise, avoid unnecessary client round trips, and let server VAD manage turn boundaries. `gpt-realtime-2.1` improves interruption behavior and silence/noise handling over GPT-Realtime-2; keep the default interaction lightweight and use `WORLD_ROOM_MODEL` when testing a deliberate quality/latency/cost tradeoff.
 
 ## Permissions and recovery
 
