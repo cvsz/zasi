@@ -7,6 +7,7 @@ A production release tag is allowed only when `scripts/production_go_gate.py` va
 - `main` is protected by GitHub branch/ruleset governance.
 - `candidate_commit` is the exact 40-character release commit SHA.
 - `candidate_image` and `previous_image` are immutable `ghcr.io/...@sha256:...` references and are different.
+- `observed_at` is a real RFC3339 UTC timestamp no more than **6 hours old** at release time. Future timestamps and stale evidence are rejected.
 - `staging_url` and `/health/ready` use HTTPS.
 - health readiness passed on the candidate.
 - World Room smoke/E2E passed on the real staging deployment.
@@ -48,8 +49,8 @@ A production release tag is allowed only when `scripts/production_go_gate.py` va
 }
 ```
 
-Do not copy placeholder values into `latest.json`. Evidence must come from an actual deployment/recovery exercise and must match the release candidate being tagged.
+Do not copy placeholder values into `latest.json`. Evidence must come from an actual deployment/recovery exercise, must match the release candidate being tagged, and must be regenerated when it becomes older than six hours.
 
 ## Release behavior
 
-`.github/workflows/release.yml` verifies that the tag commit is contained in `origin/main`, queries GitHub for the protection state of `main`, validates `evidence/staging/latest.json`, and uploads the resulting `production-go-decision.json` with the release artifacts. Missing, stale, mutable, failed, or mismatched evidence causes the release to stop with `NO-GO`.
+`.github/workflows/release.yml` verifies that the tag commit is contained in `origin/main`, queries GitHub for the protection state of `main`, validates `evidence/staging/latest.json`, and uploads the resulting `production-go-decision.json` with the release artifacts. Missing, stale, future-dated, mutable, failed, or mismatched evidence causes the release to stop with `NO-GO`.
