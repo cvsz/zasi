@@ -105,6 +105,7 @@ jobs:
           from src.control_plane.storage.postgres_storage import PostgresControlPlaneStore
           store = PostgresControlPlaneStore(os.environ['RESTORE_URL'])
           try:
+              store.initialize()
               integrity = bool(store.integrity_check())
               version = store.schema_version()
               print(json.dumps({'status': 'passed' if integrity else 'failed', 'integrity': integrity, 'schema_version': version}, sort_keys=True))
