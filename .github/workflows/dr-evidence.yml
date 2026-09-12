@@ -1,0 +1,120 @@
+name: Backup Restore and DR Evidence
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup-restore:
+    name: Clean PostgreSQL backup restore rehearsal
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: zasi
+          POSTGRES_PASSWORD: zasi-ci-password
+          POSTGRES_DB: zasi_source
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U zasi -d zasi_source"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      ZASI_PROFILE: local
+      ZASI_SECRET_PROVIDER: environment
+      ZASI_DATABASE_URL: postgresql://zasi:zasi-ci-password@127.0.0.1:5432/zasi_source
+      ZASI_ROLLBACK_SOURCE_URL: postgresql://zasi:zasi-ci-password@127.0.0.1:5432/zasi_source
+      ZASI_ROLLBACK_ADMIN_URL: postgresql://zasi:zasi-ci-password@127.0.0.1:5432/postgres
+      ZASI_BACKUP_KEY_B64: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Install project
+        run: pip install '.[dev]'
+      - name: Initialize source database
+        run: |
+          python - <<'PY'
+          import os
+          from src.control_plane.storage.postgres_storage import PostgresControlPlaneStore
+          store = PostgresControlPlaneStore(os.environ['ZASI_DATABASE_URL'])
+          try:
+              store.initialize()
+              assert store.integrity_check()
+              print(f'schema_version={store.schema_version()}')
+          finally:
+              store.close()
+          PY
+      - name: Create and validate encrypted backup
+        run: |
+          set -euo pipefail
+          python scripts/backup_control_plane.py create \
+            --backend postgresql \
+            --database-url "$ZASI_DATABASE_URL" \
+            --destination "$RUNNER_TEMP/zasi-control-plane.zasi" \
+            | tee "$RUNNER_TEMP/backup-create.json"
+          python scripts/backup_control_plane.py validate \
+            --backend postgresql \
+            --backup "$RUNNER_TEMP/zasi-control-plane.zasi" \
+            | tee "$RUNNER_TEMP/backup-validate.json"
+      - name: Create clean restore target
+        run: |
+          python - <<'PY'
+          import psycopg
+          conn = psycopg.connect('postgresql://zasi:zasi-ci-password@127.0.0.1:5432/postgres', autocommit=True)
+          try:
+              conn.execute('DROP DATABASE IF EXISTS zasi_restore_ci')
+              conn.execute('CREATE DATABASE zasi_restore_ci')
+          finally:
+              conn.close()
+          PY
+      - name: Restore into clean target and verify integrity
+        env:
+          RESTORE_URL: postgresql://zasi:zasi-ci-password@127.0.0.1:5432/zasi_restore_ci
+        run: |
+          set -euo pipefail
+          python scripts/backup_control_plane.py restore \
+            --backend postgresql \
+            --database-url "$RESTORE_URL" \
+            --backup "$RUNNER_TEMP/zasi-control-plane.zasi" \
+            | tee "$RUNNER_TEMP/backup-restore.json"
+          python - <<'PY' | tee "$RUNNER_TEMP/restore-integrity.json"
+          import json, os
+          from src.control_plane.storage.postgres_storage import PostgresControlPlaneStore
+          store = PostgresControlPlaneStore(os.environ['RESTORE_URL'])
+          try:
+              integrity = bool(store.integrity_check())
+              version = store.schema_version()
+              print(json.dumps({'status': 'passed' if integrity else 'failed', 'integrity': integrity, 'schema_version': version}, sort_keys=True))
+              if not integrity:
+                  raise SystemExit(1)
+          finally:
+              store.close()
+          PY
+      - name: Run bounded rollback restore drill
+        run: |
+          python scripts/rollback_drill.py --allow-local-rehearsal \
+            | tee "$RUNNER_TEMP/rollback-drill.json"
+      - name: Upload DR rehearsal evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dr-evidence-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            ${{ runner.temp }}/backup-create.json
+            ${{ runner.temp }}/backup-validate.json
+            ${{ runner.temp }}/backup-restore.json
+            ${{ runner.temp }}/restore-integrity.json
+            ${{ runner.temp }}/rollback-drill.json
