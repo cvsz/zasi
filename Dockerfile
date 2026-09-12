@@ -20,7 +20,9 @@ COPY scripts /app/scripts
 COPY --from=cockpit-build /frontend/web/dist /app/web/dist
 
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin zasi \
-    && pip install --no-cache-dir . \
+    && python -m pip install --no-cache-dir --upgrade "wheel>=0.46.2" "jaraco.context>=6.1.0" \
+    && python -m pip install --no-cache-dir . \
+    && python -m pip uninstall -y wheel jaraco.context \
     && install -d -m 700 /app/data \
     && chown -R 10001:10001 /app
 
