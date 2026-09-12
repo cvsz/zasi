@@ -20,5 +20,5 @@ test('World Room surface is complete', async () => {
   assert.match(frontend, /createDataChannel/);
   assert.match(server, /OPENAI_API_KEY/);
   assert.match(server, /\/v1\/realtime\/calls/);
-  assert.match(server, /gpt-realtime-2/);
+  assert.match(server, /gpt-realtime-2\.1/);
 });
