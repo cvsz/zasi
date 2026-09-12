@@ -3,7 +3,8 @@
 
 This gate intentionally distinguishes CI rehearsal evidence from real staging evidence.
 A release candidate is GO only when repository governance is enabled and an external
-staging record proves health, World Room smoke, canary SLOs, and immutable rollback.
+staging record proves recent health, World Room smoke, canary SLOs, and immutable
+rollback for the exact release candidate.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -19,6 +20,7 @@ from urllib.parse import urlparse
 SHA40 = re.compile(r"^[0-9a-f]{40}$")
 DIGEST = re.compile(r"^ghcr\.io/[a-z0-9_.-]+/[a-z0-9_.-]+@sha256:[0-9a-f]{64}$")
 PASS = "passed"
+MAX_EVIDENCE_AGE = timedelta(hours=6)
 
 
 class GateError(ValueError):
@@ -53,7 +55,13 @@ def _timestamp(value: Any) -> datetime:
     return result.astimezone(timezone.utc)
 
 
-def validate_evidence(data: dict[str, Any], *, expected_commit: str, main_protected: bool) -> dict[str, Any]:
+def validate_evidence(
+    data: dict[str, Any],
+    *,
+    expected_commit: str,
+    main_protected: bool,
+    now: datetime | None = None,
+) -> dict[str, Any]:
     _require(main_protected, "main branch is not protected; production GO is forbidden")
     _require(data.get("schema_version") == 1, "schema_version must be 1")
 
@@ -70,7 +78,11 @@ def validate_evidence(data: dict[str, Any], *, expected_commit: str, main_protec
 
     _https(data.get("staging_url"), "staging_url")
     observed_at = _timestamp(data.get("observed_at"))
-    _require(observed_at <= datetime.now(timezone.utc), "observed_at cannot be in the future")
+    current_time = now or datetime.now(timezone.utc)
+    _require(current_time.tzinfo is not None, "current time must include timezone information")
+    current_time = current_time.astimezone(timezone.utc)
+    _require(observed_at <= current_time, "observed_at cannot be in the future")
+    _require(current_time - observed_at <= MAX_EVIDENCE_AGE, "staging evidence is stale; observed_at must be within the last 6 hours")
 
     health = _passed(data.get("health"), "health")
     _https(health.get("ready_url"), "health.ready_url")
@@ -101,6 +113,7 @@ def validate_evidence(data: dict[str, Any], *, expected_commit: str, main_protec
         "observed_at": data["observed_at"],
         "checks": {
             "main_protected": True,
+            "freshness": PASS,
             "health": PASS,
             "world_room": PASS,
             "canary": PASS,
