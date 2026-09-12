@@ -1,0 +1,47 @@
+name: Production GO Gate Contract
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: Validate production GO evidence contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Run production GO gate tests
+        run: python -m unittest tests.test_production_go_gate -v
+      - name: Verify validator rejects an unprotected main branch
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/no-go.json" <<'JSON'
+          {
+            "schema_version": 1,
+            "candidate_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "candidate_image": "ghcr.io/cvsz/zasi@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "previous_image": "ghcr.io/cvsz/zasi@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "staging_url": "https://staging.example.invalid",
+            "observed_at": "2026-09-01T00:00:00Z",
+            "health": {"status": "passed", "ready_url": "https://staging.example.invalid/health/ready"},
+            "world_room": {"status": "passed", "smoke_case": "contract fixture"},
+            "canary": {"status": "passed", "request_count": 20, "error_rate": 0, "p95_ms": 100},
+            "rollback": {"status": "passed", "image": "ghcr.io/cvsz/zasi@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "health_status": "passed", "world_room_status": "passed", "duration_seconds": 30}
+          }
+          JSON
+          if python scripts/production_go_gate.py \
+            --evidence "$RUNNER_TEMP/no-go.json" \
+            --expected-commit aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+            --main-protected false; then
+            echo "validator incorrectly allowed GO on an unprotected main branch" >&2
+            exit 1
+          fi
