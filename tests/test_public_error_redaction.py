@@ -26,7 +26,7 @@ class PublicErrorRedactionTests(unittest.IsolatedAsyncioTestCase):
         self.store = ControlPlaneStore(settings.database_path)
         self.app = create_app(settings=settings, store=self.store)
 
-        @self.app.get("/api/v2/_test/public-error-redaction")
+        @self.app.post("/api/v2/_test/public-error-redaction")
         async def injected_public_error():
             raise HTTPException(
                 status_code=409,
@@ -59,7 +59,7 @@ class PublicErrorRedactionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_http_exception_payload_redacts_credentials_before_response(self):
         async with self.client() as client:
-            response = await client.get("/api/v2/_test/public-error-redaction")
+            response = await client.post("/api/v2/_test/public-error-redaction")
 
         self.assertEqual(response.status_code, 409)
         body = response.json()["error"]
