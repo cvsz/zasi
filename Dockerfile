@@ -10,7 +10,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+    PYTHONDONTWRITEBYTECODE=1 \
+    ZASI_HOST=0.0.0.0 \
+    ZASI_PORT=8080 \
+    ZASI_ALLOW_PUBLIC_BIND=yes
 
 COPY pyproject.toml README.md /app/
 COPY main.py /app/main.py
@@ -37,4 +40,4 @@ USER 10001:10001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD ["python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health/ready', timeout=3)"]
 
-CMD ["uvicorn", "backend.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["python3", "-m", "backend.runtime"]
