@@ -1,4 +1,4 @@
-.PHONY: all setup test test-agent-platform test-api test-control-plane test-js typecheck test-all coverage clean build build-web sbom install server run docker-build docker-run ci help
+.PHONY: all setup test test-agent-platform test-api test-control-plane test-identity-foundation test-js typecheck test-all coverage clean build build-web sbom install server run docker-build docker-run ci help
 
 PYTHON ?= python3
 PIP ?= $(PYTHON) -m pip
@@ -22,6 +22,20 @@ test-api:
 
 test-control-plane:
 	$(PYTHON) -m unittest tests.test_control_plane_core tests.test_control_plane_broker tests.test_control_plane_api tests.test_security_hardening tests.test_egress_security
+
+test-identity-foundation:
+	$(PYTHON) -m unittest -q \
+		tests.test_control_plane_core \
+		tests.test_control_plane_api \
+		tests.test_identity_restart_evidence \
+		tests.test_encrypted_backup \
+		tests.test_event_audit_secret_redaction \
+		tests.test_persisted_secret_redaction \
+		tests.test_outbox_credential_boundary \
+		tests.test_public_error_redaction \
+		tests.test_security_hardening \
+		tests.test_postgres_redis_runtime
+	node tests/test_electron_integration.js
 
 test-js:
 	node tests/test_components.js
@@ -77,6 +91,7 @@ help:
 	@echo "  make test-agent-platform - Run the AI Futures agent platform tests"
 	@echo "  make test-api    - Run legacy compatibility tests"
 	@echo "  make test-control-plane - Run governed API, broker, persistence, and security tests"
+	@echo "  make test-identity-foundation - Run consolidated P1 identity/tenant/persistence acceptance evidence"
 	@echo "  make test-js     - Run React Router component structure tests"
 	@echo "  make check       - Run Python-only acceptance gate (agent platform + control plane)"
 	@echo "  make test-all    - Run all unit, integration, and UI tests + coverage"
