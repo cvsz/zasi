@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -79,14 +80,26 @@ class ReleaseWorkflowTests(unittest.TestCase):
             encoding="utf-8"
         )
 
-        self.assertIn("actions/upload-artifact@v4", release_workflow)
+        self.assertRegex(
+            release_workflow,
+            r"actions/upload-artifact@[0-9a-f]{40}",
+        )
         self.assertIn("name: zasi-signed-release", release_workflow)
         self.assertIn("workflow_run:", publish_workflow)
         self.assertIn('workflows: ["Create GitHub Release"]', publish_workflow)
         self.assertIn("      actions: read\n      id-token: write", publish_workflow)
-        # Accept current and future majors so Dependabot bumps (v4 -> v8, ...)
-        # stay green. Pin floor at v4 to keep the signed-artifact contract.
-        self.assertRegex(publish_workflow, r"actions/download-artifact@v([4-9][0-9]*)")
+        self.assertRegex(
+            publish_workflow,
+            r"actions/download-artifact@[0-9a-f]{40}",
+        )
+        self.assertNotRegex(
+            release_workflow,
+            r"actions/upload-artifact@v[0-9]+",
+        )
+        self.assertNotRegex(
+            publish_workflow,
+            r"actions/download-artifact@v[0-9]+",
+        )
         self.assertIn(
             "run-id: ${{ github.event.workflow_run.id }}", publish_workflow
         )
