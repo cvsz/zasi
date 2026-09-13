@@ -29,6 +29,7 @@ function send(res, status, body, headers = {}) {
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
     'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff',
     'access-control-allow-origin': corsOrigin,
     ...headers,
   });
@@ -52,6 +53,7 @@ const server = createServer(async (req, res) => {
       'access-control-allow-origin': corsOrigin,
       'access-control-allow-methods': 'POST, OPTIONS',
       'access-control-allow-headers': 'content-type',
+      'x-content-type-options': 'nosniff',
     });
     return res.end();
   }
@@ -99,14 +101,22 @@ const server = createServer(async (req, res) => {
     });
 
     const text = await upstream.text();
-    res.writeHead(upstream.status, {
-      'content-type': upstream.headers.get('content-type') || 'application/sdp',
+    if (!upstream.ok) {
+      return send(res, 502, { error: 'Realtime upstream request failed.' });
+    }
+    const upstreamType = upstream.headers.get('content-type') || '';
+    if (!upstreamType.toLowerCase().includes('application/sdp')) {
+      return send(res, 502, { error: 'Realtime upstream returned an invalid response.' });
+    }
+    res.writeHead(200, {
+      'content-type': 'application/sdp',
       'cache-control': 'no-store',
+      'x-content-type-options': 'nosniff',
       'access-control-allow-origin': corsOrigin,
     });
     return res.end(text);
-  } catch (error) {
-    return send(res, 502, { error: error instanceof Error ? error.message : 'Realtime proxy failed.' });
+  } catch {
+    return send(res, 502, { error: 'Realtime proxy failed.' });
   }
 });
 
