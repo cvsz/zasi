@@ -3,8 +3,9 @@ Retained J.A.R.V.I.S. reference HUD compatibility surface.
 
 The governed API is implemented by ``backend.app``. This module is not an
 RBAC or capability authority and is disabled unless a caller supplies an
-explicit bearer token.
+explicit bearer token. Every compatibility route requires that token.
 """
+import hmac
 import http.server
 import socketserver
 import json
@@ -31,6 +32,13 @@ class ZASIWebServer:
             "details": details
         }
         self.audit_log.append(event)
+
+    def _is_authorized(self, authorization_header: str) -> bool:
+        """Validate the compatibility bearer token without timing-sensitive equality."""
+        if not self.api_token:
+            return False
+        expected = f"Bearer {self.api_token}"
+        return hmac.compare_digest(authorization_header or "", expected)
 
     def _get_system_snapshot(self) -> Dict[str, Any]:
         return {
@@ -139,30 +147,45 @@ class ZASIWebServer:
         parent = self
         class RequestHandler(http.server.BaseHTTPRequestHandler):
             def do_GET(self):
-                if self.path == "/":
-                    self.send_response(200)
-                    self.send_header("Content-type", "text/html")
-                    self.end_headers()
-                    self.wfile.write(parent._generate_html_dashboard().encode())
-                elif self.path == "/api/snapshot":
-                    # Check token authentication for JSON API
-                    auth_header = self.headers.get("Authorization", "")
-                    if auth_header != f"Bearer {parent.api_token}":
-                        parent.log_audit_event("API_READ_ATTEMPT", "ANONYMOUS", "UNAUTHORIZED", {"path": self.path})
-                        self.send_response(401)
-                        self.send_header("Content-type", "application/json")
-                        self.end_headers()
-                        self.wfile.write(json.dumps({"error": "Unauthorized: Invalid or missing Bearer token."}).encode())
-                        return
-
-                    parent.log_audit_event("API_SNAPSHOT_READ", "OPERATOR_KEY", "AUTHORIZED", {})
-                    self.send_response(200)
-                    self.send_header("Content-type", "application/json")
-                    self.end_headers()
-                    self.wfile.write(json.dumps(parent._get_system_snapshot()).encode())
-                else:
+                if self.path not in {"/", "/api/snapshot"}:
                     self.send_response(404)
                     self.end_headers()
+                    return
+
+                auth_header = self.headers.get("Authorization", "")
+                if not parent._is_authorized(auth_header):
+                    parent.log_audit_event(
+                        "COMPAT_READ_ATTEMPT",
+                        "ANONYMOUS",
+                        "UNAUTHORIZED",
+                        {"path": self.path},
+                    )
+                    self.send_response(401)
+                    self.send_header("Content-type", "application/json")
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
+                    self.wfile.write(
+                        json.dumps(
+                            {"error": "Unauthorized: Invalid or missing Bearer token."}
+                        ).encode()
+                    )
+                    return
+
+                if self.path == "/":
+                    parent.log_audit_event("COMPAT_HUD_READ", "OPERATOR_KEY", "AUTHORIZED", {})
+                    self.send_response(200)
+                    self.send_header("Content-type", "text/html")
+                    self.send_header("Cache-Control", "no-store")
+                    self.end_headers()
+                    self.wfile.write(parent._generate_html_dashboard().encode())
+                    return
+
+                parent.log_audit_event("API_SNAPSHOT_READ", "OPERATOR_KEY", "AUTHORIZED", {})
+                self.send_response(200)
+                self.send_header("Content-type", "application/json")
+                self.send_header("Cache-Control", "no-store")
+                self.end_headers()
+                self.wfile.write(json.dumps(parent._get_system_snapshot()).encode())
 
             def log_message(self, format, *args):
                 pass
