@@ -25,3 +25,15 @@ test('World Room surface is complete and local-only by default', async () => {
   assert.match(server, /rejects wildcard CORS/);
   assert.match(server, /World Room proxy is local-only/);
 });
+
+test('World Room proxy does not relay upstream error bodies or exception messages', async () => {
+  const server = await readFile('scripts/world_room_server.mjs', 'utf8');
+  assert.match(server, /if \(!upstream\.ok\)/);
+  assert.match(server, /Realtime upstream request failed\./);
+  assert.match(server, /Realtime upstream returned an invalid response\./);
+  assert.match(server, /content-type': 'application\/sdp'/);
+  assert.match(server, /x-content-type-options': 'nosniff'/);
+  assert.match(server, /catch \{/);
+  assert.doesNotMatch(server, /error instanceof Error \? error\.message/);
+  assert.doesNotMatch(server, /content-type': upstream\.headers\.get/);
+});
