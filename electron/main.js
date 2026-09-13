@@ -13,7 +13,11 @@ let backendLifecycle;
 
 function redactedLine(value) {
   return String(value)
-    .replace(/(authorization|api[_-]?key|token|secret|password)\s*[:=]\s*[^\s,;]+/gi, '$1=[redacted]')
+    .replace(/\b(Bearer|Basic|Digest)\s+[^\s,;]+/gi, '$1 [redacted]')
+    .replace(
+      /(authorization|api[_-]?key|access[_-]?token|refresh[_-]?token|session[_-]?token|client[_-]?secret|token|secret|password|credential)\s*[:=]\s*[^\s,;]+/gi,
+      '$1=[redacted]',
+    )
     .slice(0, 1000);
 }
 
@@ -159,4 +163,4 @@ if (require.main === module) {
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 }
 
-module.exports = { startBackend, startElectron };
+module.exports = { startBackend, startElectron, redactedLine };
