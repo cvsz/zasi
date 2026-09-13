@@ -26,12 +26,12 @@ jobs:
       contents: read
     steps:
       - name: Checkout the signed release workflow revision
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Download signed release artifact
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: zasi-signed-release
           path: dist/
@@ -58,7 +58,7 @@ jobs:
           (cd dist && sha256sum --check SHA256SUMS)
 
       - name: Publish package distributions to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
         with:
           packages-dir: dist/
           password: ${{ secrets.PYPI_TOKEN }}

@@ -18,12 +18,12 @@ jobs:
       contents: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.11"
 
@@ -58,7 +58,7 @@ jobs:
             --output production-go-decision.json
 
       - name: Upload production GO decision
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: production-go-decision-${{ github.sha }}
           path: production-go-decision.json
@@ -66,7 +66,7 @@ jobs:
           retention-days: 90
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "22.14.0"
 
@@ -106,7 +106,7 @@ jobs:
             --fingerprint "$ZASI_RELEASE_GPG_FINGERPRINT"
 
       - name: Upload signed package bundle for PyPI
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: zasi-signed-release
           path: dist/
@@ -114,7 +114,7 @@ jobs:
           retention-days: 7
 
       - name: Create GitHub Release & Upload Assets
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
           files: |
             dist/*.whl
