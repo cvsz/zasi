@@ -36,6 +36,15 @@ function send(res, status, body, headers = {}) {
   res.end(payload);
 }
 
+function hasTrustedOrigin(req) {
+  return req.headers.origin === corsOrigin;
+}
+
+function hasJsonContentType(req) {
+  const contentType = String(req.headers['content-type'] || '').toLowerCase();
+  return contentType === 'application/json' || contentType.startsWith('application/json;');
+}
+
 async function readJson(req) {
   const chunks = [];
   let total = 0;
@@ -49,6 +58,9 @@ async function readJson(req) {
 
 const server = createServer(async (req, res) => {
   if (req.method === 'OPTIONS') {
+    if (!hasTrustedOrigin(req)) {
+      return send(res, 403, { error: 'origin_not_allowed' });
+    }
     res.writeHead(204, {
       'access-control-allow-origin': corsOrigin,
       'access-control-allow-methods': 'POST, OPTIONS',
@@ -64,6 +76,14 @@ const server = createServer(async (req, res) => {
 
   if (req.method !== 'POST' || req.url !== '/api/world-room/call') {
     return send(res, 404, { error: 'not_found' });
+  }
+
+  if (!hasTrustedOrigin(req)) {
+    return send(res, 403, { error: 'origin_not_allowed' });
+  }
+
+  if (!hasJsonContentType(req)) {
+    return send(res, 415, { error: 'application_json_required' });
   }
 
   if (!apiKey) {
