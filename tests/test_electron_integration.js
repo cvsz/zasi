@@ -40,6 +40,22 @@ try {
 }
 
 assert.strictEqual(typeof main.startBackend, 'function');
+assert.strictEqual(typeof main.redactedLine, 'function');
+
+const logCases = [
+  ['Authorization: Bearer bearer-secret', 'bearer-secret'],
+  ['upstream rejected Bearer standalone-secret', 'standalone-secret'],
+  ['api_key=api-secret', 'api-secret'],
+  ['client-secret: client-secret-value', 'client-secret-value'],
+  ['password=password-secret', 'password-secret'],
+];
+for (const [line, secret] of logCases) {
+  const redacted = main.redactedLine(line);
+  assert.ok(redacted.includes('[redacted]'));
+  assert.ok(!redacted.includes(secret), `redacted log still contained ${secret}`);
+}
+assert.strictEqual(main.redactedLine('safe diagnostic text'), 'safe diagnostic text');
+
 const previousApiKey = process.env.ZASI_API_KEY;
 process.env.ZASI_API_KEY = 'electron-test-key';
 try {
