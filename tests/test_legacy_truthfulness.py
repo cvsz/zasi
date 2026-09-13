@@ -116,6 +116,18 @@ class LegacyTruthfulnessTests(unittest.TestCase):
         self.assertEqual(snapshot["evidence_state"], "unverified")
         self.assertNotIn("zasi-apex-master-key-2026", hud._generate_html_dashboard())
 
+    def test_legacy_hud_requires_exact_bearer_token_for_all_compat_routes(self):
+        daemon = SimpleNamespace(
+            rsi_engine=SimpleNamespace(current_version="reference"),
+            state=SimpleNamespace(variables={}, invariants=[]),
+            telemetry_history=[],
+        )
+        hud = ZASIWebServer(daemon, api_token="compat-secret")
+        self.assertFalse(hud._is_authorized(""))
+        self.assertFalse(hud._is_authorized("Bearer wrong"))
+        self.assertFalse(hud._is_authorized("compat-secret"))
+        self.assertTrue(hud._is_authorized("Bearer compat-secret"))
+
     def test_legacy_hud_escapes_untrusted_snapshot_values(self):
         daemon = SimpleNamespace(
             rsi_engine=SimpleNamespace(current_version="reference"),
