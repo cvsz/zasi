@@ -1,10 +1,14 @@
 """Regression tests for least-privilege GitHub Actions defaults."""
 
 from pathlib import Path
+import re
 import unittest
 
 
 WORKFLOW_DIR = Path(__file__).parents[1] / ".github" / "workflows"
+DEPENDENCY_REVIEW_PIN = re.compile(
+    r"actions/dependency-review-action@[0-9a-f]{40}\s+#\s+v([4-9][0-9]*)"
+)
 
 
 def _top_level_permissions_block(workflow: str) -> str:
@@ -41,9 +45,10 @@ class WorkflowPermissionTests(unittest.TestCase):
                 self.assertIn('node-version: "22.14.0"', workflow)
 
         ci = (WORKFLOW_DIR / "ci.yml").read_text(encoding="utf-8")
-        # Accept current and future major versions of the dependency-review
-        # action so Dependabot bumps (v4 -> v5, ...) stay green. Pin floor at v4.
-        self.assertRegex(ci, r"actions/dependency-review-action@v([4-9][0-9]*)")
+        # Dependency Review must be pinned to an immutable commit while retaining
+        # a human-readable major-version annotation. Pin floor remains v4.
+        self.assertRegex(ci, DEPENDENCY_REVIEW_PIN)
+        self.assertNotRegex(ci, r"actions/dependency-review-action@v[0-9]+")
         self.assertIn("npm ci --ignore-scripts --no-audit", ci)
         install_audit_script = Path(__file__).parents[1] / "scripts" / "npm_ci_audit.sh"
         self.assertIn("npm_bulk_audit.mjs", install_audit_script.read_text(encoding="utf-8"))
