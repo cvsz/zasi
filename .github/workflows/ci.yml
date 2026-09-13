@@ -18,6 +18,32 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.11", "3.12"]
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: zasi
+          POSTGRES_PASSWORD: zasi
+          POSTGRES_DB: zasi_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U zasi -d zasi_test"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      ZASI_TEST_POSTGRES_URL: postgresql://zasi:zasi@127.0.0.1:5432/zasi_test
+      ZASI_TEST_REDIS_URL: redis://127.0.0.1:6379/0
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
