@@ -33,6 +33,7 @@ from src.control_plane.connectors import ConnectorRegistry
 from src.control_plane.execution import ActionBroker, ToolDefinition, ToolRegistry
 from src.control_plane.events import OutboxDispatcher
 from src.control_plane.identity import hash_token, issue_id, issue_token, optional_bearer
+from src.control_plane.redaction import sanitize_persisted_payload
 from src.control_plane.orchestration.agent_runtime import (
     AgentService,
     AgentServiceError,
@@ -770,13 +771,16 @@ def create_app(
     @app.exception_handler(HTTPException)
     async def http_exception_handler(request: Request, exc: HTTPException):
         detail: Dict[str, Any] = exc.detail if isinstance(exc.detail, dict) else {}
+        safe_detail = sanitize_persisted_payload(detail)
+        if not isinstance(safe_detail, dict):
+            safe_detail = {}
         return _error(
             exc.status_code,
-            detail.get("code", "HTTP_ERROR"),
-            detail.get("message", "Request failed."),
+            str(safe_detail.get("code", "HTTP_ERROR")),
+            str(safe_detail.get("message", "Request failed.")),
             _request_id(request),
-            bool(detail.get("retryable", False)),
-            detail.get("details", {}),
+            bool(safe_detail.get("retryable", False)),
+            safe_detail.get("details", {}) if isinstance(safe_detail.get("details", {}), dict) else {},
         )
 
     @app.exception_handler(RequestValidationError)
