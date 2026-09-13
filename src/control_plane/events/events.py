@@ -22,13 +22,27 @@ class DispatchReport:
     retried: int
 
 
+def _handler_record(claimed_item: Dict[str, object]) -> Dict[str, object]:
+    """Return only non-credential outbox state to an external delivery adapter.
+
+    The claim token is an internal lease credential used exclusively to finish
+    the claimed row. Passing it to a handler widens the credential boundary and
+    makes accidental logging/telemetry exposure possible. Keep lease ownership
+    private to the dispatcher while preserving the identifiers and delivery
+    metadata an adapter needs.
+    """
+    safe_item = dict(claimed_item)
+    safe_item.pop("claim_token", None)
+    return safe_item
+
+
 class OutboxDispatcher:
     """Drain committed outbox rows without creating a second domain action.
 
     The reference profile uses the durable event table as the stream source. The
     dispatcher exists so external sinks can be added behind one retry boundary;
-    handlers receive an outbox record and never receive credentials or a raw
-    client callback.
+    handlers receive a non-credential outbox record and never receive the
+    dispatcher's internal claim token or a raw client callback.
     """
 
     def __init__(self, store: ControlPlaneStore):
@@ -54,7 +68,7 @@ class OutboxDispatcher:
                     # it without one would silently lose an external event.
                     raise _OutboxConfigurationError("outbox handler is not configured")
                 if handler is not None:
-                    handler(dict(claimed_item))
+                    handler(_handler_record(claimed_item))
                 self.store.finish_outbox(
                     item["id"],
                     success=True,
