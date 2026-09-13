@@ -37,3 +37,15 @@ test('World Room proxy does not relay upstream error bodies or exception message
   assert.doesNotMatch(server, /error instanceof Error \? error\.message/);
   assert.doesNotMatch(server, /content-type': upstream\.headers\.get/);
 });
+
+test('World Room proxy rejects cross-origin and simple-request CSRF paths', async () => {
+  const server = await readFile('scripts/world_room_server.mjs', 'utf8');
+  assert.match(server, /function hasTrustedOrigin\(req\)/);
+  assert.match(server, /req\.headers\.origin === corsOrigin/);
+  assert.match(server, /if \(!hasTrustedOrigin\(req\)\)/);
+  assert.match(server, /origin_not_allowed/);
+  assert.match(server, /function hasJsonContentType\(req\)/);
+  assert.match(server, /application\/json/);
+  assert.match(server, /application_json_required/);
+  assert.doesNotMatch(server, /access-control-allow-origin': '\*'/);
+});
