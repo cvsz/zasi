@@ -34,6 +34,7 @@ if [[ "$running_id" != "$expected_id" ]]; then
 fi
 
 python3 - "$expected" <<'PY'
+from datetime import datetime, timezone
 import json
 import sys
 
@@ -41,5 +42,6 @@ print(json.dumps({
     "status": "passed",
     "inspector": "docker",
     "observed_image": sys.argv[1],
+    "observed_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
 }, sort_keys=True))
 PY
