@@ -15,7 +15,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import ParseResult, urlparse
 
 SHA40 = re.compile(r"^[0-9a-f]{40}$")
 DIGEST = re.compile(r"^ghcr\.io/[a-z0-9_.-]+/[a-z0-9_.-]+@sha256:[0-9a-f]{64}$")
@@ -60,9 +60,19 @@ def _https(value: Any, name: str) -> str:
     _require(isinstance(value, str) and value, f"{name} is required")
     parsed = urlparse(value)
     _require(parsed.scheme == "https" and bool(parsed.netloc), f"{name} must be an https URL")
+    _require(parsed.hostname is not None, f"{name} must include a hostname")
+    try:
+        parsed.port
+    except ValueError as exc:
+        raise GateError(f"{name} has an invalid port") from exc
     _require(parsed.username is None and parsed.password is None, f"{name} must not contain URL credentials")
     _require(parsed.fragment == "", f"{name} must not contain a fragment")
     return value
+
+
+def _origin(parsed: ParseResult) -> tuple[str, str, int]:
+    port = parsed.port if parsed.port is not None else 443
+    return parsed.scheme.lower(), (parsed.hostname or "").lower(), port
 
 
 def _same_origin(value: Any, name: str, staging_url: str) -> str:
@@ -70,8 +80,7 @@ def _same_origin(value: Any, name: str, staging_url: str) -> str:
     parsed = urlparse(result)
     staging = urlparse(staging_url)
     _require(
-        (parsed.scheme.lower(), parsed.hostname, parsed.port) ==
-        (staging.scheme.lower(), staging.hostname, staging.port),
+        _origin(parsed) == _origin(staging),
         f"{name} must use the same origin as staging_url",
     )
     return result
