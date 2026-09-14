@@ -21,6 +21,7 @@ class RollbackWorldRoomEvidenceTests(unittest.TestCase):
 
     def test_missing_rollback_world_room_status_is_rejected(self):
         item = evidence()
+        item["rollback"].pop("world_room_status")
         with self.assertRaisesRegex(GateError, "rollback.world_room_status"):
             self.validate(item)
 
