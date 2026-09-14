@@ -9,14 +9,16 @@ A production release tag is allowed only when `scripts/production_go_gate.py` va
 - `candidate_image` and `previous_image` are immutable `ghcr.io/...@sha256:...` references and are different.
 - `observed_at` is a real RFC3339 UTC timestamp no more than **6 hours old** at release time. Future timestamps and stale evidence are rejected.
 - `staging_url`, readiness, World Room, canary, and rollback endpoints use HTTPS and the same staging origin.
-- `/health/ready` reports `release_identity.commit` and `release_identity.image`; staging/production readiness is degraded when those values are missing or malformed.
-- `health.observed_commit` and `health.observed_image` are copied verbatim from that live readiness response and must equal the exact `candidate_commit` and `candidate_image`.
+- the container artifact contains `/app/.zasi-release-commit`, baked at image build time from the exact Git commit; `/health/ready` reports that value as `release_identity.commit` with `release_identity.source=artifact`.
+- the running container digest is verified outside the application through Docker runtime inspection. `scripts/observe_container_image.sh <container> <candidate_image>` must succeed and its JSON becomes the `runtime` evidence object.
+- `health.observed_commit` is copied from the live external `/health/ready` response and must equal `candidate_commit`; `health.identity_source` must be `artifact`.
+- `runtime.observed_image` must equal the exact immutable `candidate_image` and `runtime.inspector` must be `docker`.
 - World Room and canary evidence identify the exact `candidate_image` digest.
 - controlled canary evidence contains at least 20 requests, error rate <= 1%, and p95 <= 2000 ms.
 - rollback redeployed the exact `previous_image` digest in <= 300 seconds on that same staging origin.
 - health and World Room checks passed again after rollback.
 
-The deployment must provide `ZASI_RELEASE_COMMIT=<40-hex-sha>` and `ZASI_RELEASE_IMAGE=ghcr.io/...@sha256:<64-hex-digest>` to the candidate process. These are non-secret release identity values. Do not populate the evidence record from intended deployment inputs alone: fetch `/health/ready` from the externally reachable staging origin and record the values actually returned in `release_identity`.
+Do not inject release identity through `ZASI_RELEASE_COMMIT` or `ZASI_RELEASE_IMAGE`. Those caller-controlled values are not accepted as production evidence. The commit identity must come from the built artifact, while the image digest must be verified independently by the container runtime.
 
 ## Required JSON shape
 
@@ -28,11 +30,16 @@ The deployment must provide `ZASI_RELEASE_COMMIT=<40-hex-sha>` and `ZASI_RELEASE
   "previous_image": "ghcr.io/cvsz/zasi@sha256:<64-hex-digest>",
   "staging_url": "https://<real-staging-host>",
   "observed_at": "2026-09-13T00:00:00Z",
+  "runtime": {
+    "status": "passed",
+    "inspector": "docker",
+    "observed_image": "ghcr.io/cvsz/zasi@sha256:<candidate-64-hex-digest>"
+  },
   "health": {
     "status": "passed",
     "ready_url": "https://<real-staging-host>/health/ready",
     "observed_commit": "<commit returned by /health/ready release_identity.commit>",
-    "observed_image": "ghcr.io/cvsz/zasi@sha256:<digest returned by /health/ready release_identity.image>"
+    "identity_source": "artifact"
   },
   "world_room": {
     "status": "passed",
