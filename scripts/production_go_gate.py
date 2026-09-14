@@ -266,6 +266,7 @@ def validate_evidence(
         isinstance(rollback.get("world_room_smoke_case"), str) and rollback["world_room_smoke_case"].strip(),
         "rollback.world_room_smoke_case is required",
     )
+    _require(rollback.get("world_room_status") == PASS, "rollback.world_room_status must be 'passed'")
     _require(rollback.get("world_room_image") == previous_image, "rollback.world_room_image must equal previous_image")
     duration = rollback.get("duration_seconds")
     _require(isinstance(duration, (int, float)) and not isinstance(duration, bool) and 0 < float(duration) <= 300, "rollback.duration_seconds must be > 0 and <= 300")
