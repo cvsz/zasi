@@ -41,15 +41,28 @@ def evidence():
         "previous_image": PREVIOUS,
         "staging_url": "https://staging.example.com",
         "observed_at": "2026-09-13T00:00:00Z",
-        "health": {"status": "passed", "ready_url": "https://staging.example.com/health/ready"},
+        "health": {
+            "status": "passed",
+            "ready_url": "https://staging.example.com/health/ready",
+            "image": CANDIDATE,
+        },
         "world_room": {
             "status": "passed",
             "smoke_case": "join, speak, receive realtime response",
             "endpoint_url": "https://staging.example.com/world-room",
+            "image": CANDIDATE,
         },
-        "canary": {"status": "passed", "request_count": 100, "error_rate": 0.0, "p95_ms": 250},
+        "canary": {
+            "status": "passed",
+            "endpoint_url": "https://staging.example.com/health/ready",
+            "image": CANDIDATE,
+            "request_count": 100,
+            "error_rate": 0.0,
+            "p95_ms": 250,
+        },
         "rollback": {
             "status": "passed",
+            "endpoint_url": "https://staging.example.com/health/ready",
             "image": PREVIOUS,
             "health_status": "passed",
             "world_room_status": "passed",
@@ -142,9 +155,39 @@ class ProductionGoGateTests(unittest.TestCase):
         with self.assertRaisesRegex(GateError, "/health/ready"):
             self.validate(item)
 
+    def test_health_must_prove_candidate_digest(self):
+        item = evidence()
+        item["health"]["image"] = PREVIOUS
+        with self.assertRaisesRegex(GateError, "health.image"):
+            self.validate(item)
+
     def test_world_room_must_bind_to_staging_origin(self):
         item = evidence()
         item["world_room"]["endpoint_url"] = "https://other.example.com/world-room"
+        with self.assertRaisesRegex(GateError, "same origin"):
+            self.validate(item)
+
+    def test_world_room_must_prove_candidate_digest(self):
+        item = evidence()
+        item["world_room"]["image"] = PREVIOUS
+        with self.assertRaisesRegex(GateError, "world_room.image"):
+            self.validate(item)
+
+    def test_canary_must_bind_to_staging_origin(self):
+        item = evidence()
+        item["canary"]["endpoint_url"] = "https://other.example.com/health/ready"
+        with self.assertRaisesRegex(GateError, "same origin"):
+            self.validate(item)
+
+    def test_canary_must_prove_candidate_digest(self):
+        item = evidence()
+        item["canary"]["image"] = PREVIOUS
+        with self.assertRaisesRegex(GateError, "canary.image"):
+            self.validate(item)
+
+    def test_rollback_must_bind_to_staging_origin(self):
+        item = evidence()
+        item["rollback"]["endpoint_url"] = "https://other.example.com/health/ready"
         with self.assertRaisesRegex(GateError, "same origin"):
             self.validate(item)
 
