@@ -201,19 +201,17 @@ def validate_evidence(
     _require(observed_at <= current_time, "observed_at cannot be in the future")
     _require(current_time - observed_at <= MAX_EVIDENCE_AGE, "staging evidence is stale; observed_at must be within the last 6 hours")
 
+    runtime = _passed(data.get("runtime"), "runtime")
+    _require(runtime.get("inspector") == "docker", "runtime.inspector must be 'docker'")
+    _require(runtime.get("observed_image") == candidate_image, "runtime.observed_image must equal candidate_image")
+
     health = _passed(data.get("health"), "health")
     ready_url = _same_origin(health.get("ready_url"), "health.ready_url", staging_url)
     ready = urlparse(ready_url)
     _require(ready.path.rstrip("/") == "/health/ready", "health.ready_url must target /health/ready")
     _require(ready.query == "", "health.ready_url must not contain a query string")
-    _require(
-        health.get("observed_commit") == candidate_commit,
-        "health.observed_commit must equal candidate_commit",
-    )
-    _require(
-        health.get("observed_image") == candidate_image,
-        "health.observed_image must equal candidate_image",
-    )
+    _require(health.get("observed_commit") == candidate_commit, "health.observed_commit must equal candidate_commit")
+    _require(health.get("identity_source") == "artifact", "health.identity_source must be 'artifact'")
 
     world_room = _passed(data.get("world_room"), "world_room")
     _require(isinstance(world_room.get("smoke_case"), str) and world_room["smoke_case"].strip(), "world_room.smoke_case is required")
@@ -248,6 +246,7 @@ def validate_evidence(
         "checks": {
             "main_governance": PASS,
             "freshness": PASS,
+            "runtime_identity": PASS,
             "health": PASS,
             "world_room": PASS,
             "canary": PASS,
