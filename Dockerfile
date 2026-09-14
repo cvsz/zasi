@@ -8,6 +8,8 @@ RUN npm ci --ignore-scripts \
 
 FROM python:3.11-slim
 
+ARG ZASI_BUILD_COMMIT
+
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -22,7 +24,12 @@ COPY src /app/src
 COPY scripts /app/scripts
 COPY --from=cockpit-build /frontend/web/dist /app/web/dist
 
-RUN apt-get update \
+RUN case "${ZASI_BUILD_COMMIT}" in \
+      [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;; \
+      *) echo "ZASI_BUILD_COMMIT must be a lowercase 40-character git SHA" >&2; exit 2 ;; \
+    esac \
+    && printf '%s\n' "${ZASI_BUILD_COMMIT}" > /app/.zasi-release-commit \
+    && apt-get update \
     && apt-get upgrade -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 10001 --shell /usr/sbin/nologin zasi \
