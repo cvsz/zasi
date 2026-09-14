@@ -2,9 +2,9 @@
 """Validate the external evidence required before a ZASI production release.
 
 This gate intentionally distinguishes CI rehearsal evidence from real staging evidence.
-A release candidate is GO only when repository governance is enabled and an external
-staging record proves recent health, World Room smoke, canary SLOs, and immutable
-rollback for the exact release candidate.
+A release candidate is GO only when repository governance is independently verified
+from live GitHub ruleset data and an external staging record proves recent health,
+World Room smoke, canary SLOs, and immutable rollback for the exact release candidate.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ SHA40 = re.compile(r"^[0-9a-f]{40}$")
 DIGEST = re.compile(r"^ghcr\.io/[a-z0-9_.-]+/[a-z0-9_.-]+@sha256:[0-9a-f]{64}$")
 PASS = "passed"
 MAX_EVIDENCE_AGE = timedelta(hours=6)
+MAIN_REF_TARGETS = {"~DEFAULT_BRANCH", "refs/heads/main"}
 
 
 class GateError(ValueError):
@@ -55,14 +56,74 @@ def _timestamp(value: Any) -> datetime:
     return result.astimezone(timezone.utc)
 
 
+def validate_governance(rulesets: Any) -> dict[str, Any]:
+    """Require one active branch ruleset that enforces every #78 main control."""
+    _require(isinstance(rulesets, list), "GitHub rulesets evidence must be a list")
+
+    failures: list[str] = []
+    for ruleset in rulesets:
+        if not isinstance(ruleset, dict):
+            continue
+        if ruleset.get("target") != "branch" or ruleset.get("enforcement") != "active":
+            continue
+
+        ref_name = (ruleset.get("conditions") or {}).get("ref_name") or {}
+        includes = ref_name.get("include") or []
+        excludes = ref_name.get("exclude") or []
+        if not isinstance(includes, list) or not MAIN_REF_TARGETS.intersection(includes):
+            continue
+        if "refs/heads/main" in excludes or "~DEFAULT_BRANCH" in excludes:
+            continue
+
+        rules = ruleset.get("rules")
+        if not isinstance(rules, list):
+            failures.append(f"ruleset {ruleset.get('id', '<unknown>')} has no expanded rules")
+            continue
+        by_type = {rule.get("type"): rule for rule in rules if isinstance(rule, dict)}
+
+        missing = sorted({"pull_request", "deletion", "non_fast_forward", "required_status_checks"} - set(by_type))
+        if missing:
+            failures.append(f"ruleset {ruleset.get('id', '<unknown>')} missing rules: {', '.join(missing)}")
+            continue
+
+        pr_params = by_type["pull_request"].get("parameters") or {}
+        if pr_params.get("required_review_thread_resolution") is not True:
+            failures.append(f"ruleset {ruleset.get('id', '<unknown>')} must require review-thread resolution")
+            continue
+
+        status_params = by_type["required_status_checks"].get("parameters") or {}
+        required_checks = status_params.get("required_status_checks") or []
+        if not isinstance(required_checks, list) or not required_checks:
+            failures.append(f"ruleset {ruleset.get('id', '<unknown>')} must require status checks")
+            continue
+        if status_params.get("strict_required_status_checks_policy") is not True:
+            failures.append(f"ruleset {ruleset.get('id', '<unknown>')} must require branch to be up to date")
+            continue
+
+        bypass_actors = ruleset.get("bypass_actors") or []
+        if bypass_actors:
+            failures.append(f"ruleset {ruleset.get('id', '<unknown>')} has bypass actors")
+            continue
+
+        return {
+            "status": PASS,
+            "ruleset_id": ruleset.get("id"),
+            "ruleset_name": ruleset.get("name"),
+            "required_check_count": len(required_checks),
+        }
+
+    suffix = f"; candidates rejected: {' | '.join(failures)}" if failures else ""
+    raise GateError("no active GitHub ruleset fully protects main with the required production controls" + suffix)
+
+
 def validate_evidence(
     data: dict[str, Any],
     *,
     expected_commit: str,
-    main_protected: bool,
+    rulesets: Any,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    _require(main_protected, "main branch is not protected; production GO is forbidden")
+    governance = validate_governance(rulesets)
     _require(data.get("schema_version") == 1, "schema_version must be 1")
 
     candidate_commit = data.get("candidate_commit")
@@ -111,8 +172,9 @@ def validate_evidence(
         "candidate_image": candidate_image,
         "previous_image": previous_image,
         "observed_at": data["observed_at"],
+        "governance": governance,
         "checks": {
-            "main_protected": True,
+            "main_governance": PASS,
             "freshness": PASS,
             "health": PASS,
             "world_room": PASS,
@@ -122,27 +184,19 @@ def validate_evidence(
     }
 
 
-def parse_bool(value: str) -> bool:
-    normalized = value.strip().lower()
-    if normalized in {"1", "true", "yes"}:
-        return True
-    if normalized in {"0", "false", "no"}:
-        return False
-    raise argparse.ArgumentTypeError("expected true/false")
-
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--evidence", type=Path, required=True)
     parser.add_argument("--expected-commit", required=True)
-    parser.add_argument("--main-protected", type=parse_bool, required=True)
+    parser.add_argument("--rulesets", type=Path, required=True, help="JSON array of expanded GitHub repository rulesets")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
 
     try:
         data = json.loads(args.evidence.read_text(encoding="utf-8"))
+        rulesets = json.loads(args.rulesets.read_text(encoding="utf-8"))
         _require(isinstance(data, dict), "evidence root must be an object")
-        result = validate_evidence(data, expected_commit=args.expected_commit, main_protected=args.main_protected)
+        result = validate_evidence(data, expected_commit=args.expected_commit, rulesets=rulesets)
     except (OSError, json.JSONDecodeError, GateError) as exc:
         print(json.dumps({"decision": "NO-GO", "reason": str(exc)}, sort_keys=True))
         return 2
