@@ -194,12 +194,16 @@ def validate_evidence(
     ready = urlparse(ready_url)
     _require(ready.path.rstrip("/") == "/health/ready", "health.ready_url must target /health/ready")
     _require(ready.query == "", "health.ready_url must not contain a query string")
+    _require(health.get("image") == candidate_image, "health.image must equal candidate_image")
 
     world_room = _passed(data.get("world_room"), "world_room")
     _require(isinstance(world_room.get("smoke_case"), str) and world_room["smoke_case"].strip(), "world_room.smoke_case is required")
     _same_origin(world_room.get("endpoint_url"), "world_room.endpoint_url", staging_url)
+    _require(world_room.get("image") == candidate_image, "world_room.image must equal candidate_image")
 
     canary = _passed(data.get("canary"), "canary")
+    _same_origin(canary.get("endpoint_url"), "canary.endpoint_url", staging_url)
+    _require(canary.get("image") == candidate_image, "canary.image must equal candidate_image")
     request_count = canary.get("request_count")
     error_rate = canary.get("error_rate")
     p95_ms = canary.get("p95_ms")
@@ -208,6 +212,7 @@ def validate_evidence(
     _require(isinstance(p95_ms, (int, float)) and not isinstance(p95_ms, bool) and 0 < float(p95_ms) <= 2000, "canary.p95_ms must be > 0 and <= 2000")
 
     rollback = _passed(data.get("rollback"), "rollback")
+    _same_origin(rollback.get("endpoint_url"), "rollback.endpoint_url", staging_url)
     _require(rollback.get("image") == previous_image, "rollback.image must equal previous_image")
     _require(rollback.get("health_status") == PASS, "rollback.health_status must be 'passed'")
     _require(rollback.get("world_room_status") == PASS, "rollback.world_room_status must be 'passed'")
