@@ -42,7 +42,11 @@ def evidence():
         "staging_url": "https://staging.example.com",
         "observed_at": "2026-09-13T00:00:00Z",
         "health": {"status": "passed", "ready_url": "https://staging.example.com/health/ready"},
-        "world_room": {"status": "passed", "smoke_case": "join, speak, receive realtime response"},
+        "world_room": {
+            "status": "passed",
+            "smoke_case": "join, speak, receive realtime response",
+            "endpoint_url": "https://staging.example.com/world-room",
+        },
         "canary": {"status": "passed", "request_count": 100, "error_rate": 0.0, "p95_ms": 250},
         "rollback": {
             "status": "passed",
@@ -124,6 +128,30 @@ class ProductionGoGateTests(unittest.TestCase):
         item = evidence()
         item["candidate_image"] = "ghcr.io/cvsz/zasi:latest"
         with self.assertRaisesRegex(GateError, "immutable GHCR"):
+            self.validate(item)
+
+    def test_health_must_use_staging_origin(self):
+        item = evidence()
+        item["health"]["ready_url"] = "https://other.example.com/health/ready"
+        with self.assertRaisesRegex(GateError, "same origin"):
+            self.validate(item)
+
+    def test_health_must_target_canonical_readiness_path(self):
+        item = evidence()
+        item["health"]["ready_url"] = "https://staging.example.com/health"
+        with self.assertRaisesRegex(GateError, "/health/ready"):
+            self.validate(item)
+
+    def test_world_room_must_bind_to_staging_origin(self):
+        item = evidence()
+        item["world_room"]["endpoint_url"] = "https://other.example.com/world-room"
+        with self.assertRaisesRegex(GateError, "same origin"):
+            self.validate(item)
+
+    def test_url_credentials_are_rejected(self):
+        item = evidence()
+        item["staging_url"] = "https://user:secret@staging.example.com"
+        with self.assertRaisesRegex(GateError, "URL credentials"):
             self.validate(item)
 
     def test_failed_world_room_is_rejected(self):

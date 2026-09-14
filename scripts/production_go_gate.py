@@ -60,7 +60,21 @@ def _https(value: Any, name: str) -> str:
     _require(isinstance(value, str) and value, f"{name} is required")
     parsed = urlparse(value)
     _require(parsed.scheme == "https" and bool(parsed.netloc), f"{name} must be an https URL")
+    _require(parsed.username is None and parsed.password is None, f"{name} must not contain URL credentials")
+    _require(parsed.fragment == "", f"{name} must not contain a fragment")
     return value
+
+
+def _same_origin(value: Any, name: str, staging_url: str) -> str:
+    result = _https(value, name)
+    parsed = urlparse(result)
+    staging = urlparse(staging_url)
+    _require(
+        (parsed.scheme.lower(), parsed.hostname, parsed.port) ==
+        (staging.scheme.lower(), staging.hostname, staging.port),
+        f"{name} must use the same origin as staging_url",
+    )
+    return result
 
 
 def _timestamp(value: Any) -> datetime:
@@ -167,7 +181,7 @@ def validate_evidence(
     _require(isinstance(previous_image, str) and DIGEST.fullmatch(previous_image) is not None, "previous_image must be an immutable GHCR sha256 digest reference")
     _require(candidate_image != previous_image, "candidate_image and previous_image must differ")
 
-    _https(data.get("staging_url"), "staging_url")
+    staging_url = _https(data.get("staging_url"), "staging_url")
     observed_at = _timestamp(data.get("observed_at"))
     current_time = now or datetime.now(timezone.utc)
     _require(current_time.tzinfo is not None, "current time must include timezone information")
@@ -176,10 +190,14 @@ def validate_evidence(
     _require(current_time - observed_at <= MAX_EVIDENCE_AGE, "staging evidence is stale; observed_at must be within the last 6 hours")
 
     health = _passed(data.get("health"), "health")
-    _https(health.get("ready_url"), "health.ready_url")
+    ready_url = _same_origin(health.get("ready_url"), "health.ready_url", staging_url)
+    ready = urlparse(ready_url)
+    _require(ready.path.rstrip("/") == "/health/ready", "health.ready_url must target /health/ready")
+    _require(ready.query == "", "health.ready_url must not contain a query string")
 
     world_room = _passed(data.get("world_room"), "world_room")
     _require(isinstance(world_room.get("smoke_case"), str) and world_room["smoke_case"].strip(), "world_room.smoke_case is required")
+    _same_origin(world_room.get("endpoint_url"), "world_room.endpoint_url", staging_url)
 
     canary = _passed(data.get("canary"), "canary")
     request_count = canary.get("request_count")
