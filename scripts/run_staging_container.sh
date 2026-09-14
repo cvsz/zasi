@@ -3,14 +3,16 @@ set -euo pipefail
 
 : "${ZASI_IMAGE:?ZASI_IMAGE is required}"
 : "${CREDENTIALS_DIRECTORY:?systemd credential directory is required}"
+: "${ZASI_RUNTIME_DIRECTORY:=/run/zasi-staging}"
 
 if [[ ! "$ZASI_IMAGE" =~ ^ghcr\.io/[a-z0-9_.-]+/[a-z0-9_.-]+@sha256:[0-9a-f]{64}$ ]]; then
   echo "ZASI_IMAGE must be an immutable GHCR digest reference" >&2
   exit 65
 fi
 
-credential_file="${CREDENTIALS_DIRECTORY}/zasi-secrets"
-if [[ ! -f "$credential_file" ]]; then
+source_credential="${CREDENTIALS_DIRECTORY}/zasi-secrets"
+runtime_credential="${ZASI_RUNTIME_DIRECTORY}/zasi-secrets"
+if [[ ! -f "$source_credential" ]]; then
   echo "systemd credential zasi-secrets is missing" >&2
   exit 66
 fi
@@ -19,6 +21,9 @@ command -v docker >/dev/null 2>&1 || {
   echo "docker is required" >&2
   exit 69
 }
+
+install -d -m 0700 "$ZASI_RUNTIME_DIRECTORY"
+install -m 0400 "$source_credential" "$runtime_credential"
 
 docker pull "$ZASI_IMAGE"
 docker rm -f zasi-staging >/dev/null 2>&1 || true
@@ -33,7 +38,7 @@ exec docker run --rm \
   --memory 512m \
   --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m \
   --mount type=volume,src=zasi-staging-data,dst=/app/data \
-  --mount type=bind,src="$credential_file",dst=/run/credentials/zasi-secrets,readonly \
+  --mount type=bind,src="$runtime_credential",dst=/run/credentials/zasi-secrets,readonly \
   -e CREDENTIALS_DIRECTORY=/run/credentials \
   -e ZASI_PROFILE=staging \
   -e ZASI_SECRET_PROVIDER=systemd-credential \
