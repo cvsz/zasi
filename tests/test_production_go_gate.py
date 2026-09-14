@@ -41,15 +41,28 @@ def evidence():
         "previous_image": PREVIOUS,
         "staging_url": "https://staging.example.com",
         "observed_at": "2026-09-13T00:00:00Z",
-        "health": {"status": "passed", "ready_url": "https://staging.example.com/health/ready"},
+        "health": {
+            "status": "passed",
+            "ready_url": "https://staging.example.com/health/ready",
+            "image": CANDIDATE,
+        },
         "world_room": {
             "status": "passed",
             "smoke_case": "join, speak, receive realtime response",
             "endpoint_url": "https://staging.example.com/world-room",
+            "image": CANDIDATE,
         },
-        "canary": {"status": "passed", "request_count": 100, "error_rate": 0.0, "p95_ms": 250},
+        "canary": {
+            "status": "passed",
+            "endpoint_url": "https://staging.example.com/health/ready",
+            "image": CANDIDATE,
+            "request_count": 100,
+            "error_rate": 0.0,
+            "p95_ms": 250,
+        },
         "rollback": {
             "status": "passed",
+            "endpoint_url": "https://staging.example.com/health/ready",
             "image": PREVIOUS,
             "health_status": "passed",
             "world_room_status": "passed",
@@ -76,6 +89,33 @@ class ProductionGoGateTests(unittest.TestCase):
             result["governance"]["required_production_checks"],
             sorted(REQUIRED_PRODUCTION_CHECKS),
         )
+
+    def test_explicit_default_https_port_is_same_origin(self):
+        item = evidence()
+        item["health"]["ready_url"] = "https://staging.example.com:443/health/ready"
+        item["world_room"]["endpoint_url"] = "https://staging.example.com:443/world-room"
+        item["canary"]["endpoint_url"] = "https://staging.example.com:443/health/ready"
+        item["rollback"]["endpoint_url"] = "https://staging.example.com:443/health/ready"
+        result = self.validate(item)
+        self.assertEqual(result["decision"], "GO")
+
+    def test_nondefault_port_is_different_origin(self):
+        item = evidence()
+        item["canary"]["endpoint_url"] = "https://staging.example.com:8443/health/ready"
+        with self.assertRaisesRegex(GateError, "same origin"):
+            self.validate(item)
+
+    def test_invalid_url_port_is_rejected(self):
+        item = evidence()
+        item["canary"]["endpoint_url"] = "https://staging.example.com:notaport/health/ready"
+        with self.assertRaisesRegex(GateError, "invalid port"):
+            self.validate(item)
+
+    def test_malformed_url_is_rejected_as_gate_error(self):
+        item = evidence()
+        item["canary"]["endpoint_url"] = "https://[broken"
+        with self.assertRaisesRegex(GateError, "valid URL"):
+            self.validate(item)
 
     def test_missing_ruleset_is_no_go(self):
         with self.assertRaisesRegex(GateError, "no active GitHub ruleset"):
@@ -142,9 +182,39 @@ class ProductionGoGateTests(unittest.TestCase):
         with self.assertRaisesRegex(GateError, "/health/ready"):
             self.validate(item)
 
+    def test_health_must_prove_candidate_digest(self):
+        item = evidence()
+        item["health"]["image"] = PREVIOUS
+        with self.assertRaisesRegex(GateError, "health.image"):
+            self.validate(item)
+
     def test_world_room_must_bind_to_staging_origin(self):
         item = evidence()
         item["world_room"]["endpoint_url"] = "https://other.example.com/world-room"
+        with self.assertRaisesRegex(GateError, "same origin"):
+            self.validate(item)
+
+    def test_world_room_must_prove_candidate_digest(self):
+        item = evidence()
+        item["world_room"]["image"] = PREVIOUS
+        with self.assertRaisesRegex(GateError, "world_room.image"):
+            self.validate(item)
+
+    def test_canary_must_bind_to_staging_origin(self):
+        item = evidence()
+        item["canary"]["endpoint_url"] = "https://other.example.com/health/ready"
+        with self.assertRaisesRegex(GateError, "same origin"):
+            self.validate(item)
+
+    def test_canary_must_prove_candidate_digest(self):
+        item = evidence()
+        item["canary"]["image"] = PREVIOUS
+        with self.assertRaisesRegex(GateError, "canary.image"):
+            self.validate(item)
+
+    def test_rollback_must_bind_to_staging_origin(self):
+        item = evidence()
+        item["rollback"]["endpoint_url"] = "https://other.example.com/health/ready"
         with self.assertRaisesRegex(GateError, "same origin"):
             self.validate(item)
 
