@@ -198,9 +198,12 @@ def validate_evidence(
     _require(data.get("schema_version") == 1, "schema_version must be 1")
 
     candidate_commit = data.get("candidate_commit")
+    previous_commit = data.get("previous_commit")
     _require(isinstance(candidate_commit, str) and SHA40.fullmatch(candidate_commit) is not None, "candidate_commit must be a lowercase 40-character git SHA")
+    _require(isinstance(previous_commit, str) and SHA40.fullmatch(previous_commit) is not None, "previous_commit must be a lowercase 40-character git SHA")
     _require(SHA40.fullmatch(expected_commit) is not None, "expected commit must be a lowercase 40-character git SHA")
     _require(candidate_commit == expected_commit, "evidence candidate_commit does not match the release commit")
+    _require(previous_commit != candidate_commit, "previous_commit and candidate_commit must differ")
 
     candidate_image = data.get("candidate_image")
     previous_image = data.get("previous_image")
@@ -249,12 +252,21 @@ def validate_evidence(
 
     rollback = _passed(data.get("rollback"), "rollback")
     _phase_timestamp(rollback, "rollback", previous=canary_at, envelope=observed_at)
-    _same_origin(rollback.get("endpoint_url"), "rollback.endpoint_url", staging_url)
+    rollback_ready_url = _same_origin(rollback.get("ready_url"), "rollback.ready_url", staging_url)
+    rollback_ready = urlparse(rollback_ready_url)
+    _require(rollback_ready.path.rstrip("/") == "/health/ready", "rollback.ready_url must target /health/ready")
+    _require(rollback_ready.query == "", "rollback.ready_url must not contain a query string")
     _require(rollback.get("image") == previous_image, "rollback.image must equal previous_image")
     _require(rollback.get("inspector") == "docker", "rollback.inspector must be 'docker'")
     _require(rollback.get("observed_image") == previous_image, "rollback.observed_image must equal previous_image")
-    _require(rollback.get("health_status") == PASS, "rollback.health_status must be 'passed'")
-    _require(rollback.get("world_room_status") == PASS, "rollback.world_room_status must be 'passed'")
+    _require(rollback.get("observed_commit") == previous_commit, "rollback.observed_commit must equal previous_commit")
+    _require(rollback.get("identity_source") == "artifact", "rollback.identity_source must be 'artifact'")
+    _same_origin(rollback.get("world_room_endpoint_url"), "rollback.world_room_endpoint_url", staging_url)
+    _require(
+        isinstance(rollback.get("world_room_smoke_case"), str) and rollback["world_room_smoke_case"].strip(),
+        "rollback.world_room_smoke_case is required",
+    )
+    _require(rollback.get("world_room_image") == previous_image, "rollback.world_room_image must equal previous_image")
     duration = rollback.get("duration_seconds")
     _require(isinstance(duration, (int, float)) and not isinstance(duration, bool) and 0 < float(duration) <= 300, "rollback.duration_seconds must be > 0 and <= 300")
 
@@ -262,6 +274,7 @@ def validate_evidence(
         "decision": "GO",
         "candidate_commit": candidate_commit,
         "candidate_image": candidate_image,
+        "previous_commit": previous_commit,
         "previous_image": previous_image,
         "observed_at": data["observed_at"],
         "governance": governance,
