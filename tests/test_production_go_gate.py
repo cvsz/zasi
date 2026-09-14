@@ -111,6 +111,12 @@ class ProductionGoGateTests(unittest.TestCase):
         with self.assertRaisesRegex(GateError, "invalid port"):
             self.validate(item)
 
+    def test_malformed_url_is_rejected_as_gate_error(self):
+        item = evidence()
+        item["canary"]["endpoint_url"] = "https://[broken"
+        with self.assertRaisesRegex(GateError, "valid URL"):
+            self.validate(item)
+
     def test_missing_ruleset_is_no_go(self):
         with self.assertRaisesRegex(GateError, "no active GitHub ruleset"):
             self.validate(evidence(), rulesets=[])
