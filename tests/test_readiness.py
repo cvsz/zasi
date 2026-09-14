@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -15,6 +16,25 @@ class HealthyRedis:
 
 
 class ReadinessTests(unittest.TestCase):
+    def _staging_settings(self, database_path: str) -> Settings:
+        """Build a valid settings object without coupling readiness tests to secret-provider I/O."""
+        local = Settings.from_mapping(
+            {
+                "ZASI_PROFILE": "local",
+                "ZASI_API_KEY": "readiness-test-secret",
+                "ZASI_DATABASE_PATH": database_path,
+            }
+        )
+        return replace(
+            local,
+            profile="staging",
+            database_backend="postgresql",
+            database_url="postgresql://zasi:test@127.0.0.1:5432/zasi_test",
+            redis_url="redis://:test@127.0.0.1:6379/0",
+            secret_provider="systemd-credential",
+            backup_policy="managed",
+        )
+
     def test_missing_frontend_bundle_degrades_full_stack_readiness(self):
         with tempfile.TemporaryDirectory() as directory:
             store = ControlPlaneStore(str(Path(directory) / "control-plane.db"))
@@ -46,16 +66,7 @@ class ReadinessTests(unittest.TestCase):
             (frontend / "index.html").write_text("ready", encoding="utf-8")
             store = ControlPlaneStore(str(root / "control-plane.db"))
             store.initialize()
-            settings = Settings.from_mapping(
-                {
-                    "ZASI_PROFILE": "staging",
-                    "ZASI_API_KEY": "readiness-test-secret",
-                    "ZASI_DATABASE_URL": "postgresql://zasi:test@127.0.0.1:5432/zasi_test",
-                    "ZASI_REDIS_URL": "redis://127.0.0.1:6379/0",
-                    "ZASI_CORS_ORIGINS": "https://staging.example.com",
-                    "ZASI_DATABASE_PATH": str(root / "control-plane.db"),
-                }
-            )
+            settings = self._staging_settings(str(root / "control-plane.db"))
             try:
                 with (
                     patch("backend.readiness.frontend_dist_path", return_value=frontend),
@@ -88,16 +99,7 @@ class ReadinessTests(unittest.TestCase):
             (frontend / "index.html").write_text("ready", encoding="utf-8")
             store = ControlPlaneStore(str(root / "control-plane.db"))
             store.initialize()
-            settings = Settings.from_mapping(
-                {
-                    "ZASI_PROFILE": "staging",
-                    "ZASI_API_KEY": "readiness-test-secret",
-                    "ZASI_DATABASE_URL": "postgresql://zasi:test@127.0.0.1:5432/zasi_test",
-                    "ZASI_REDIS_URL": "redis://127.0.0.1:6379/0",
-                    "ZASI_CORS_ORIGINS": "https://staging.example.com",
-                    "ZASI_DATABASE_PATH": str(root / "control-plane.db"),
-                }
-            )
+            settings = self._staging_settings(str(root / "control-plane.db"))
             try:
                 with (
                     patch("backend.readiness.frontend_dist_path", return_value=frontend),
