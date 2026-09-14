@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timezone
 
-from scripts.production_go_gate import GateError, validate_evidence
+from scripts.production_go_gate import GateError, REQUIRED_PRODUCTION_CHECKS, validate_evidence
 
 
 COMMIT = "a" * 40
@@ -24,7 +24,10 @@ def rulesets():
             {"type": "pull_request", "parameters": {"required_review_thread_resolution": True}},
             {"type": "required_status_checks", "parameters": {
                 "strict_required_status_checks_policy": True,
-                "required_status_checks": [{"context": "CI / test (3.11)"}],
+                "required_status_checks": [
+                    {"context": context}
+                    for context in sorted(REQUIRED_PRODUCTION_CHECKS)
+                ],
             }},
         ],
     }]
@@ -65,6 +68,10 @@ class ProductionGoGateTests(unittest.TestCase):
         result = self.validate(evidence())
         self.assertEqual(result["decision"], "GO")
         self.assertEqual(result["checks"]["main_governance"], "passed")
+        self.assertEqual(
+            result["governance"]["required_production_checks"],
+            sorted(REQUIRED_PRODUCTION_CHECKS),
+        )
 
     def test_missing_ruleset_is_no_go(self):
         with self.assertRaisesRegex(GateError, "no active GitHub ruleset"):
@@ -86,6 +93,15 @@ class ProductionGoGateTests(unittest.TestCase):
         item = rulesets()
         item[0]["rules"] = [rule for rule in item[0]["rules"] if rule["type"] not in {"deletion", "non_fast_forward"}]
         with self.assertRaisesRegex(GateError, "missing rules"):
+            self.validate(evidence(), rulesets=item)
+
+    def test_ruleset_must_require_full_production_check_set(self):
+        item = rulesets()
+        checks = item[0]["rules"][3]["parameters"]["required_status_checks"]
+        item[0]["rules"][3]["parameters"]["required_status_checks"] = [
+            check for check in checks if check["context"] != "Build security evidence"
+        ]
+        with self.assertRaisesRegex(GateError, "missing required production checks"):
             self.validate(evidence(), rulesets=item)
 
     def test_ruleset_must_require_strict_status_checks(self):
