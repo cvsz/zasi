@@ -1,5 +1,4 @@
 import unittest
-from copy import deepcopy
 from datetime import datetime, timezone
 
 from scripts.production_go_gate import GateError, validate_evidence
@@ -9,6 +8,26 @@ COMMIT = "a" * 40
 CANDIDATE = "ghcr.io/cvsz/zasi@sha256:" + "b" * 64
 PREVIOUS = "ghcr.io/cvsz/zasi@sha256:" + "c" * 64
 NOW = datetime(2026, 9, 13, 1, 0, 0, tzinfo=timezone.utc)
+
+
+def rulesets():
+    return [{
+        "id": 123,
+        "name": "production-main",
+        "target": "branch",
+        "enforcement": "active",
+        "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}},
+        "bypass_actors": [],
+        "rules": [
+            {"type": "deletion"},
+            {"type": "non_fast_forward"},
+            {"type": "pull_request", "parameters": {"required_review_thread_resolution": True}},
+            {"type": "required_status_checks", "parameters": {
+                "strict_required_status_checks_policy": True,
+                "required_status_checks": [{"context": "CI / test (3.11)"}],
+            }},
+        ],
+    }]
 
 
 def evidence():
@@ -37,7 +56,7 @@ class ProductionGoGateTests(unittest.TestCase):
         return validate_evidence(
             item,
             expected_commit=kwargs.pop("expected_commit", COMMIT),
-            main_protected=kwargs.pop("main_protected", True),
+            rulesets=kwargs.pop("rulesets", rulesets()),
             now=kwargs.pop("now", NOW),
             **kwargs,
         )
@@ -45,11 +64,41 @@ class ProductionGoGateTests(unittest.TestCase):
     def test_valid_external_evidence_is_go(self):
         result = self.validate(evidence())
         self.assertEqual(result["decision"], "GO")
-        self.assertEqual(result["checks"]["freshness"], "passed")
+        self.assertEqual(result["checks"]["main_governance"], "passed")
 
-    def test_unprotected_main_is_no_go(self):
-        with self.assertRaisesRegex(GateError, "not protected"):
-            self.validate(evidence(), main_protected=False)
+    def test_missing_ruleset_is_no_go(self):
+        with self.assertRaisesRegex(GateError, "no active GitHub ruleset"):
+            self.validate(evidence(), rulesets=[])
+
+    def test_ruleset_must_require_pull_requests(self):
+        item = rulesets()
+        item[0]["rules"] = [rule for rule in item[0]["rules"] if rule["type"] != "pull_request"]
+        with self.assertRaisesRegex(GateError, "missing rules"):
+            self.validate(evidence(), rulesets=item)
+
+    def test_ruleset_must_resolve_review_threads(self):
+        item = rulesets()
+        item[0]["rules"][2]["parameters"]["required_review_thread_resolution"] = False
+        with self.assertRaisesRegex(GateError, "review-thread resolution"):
+            self.validate(evidence(), rulesets=item)
+
+    def test_ruleset_must_block_force_push_and_deletion(self):
+        item = rulesets()
+        item[0]["rules"] = [rule for rule in item[0]["rules"] if rule["type"] not in {"deletion", "non_fast_forward"}]
+        with self.assertRaisesRegex(GateError, "missing rules"):
+            self.validate(evidence(), rulesets=item)
+
+    def test_ruleset_must_require_strict_status_checks(self):
+        item = rulesets()
+        item[0]["rules"][3]["parameters"]["strict_required_status_checks_policy"] = False
+        with self.assertRaisesRegex(GateError, "up to date"):
+            self.validate(evidence(), rulesets=item)
+
+    def test_ruleset_bypass_is_rejected(self):
+        item = rulesets()
+        item[0]["bypass_actors"] = [{"actor_type": "RepositoryRole", "actor_id": 5, "bypass_mode": "always"}]
+        with self.assertRaisesRegex(GateError, "bypass actors"):
+            self.validate(evidence(), rulesets=item)
 
     def test_commit_must_match_release(self):
         with self.assertRaisesRegex(GateError, "does not match"):
