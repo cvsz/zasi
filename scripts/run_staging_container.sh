@@ -33,9 +33,10 @@ exec docker run --rm \
   --memory 512m \
   --tmpfs /tmp:rw,noexec,nosuid,nodev,size=64m \
   --mount type=volume,src=zasi-staging-data,dst=/app/data \
-  --env-file "$credential_file" \
+  --mount type=bind,src="$credential_file",dst=/run/credentials/zasi-secrets,readonly \
+  -e CREDENTIALS_DIRECTORY=/run/credentials \
   -e ZASI_PROFILE=staging \
-  -e ZASI_SECRET_PROVIDER=environment \
+  -e ZASI_SECRET_PROVIDER=systemd-credential \
   -e ZASI_BACKUP_POLICY=managed-encrypted \
   -e ZASI_DATABASE_BACKEND=postgresql \
   -e ZASI_REDIS_KEY_PREFIX=zasi:staging \
