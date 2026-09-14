@@ -5,6 +5,7 @@ from scripts.production_go_gate import GateError, REQUIRED_PRODUCTION_CHECKS, va
 
 
 COMMIT = "a" * 40
+PREVIOUS_COMMIT = "d" * 40
 CANDIDATE = "ghcr.io/cvsz/zasi@sha256:" + "b" * 64
 PREVIOUS = "ghcr.io/cvsz/zasi@sha256:" + "c" * 64
 NOW = datetime(2026, 9, 13, 1, 0, 0, tzinfo=timezone.utc)
@@ -37,6 +38,7 @@ def evidence():
     return {
         "schema_version": 1,
         "candidate_commit": COMMIT,
+        "previous_commit": PREVIOUS_COMMIT,
         "candidate_image": CANDIDATE,
         "previous_image": PREVIOUS,
         "staging_url": "https://staging.example.com",
@@ -73,12 +75,16 @@ def evidence():
         "rollback": {
             "status": "passed",
             "observed_at": "2026-09-13T00:00:00Z",
-            "endpoint_url": "https://staging.example.com/health/ready",
+            "ready_url": "https://staging.example.com/health/ready",
             "image": PREVIOUS,
             "inspector": "docker",
             "observed_image": PREVIOUS,
-            "health_status": "passed",
+            "observed_commit": PREVIOUS_COMMIT,
+            "identity_source": "artifact",
+            "world_room_endpoint_url": "https://staging.example.com/world-room",
+            "world_room_smoke_case": "join, speak, receive realtime response after rollback",
             "world_room_status": "passed",
+            "world_room_image": PREVIOUS,
             "duration_seconds": 45,
         },
     }
@@ -100,13 +106,15 @@ class ProductionGoGateTests(unittest.TestCase):
         self.assertEqual(result["checks"]["main_governance"], "passed")
         self.assertEqual(result["checks"]["phase_timeline"], "passed")
         self.assertEqual(result["checks"]["runtime_identity"], "passed")
+        self.assertEqual(result["previous_commit"], PREVIOUS_COMMIT)
 
     def test_explicit_default_https_port_is_same_origin(self):
         item = evidence()
         item["health"]["ready_url"] = "https://staging.example.com:443/health/ready"
         item["world_room"]["endpoint_url"] = "https://staging.example.com:443/world-room"
         item["canary"]["endpoint_url"] = "https://staging.example.com:443/health/ready"
-        item["rollback"]["endpoint_url"] = "https://staging.example.com:443/health/ready"
+        item["rollback"]["ready_url"] = "https://staging.example.com:443/health/ready"
+        item["rollback"]["world_room_endpoint_url"] = "https://staging.example.com:443/world-room"
         self.assertEqual(self.validate(item)["decision"], "GO")
 
     def test_nondefault_port_is_different_origin(self):
@@ -172,7 +180,13 @@ class ProductionGoGateTests(unittest.TestCase):
 
     def test_commit_must_match_release(self):
         with self.assertRaisesRegex(GateError, "does not match"):
-            self.validate(evidence(), expected_commit="d" * 40)
+            self.validate(evidence(), expected_commit="e" * 40)
+
+    def test_previous_commit_must_differ_from_candidate(self):
+        item = evidence()
+        item["previous_commit"] = COMMIT
+        with self.assertRaisesRegex(GateError, "previous_commit and candidate_commit must differ"):
+            self.validate(item)
 
     def test_mutable_image_reference_is_rejected(self):
         item = evidence()
@@ -206,7 +220,7 @@ class ProductionGoGateTests(unittest.TestCase):
 
     def test_health_must_observe_candidate_commit(self):
         item = evidence()
-        item["health"]["observed_commit"] = "d" * 40
+        item["health"]["observed_commit"] = "e" * 40
         with self.assertRaisesRegex(GateError, "health.observed_commit"):
             self.validate(item)
 
@@ -240,10 +254,46 @@ class ProductionGoGateTests(unittest.TestCase):
         with self.assertRaisesRegex(GateError, "canary.image"):
             self.validate(item)
 
-    def test_rollback_must_bind_to_staging_origin(self):
+    def test_rollback_must_bind_readiness_to_staging_origin(self):
         item = evidence()
-        item["rollback"]["endpoint_url"] = "https://other.example.com/health/ready"
+        item["rollback"]["ready_url"] = "https://other.example.com/health/ready"
         with self.assertRaisesRegex(GateError, "same origin"):
+            self.validate(item)
+
+    def test_rollback_must_target_canonical_readiness_path(self):
+        item = evidence()
+        item["rollback"]["ready_url"] = "https://staging.example.com/health"
+        with self.assertRaisesRegex(GateError, "rollback.ready_url"):
+            self.validate(item)
+
+    def test_rollback_must_observe_previous_commit(self):
+        item = evidence()
+        item["rollback"]["observed_commit"] = COMMIT
+        with self.assertRaisesRegex(GateError, "rollback.observed_commit"):
+            self.validate(item)
+
+    def test_rollback_identity_must_be_artifact_derived(self):
+        item = evidence()
+        item["rollback"]["identity_source"] = "environment"
+        with self.assertRaisesRegex(GateError, "rollback.identity_source"):
+            self.validate(item)
+
+    def test_rollback_world_room_must_bind_to_staging_origin(self):
+        item = evidence()
+        item["rollback"]["world_room_endpoint_url"] = "https://other.example.com/world-room"
+        with self.assertRaisesRegex(GateError, "same origin"):
+            self.validate(item)
+
+    def test_rollback_world_room_must_prove_previous_digest(self):
+        item = evidence()
+        item["rollback"]["world_room_image"] = CANDIDATE
+        with self.assertRaisesRegex(GateError, "rollback.world_room_image"):
+            self.validate(item)
+
+    def test_rollback_world_room_must_be_successful(self):
+        item = evidence()
+        item["rollback"]["world_room_status"] = "failed"
+        with self.assertRaisesRegex(GateError, "rollback.world_room_status"):
             self.validate(item)
 
     def test_url_credentials_are_rejected(self):
