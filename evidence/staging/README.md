@@ -8,11 +8,10 @@ A production release tag is allowed only when `scripts/production_go_gate.py` va
 - `candidate_commit` is the exact 40-character release commit SHA.
 - `candidate_image` and `previous_image` are immutable `ghcr.io/...@sha256:...` references and are different.
 - `observed_at` is a real RFC3339 UTC timestamp no more than **6 hours old** at release time. Future timestamps and stale evidence are rejected.
-- `staging_url` and `/health/ready` use HTTPS.
-- health readiness passed on the candidate.
-- World Room smoke/E2E passed on the real staging deployment.
+- `staging_url`, readiness, World Room, canary, and rollback endpoints use HTTPS and the same staging origin.
+- candidate readiness, World Room, and canary evidence explicitly identify the exact `candidate_image` digest.
 - controlled canary evidence contains at least 20 requests, error rate <= 1%, and p95 <= 2000 ms.
-- rollback redeployed the exact `previous_image` digest in <= 300 seconds.
+- rollback redeployed the exact `previous_image` digest in <= 300 seconds on that same staging origin.
 - health and World Room checks passed again after rollback.
 
 ## Required JSON shape
@@ -27,20 +26,26 @@ A production release tag is allowed only when `scripts/production_go_gate.py` va
   "observed_at": "2026-09-13T00:00:00Z",
   "health": {
     "status": "passed",
-    "ready_url": "https://<real-staging-host>/health/ready"
+    "ready_url": "https://<real-staging-host>/health/ready",
+    "image": "ghcr.io/cvsz/zasi@sha256:<candidate-64-hex-digest>"
   },
   "world_room": {
     "status": "passed",
-    "smoke_case": "join room, establish realtime session, exchange audio, receive response"
+    "smoke_case": "join room, establish realtime session, exchange audio, receive response",
+    "endpoint_url": "https://<real-staging-host>/world-room",
+    "image": "ghcr.io/cvsz/zasi@sha256:<candidate-64-hex-digest>"
   },
   "canary": {
     "status": "passed",
+    "endpoint_url": "https://<real-staging-host>/health/ready",
+    "image": "ghcr.io/cvsz/zasi@sha256:<candidate-64-hex-digest>",
     "request_count": 100,
     "error_rate": 0.0,
     "p95_ms": 250
   },
   "rollback": {
     "status": "passed",
+    "endpoint_url": "https://<real-staging-host>/health/ready",
     "image": "ghcr.io/cvsz/zasi@sha256:<previous-64-hex-digest>",
     "health_status": "passed",
     "world_room_status": "passed",
@@ -53,4 +58,4 @@ Do not copy placeholder values into `latest.json`. Evidence must come from an ac
 
 ## Release behavior
 
-`.github/workflows/release.yml` verifies that the tag commit is contained in `origin/main`, queries GitHub for the protection state of `main`, validates `evidence/staging/latest.json`, and uploads the resulting `production-go-decision.json` with the release artifacts. Missing, stale, future-dated, mutable, failed, or mismatched evidence causes the release to stop with `NO-GO`.
+`.github/workflows/release.yml` verifies that the tag commit is contained in `origin/main`, queries live GitHub rulesets, validates `evidence/staging/latest.json`, and uploads the resulting `production-go-decision.json` with the release artifacts. Missing, stale, future-dated, mutable, cross-origin, wrong-digest, failed, or mismatched evidence causes the release to stop with `NO-GO`.
