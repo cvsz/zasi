@@ -9,10 +9,16 @@ A production release tag is allowed only when `scripts/production_go_gate.py` va
 - `candidate_image` and `previous_image` are immutable `ghcr.io/...@sha256:...` references and are different.
 - `observed_at` is a real RFC3339 UTC timestamp no more than **6 hours old** at release time. Future timestamps and stale evidence are rejected.
 - `staging_url`, readiness, World Room, canary, and rollback endpoints use HTTPS and the same staging origin.
-- candidate readiness, World Room, and canary evidence explicitly identify the exact `candidate_image` digest.
+- the container artifact contains `/app/.zasi-release-commit`, baked at image build time from the exact Git commit; `/health/ready` reports that value as `release_identity.commit` with `release_identity.source=artifact`.
+- the running container digest is verified outside the application through Docker runtime inspection. `scripts/observe_container_image.sh <container> <candidate_image>` must succeed and its JSON becomes the `runtime` evidence object.
+- `health.observed_commit` is copied from the live external `/health/ready` response and must equal `candidate_commit`; `health.identity_source` must be `artifact`.
+- `runtime.observed_image` must equal the exact immutable `candidate_image` and `runtime.inspector` must be `docker`.
+- World Room and canary evidence identify the exact `candidate_image` digest.
 - controlled canary evidence contains at least 20 requests, error rate <= 1%, and p95 <= 2000 ms.
 - rollback redeployed the exact `previous_image` digest in <= 300 seconds on that same staging origin.
 - health and World Room checks passed again after rollback.
+
+Do not inject release identity through `ZASI_RELEASE_COMMIT` or `ZASI_RELEASE_IMAGE`. Those caller-controlled values are not accepted as production evidence. The commit identity must come from the built artifact, while the image digest must be verified independently by the container runtime.
 
 ## Required JSON shape
 
@@ -24,10 +30,16 @@ A production release tag is allowed only when `scripts/production_go_gate.py` va
   "previous_image": "ghcr.io/cvsz/zasi@sha256:<64-hex-digest>",
   "staging_url": "https://<real-staging-host>",
   "observed_at": "2026-09-13T00:00:00Z",
+  "runtime": {
+    "status": "passed",
+    "inspector": "docker",
+    "observed_image": "ghcr.io/cvsz/zasi@sha256:<candidate-64-hex-digest>"
+  },
   "health": {
     "status": "passed",
     "ready_url": "https://<real-staging-host>/health/ready",
-    "image": "ghcr.io/cvsz/zasi@sha256:<candidate-64-hex-digest>"
+    "observed_commit": "<commit returned by /health/ready release_identity.commit>",
+    "identity_source": "artifact"
   },
   "world_room": {
     "status": "passed",
@@ -58,4 +70,4 @@ Do not copy placeholder values into `latest.json`. Evidence must come from an ac
 
 ## Release behavior
 
-`.github/workflows/release.yml` verifies that the tag commit is contained in `origin/main`, queries live GitHub rulesets, validates `evidence/staging/latest.json`, and uploads the resulting `production-go-decision.json` with the release artifacts. Missing, stale, future-dated, mutable, cross-origin, wrong-digest, failed, or mismatched evidence causes the release to stop with `NO-GO`.
+`.github/workflows/release.yml` verifies that the tag commit is contained in `origin/main`, queries live GitHub rulesets, validates `evidence/staging/latest.json`, and uploads the resulting `production-go-decision.json` with the release artifacts. Missing, stale, future-dated, mutable, cross-origin, wrong-identity, failed, or mismatched evidence causes the release to stop with `NO-GO`.

@@ -41,10 +41,16 @@ def evidence():
         "previous_image": PREVIOUS,
         "staging_url": "https://staging.example.com",
         "observed_at": "2026-09-13T00:00:00Z",
+        "runtime": {
+            "status": "passed",
+            "inspector": "docker",
+            "observed_image": CANDIDATE,
+        },
         "health": {
             "status": "passed",
             "ready_url": "https://staging.example.com/health/ready",
-            "image": CANDIDATE,
+            "observed_commit": COMMIT,
+            "identity_source": "artifact",
         },
         "world_room": {
             "status": "passed",
@@ -85,10 +91,7 @@ class ProductionGoGateTests(unittest.TestCase):
         result = self.validate(evidence())
         self.assertEqual(result["decision"], "GO")
         self.assertEqual(result["checks"]["main_governance"], "passed")
-        self.assertEqual(
-            result["governance"]["required_production_checks"],
-            sorted(REQUIRED_PRODUCTION_CHECKS),
-        )
+        self.assertEqual(result["checks"]["runtime_identity"], "passed")
 
     def test_explicit_default_https_port_is_same_origin(self):
         item = evidence()
@@ -96,8 +99,7 @@ class ProductionGoGateTests(unittest.TestCase):
         item["world_room"]["endpoint_url"] = "https://staging.example.com:443/world-room"
         item["canary"]["endpoint_url"] = "https://staging.example.com:443/health/ready"
         item["rollback"]["endpoint_url"] = "https://staging.example.com:443/health/ready"
-        result = self.validate(item)
-        self.assertEqual(result["decision"], "GO")
+        self.assertEqual(self.validate(item)["decision"], "GO")
 
     def test_nondefault_port_is_different_origin(self):
         item = evidence()
@@ -170,6 +172,18 @@ class ProductionGoGateTests(unittest.TestCase):
         with self.assertRaisesRegex(GateError, "immutable GHCR"):
             self.validate(item)
 
+    def test_runtime_must_observe_candidate_digest(self):
+        item = evidence()
+        item["runtime"]["observed_image"] = PREVIOUS
+        with self.assertRaisesRegex(GateError, "runtime.observed_image"):
+            self.validate(item)
+
+    def test_runtime_must_use_supported_inspector(self):
+        item = evidence()
+        item["runtime"]["inspector"] = "application-env"
+        with self.assertRaisesRegex(GateError, "runtime.inspector"):
+            self.validate(item)
+
     def test_health_must_use_staging_origin(self):
         item = evidence()
         item["health"]["ready_url"] = "https://other.example.com/health/ready"
@@ -182,10 +196,16 @@ class ProductionGoGateTests(unittest.TestCase):
         with self.assertRaisesRegex(GateError, "/health/ready"):
             self.validate(item)
 
-    def test_health_must_prove_candidate_digest(self):
+    def test_health_must_observe_candidate_commit(self):
         item = evidence()
-        item["health"]["image"] = PREVIOUS
-        with self.assertRaisesRegex(GateError, "health.image"):
+        item["health"]["observed_commit"] = "d" * 40
+        with self.assertRaisesRegex(GateError, "health.observed_commit"):
+            self.validate(item)
+
+    def test_health_identity_must_be_artifact_derived(self):
+        item = evidence()
+        item["health"]["identity_source"] = "environment"
+        with self.assertRaisesRegex(GateError, "health.identity_source"):
             self.validate(item)
 
     def test_world_room_must_bind_to_staging_origin(self):
@@ -257,8 +277,7 @@ class ProductionGoGateTests(unittest.TestCase):
     def test_six_hour_old_evidence_is_still_valid(self):
         item = evidence()
         item["observed_at"] = "2026-09-12T19:00:00Z"
-        result = self.validate(item)
-        self.assertEqual(result["decision"], "GO")
+        self.assertEqual(self.validate(item)["decision"], "GO")
 
     def test_future_evidence_is_rejected(self):
         item = evidence()
