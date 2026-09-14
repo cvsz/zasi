@@ -90,6 +90,27 @@ class ProductionGoGateTests(unittest.TestCase):
             sorted(REQUIRED_PRODUCTION_CHECKS),
         )
 
+    def test_explicit_default_https_port_is_same_origin(self):
+        item = evidence()
+        item["health"]["ready_url"] = "https://staging.example.com:443/health/ready"
+        item["world_room"]["endpoint_url"] = "https://staging.example.com:443/world-room"
+        item["canary"]["endpoint_url"] = "https://staging.example.com:443/health/ready"
+        item["rollback"]["endpoint_url"] = "https://staging.example.com:443/health/ready"
+        result = self.validate(item)
+        self.assertEqual(result["decision"], "GO")
+
+    def test_nondefault_port_is_different_origin(self):
+        item = evidence()
+        item["canary"]["endpoint_url"] = "https://staging.example.com:8443/health/ready"
+        with self.assertRaisesRegex(GateError, "same origin"):
+            self.validate(item)
+
+    def test_invalid_url_port_is_rejected(self):
+        item = evidence()
+        item["canary"]["endpoint_url"] = "https://staging.example.com:notaport/health/ready"
+        with self.assertRaisesRegex(GateError, "invalid port"):
+            self.validate(item)
+
     def test_missing_ruleset_is_no_go(self):
         with self.assertRaisesRegex(GateError, "no active GitHub ruleset"):
             self.validate(evidence(), rulesets=[])
