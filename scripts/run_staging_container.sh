@@ -29,7 +29,9 @@ command -v docker >/dev/null 2>&1 || {
 }
 
 install -d -m 0700 "$ZASI_RUNTIME_DIRECTORY"
-install -m 0400 "$source_credential" "$runtime_credential"
+# The image runs as UID/GID 10001. Keep the staged plaintext credential in the
+# unit's volatile /run directory, readable only by that runtime identity.
+install -o 10001 -g 10001 -m 0400 "$source_credential" "$runtime_credential"
 
 docker pull "$ZASI_IMAGE"
 docker rm -f zasi-staging >/dev/null 2>&1 || true
