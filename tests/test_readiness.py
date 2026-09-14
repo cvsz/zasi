@@ -9,6 +9,11 @@ from src.control_plane.execution import ToolRegistry
 from src.control_plane.storage import ControlPlaneStore
 
 
+class HealthyRedis:
+    def ping(self):
+        return True
+
+
 class ReadinessTests(unittest.TestCase):
     def test_missing_frontend_bundle_degrades_full_stack_readiness(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -45,6 +50,8 @@ class ReadinessTests(unittest.TestCase):
                 {
                     "ZASI_PROFILE": "staging",
                     "ZASI_API_KEY": "readiness-test-secret",
+                    "ZASI_DATABASE_URL": "postgresql://zasi:test@127.0.0.1:5432/zasi_test",
+                    "ZASI_REDIS_URL": "redis://127.0.0.1:6379/0",
                     "ZASI_DATABASE_PATH": str(root / "control-plane.db"),
                 }
             )
@@ -56,7 +63,12 @@ class ReadinessTests(unittest.TestCase):
                         {"ZASI_RELEASE_COMMIT": "", "ZASI_RELEASE_IMAGE": ""},
                     ),
                 ):
-                    result = probe(store, settings, ToolRegistry())
+                    result = probe(
+                        store,
+                        settings,
+                        ToolRegistry(),
+                        redis_runtime=HealthyRedis(),
+                    )
             finally:
                 store.close()
 
@@ -79,6 +91,8 @@ class ReadinessTests(unittest.TestCase):
                 {
                     "ZASI_PROFILE": "staging",
                     "ZASI_API_KEY": "readiness-test-secret",
+                    "ZASI_DATABASE_URL": "postgresql://zasi:test@127.0.0.1:5432/zasi_test",
+                    "ZASI_REDIS_URL": "redis://127.0.0.1:6379/0",
                     "ZASI_DATABASE_PATH": str(root / "control-plane.db"),
                 }
             )
@@ -90,7 +104,12 @@ class ReadinessTests(unittest.TestCase):
                         {"ZASI_RELEASE_COMMIT": commit, "ZASI_RELEASE_IMAGE": image},
                     ),
                 ):
-                    result = probe(store, settings, ToolRegistry())
+                    result = probe(
+                        store,
+                        settings,
+                        ToolRegistry(),
+                        redis_runtime=HealthyRedis(),
+                    )
             finally:
                 store.close()
 
