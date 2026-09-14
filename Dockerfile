@@ -8,7 +8,7 @@ RUN npm ci --ignore-scripts \
 
 FROM python:3.11-slim
 
-ARG ZASI_BUILD_COMMIT
+ARG ZASI_BUILD_COMMIT=""
 
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \
@@ -24,11 +24,13 @@ COPY src /app/src
 COPY scripts /app/scripts
 COPY --from=cockpit-build /frontend/web/dist /app/web/dist
 
-RUN case "${ZASI_BUILD_COMMIT}" in \
-      [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;; \
-      *) echo "ZASI_BUILD_COMMIT must be a lowercase 40-character git SHA" >&2; exit 2 ;; \
-    esac \
-    && printf '%s\n' "${ZASI_BUILD_COMMIT}" > /app/.zasi-release-commit \
+RUN if printf '%s' "${ZASI_BUILD_COMMIT}" | grep -Eq '^[0-9a-f]{40}$'; then \
+      printf '%s\n' "${ZASI_BUILD_COMMIT}" > /app/.zasi-release-commit; \
+    elif [ -n "${ZASI_BUILD_COMMIT}" ]; then \
+      echo "ZASI_BUILD_COMMIT must be a lowercase 40-character git SHA" >&2; exit 2; \
+    else \
+      echo "Building non-release image without artifact commit identity" >&2; \
+    fi \
     && apt-get update \
     && apt-get upgrade -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
