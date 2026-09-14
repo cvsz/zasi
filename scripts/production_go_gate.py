@@ -206,7 +206,14 @@ def validate_evidence(
     ready = urlparse(ready_url)
     _require(ready.path.rstrip("/") == "/health/ready", "health.ready_url must target /health/ready")
     _require(ready.query == "", "health.ready_url must not contain a query string")
-    _require(health.get("image") == candidate_image, "health.image must equal candidate_image")
+    _require(
+        health.get("observed_commit") == candidate_commit,
+        "health.observed_commit must equal candidate_commit",
+    )
+    _require(
+        health.get("observed_image") == candidate_image,
+        "health.observed_image must equal candidate_image",
+    )
 
     world_room = _passed(data.get("world_room"), "world_room")
     _require(isinstance(world_room.get("smoke_case"), str) and world_room["smoke_case"].strip(), "world_room.smoke_case is required")
