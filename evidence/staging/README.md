@@ -9,10 +9,14 @@ A production release tag is allowed only when `scripts/production_go_gate.py` va
 - `candidate_image` and `previous_image` are immutable `ghcr.io/...@sha256:...` references and are different.
 - `observed_at` is a real RFC3339 UTC timestamp no more than **6 hours old** at release time. Future timestamps and stale evidence are rejected.
 - `staging_url`, readiness, World Room, canary, and rollback endpoints use HTTPS and the same staging origin.
-- candidate readiness, World Room, and canary evidence explicitly identify the exact `candidate_image` digest.
+- `/health/ready` reports `release_identity.commit` and `release_identity.image`; staging/production readiness is degraded when those values are missing or malformed.
+- `health.observed_commit` and `health.observed_image` are copied verbatim from that live readiness response and must equal the exact `candidate_commit` and `candidate_image`.
+- World Room and canary evidence identify the exact `candidate_image` digest.
 - controlled canary evidence contains at least 20 requests, error rate <= 1%, and p95 <= 2000 ms.
 - rollback redeployed the exact `previous_image` digest in <= 300 seconds on that same staging origin.
 - health and World Room checks passed again after rollback.
+
+The deployment must provide `ZASI_RELEASE_COMMIT=<40-hex-sha>` and `ZASI_RELEASE_IMAGE=ghcr.io/...@sha256:<64-hex-digest>` to the candidate process. These are non-secret release identity values. Do not populate the evidence record from intended deployment inputs alone: fetch `/health/ready` from the externally reachable staging origin and record the values actually returned in `release_identity`.
 
 ## Required JSON shape
 
@@ -27,7 +31,8 @@ A production release tag is allowed only when `scripts/production_go_gate.py` va
   "health": {
     "status": "passed",
     "ready_url": "https://<real-staging-host>/health/ready",
-    "image": "ghcr.io/cvsz/zasi@sha256:<candidate-64-hex-digest>"
+    "observed_commit": "<commit returned by /health/ready release_identity.commit>",
+    "observed_image": "ghcr.io/cvsz/zasi@sha256:<digest returned by /health/ready release_identity.image>"
   },
   "world_room": {
     "status": "passed",
@@ -58,4 +63,4 @@ Do not copy placeholder values into `latest.json`. Evidence must come from an ac
 
 ## Release behavior
 
-`.github/workflows/release.yml` verifies that the tag commit is contained in `origin/main`, queries live GitHub rulesets, validates `evidence/staging/latest.json`, and uploads the resulting `production-go-decision.json` with the release artifacts. Missing, stale, future-dated, mutable, cross-origin, wrong-digest, failed, or mismatched evidence causes the release to stop with `NO-GO`.
+`.github/workflows/release.yml` verifies that the tag commit is contained in `origin/main`, queries live GitHub rulesets, validates `evidence/staging/latest.json`, and uploads the resulting `production-go-decision.json` with the release artifacts. Missing, stale, future-dated, mutable, cross-origin, wrong-identity, failed, or mismatched evidence causes the release to stop with `NO-GO`.
