@@ -2,11 +2,17 @@
 set -euo pipefail
 
 : "${ZASI_IMAGE:?ZASI_IMAGE is required}"
+: "${ZASI_STAGING_ORIGIN:?ZASI_STAGING_ORIGIN is required}"
 : "${CREDENTIALS_DIRECTORY:?systemd credential directory is required}"
 : "${ZASI_RUNTIME_DIRECTORY:=/run/zasi-staging}"
 
 if [[ ! "$ZASI_IMAGE" =~ ^ghcr\.io/[a-z0-9_.-]+/[a-z0-9_.-]+@sha256:[0-9a-f]{64}$ ]]; then
   echo "ZASI_IMAGE must be an immutable GHCR digest reference" >&2
+  exit 65
+fi
+
+if [[ ! "$ZASI_STAGING_ORIGIN" =~ ^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?$ ]]; then
+  echo "ZASI_STAGING_ORIGIN must be a bare https origin without path, query, credentials, or fragment" >&2
   exit 65
 fi
 
@@ -48,7 +54,7 @@ exec docker run --rm \
   -e ZASI_HOST=127.0.0.1 \
   -e ZASI_PORT=8080 \
   -e ZASI_ALLOW_PUBLIC_BIND=no \
-  -e ZASI_CORS_ORIGINS=http://127.0.0.1:8080 \
+  -e ZASI_CORS_ORIGINS="$ZASI_STAGING_ORIGIN" \
   -e ZASI_ARTIFACT_DIRECTORY=/app/data/artifacts \
   -e ZASI_ENABLE_EXTERNAL_EGRESS=no \
   -e ZASI_ENABLE_RESEARCH_EXECUTION=no \
