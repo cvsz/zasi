@@ -20,7 +20,7 @@ A production release tag is allowed only when `scripts/production_go_gate.py` va
 - rollback redeployed the exact `previous_image` digest in <= 300 seconds on that same staging origin.
 - after rollback, `scripts/observe_container_image.sh <container> <previous_image>` must independently verify the running previous digest.
 - after rollback, external `/health/ready` must pass again and report `previous_commit` from artifact-derived release identity.
-- after rollback, World Room smoke/E2E must pass again on the same staging origin and identify `previous_image`; a bare caller-authored `health_status` or `world_room_status` string is not accepted.
+- after rollback, World Room smoke/E2E must pass again on the same staging origin, explicitly report `world_room_status: "passed"`, and identify `previous_image`. A nonblank smoke description alone is not success evidence.
 
 Do not inject release identity through `ZASI_RELEASE_COMMIT` or `ZASI_RELEASE_IMAGE`. Those caller-controlled values are not accepted as production evidence. The commit identity must come from the built artifact, while both candidate and rollback image digests must be verified independently by the container runtime.
 
@@ -75,6 +75,7 @@ Do not inject release identity through `ZASI_RELEASE_COMMIT` or `ZASI_RELEASE_IM
     "identity_source": "artifact",
     "world_room_endpoint_url": "https://<real-staging-host>/world-room",
     "world_room_smoke_case": "join room, establish realtime session, exchange audio, receive response after rollback",
+    "world_room_status": "passed",
     "world_room_image": "ghcr.io/cvsz/zasi@sha256:<previous-64-hex-digest>",
     "duration_seconds": 45
   }
