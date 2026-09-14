@@ -22,6 +22,23 @@ DIGEST = re.compile(r"^ghcr\.io/[a-z0-9_.-]+/[a-z0-9_.-]+@sha256:[0-9a-f]{64}$")
 PASS = "passed"
 MAX_EVIDENCE_AGE = timedelta(hours=6)
 MAIN_REF_TARGETS = {"~DEFAULT_BRANCH", "refs/heads/main"}
+REQUIRED_PRODUCTION_CHECKS = frozenset({
+    "Test (Python 3.11)",
+    "Test (Python 3.12)",
+    "Build Distribution",
+    "Docker Build Check",
+    "Dependency Review",
+    "Python Syntax & React TypeScript Validation",
+    "Analyze (actions)",
+    "Analyze (javascript-typescript)",
+    "Analyze (python)",
+    "Build and Security Scan Docker Image",
+    "Build security evidence",
+    "Clean PostgreSQL backup restore rehearsal",
+    "Local two-replica canary and failure rehearsal",
+    "Base to candidate to immutable rollback",
+    "Validate production GO evidence contract",
+})
 
 
 class GateError(ValueError):
@@ -96,6 +113,18 @@ def validate_governance(rulesets: Any) -> dict[str, Any]:
         if not isinstance(required_checks, list) or not required_checks:
             failures.append(f"ruleset {ruleset.get('id', '<unknown>')} must require status checks")
             continue
+        required_contexts = {
+            check.get("context")
+            for check in required_checks
+            if isinstance(check, dict) and isinstance(check.get("context"), str)
+        }
+        missing_checks = sorted(REQUIRED_PRODUCTION_CHECKS - required_contexts)
+        if missing_checks:
+            failures.append(
+                f"ruleset {ruleset.get('id', '<unknown>')} missing required production checks: "
+                + ", ".join(missing_checks)
+            )
+            continue
         if status_params.get("strict_required_status_checks_policy") is not True:
             failures.append(f"ruleset {ruleset.get('id', '<unknown>')} must require branch to be up to date")
             continue
@@ -110,6 +139,7 @@ def validate_governance(rulesets: Any) -> dict[str, Any]:
             "ruleset_id": ruleset.get("id"),
             "ruleset_name": ruleset.get("name"),
             "required_check_count": len(required_checks),
+            "required_production_checks": sorted(REQUIRED_PRODUCTION_CHECKS),
         }
 
     suffix = f"; candidates rejected: {' | '.join(failures)}" if failures else ""
