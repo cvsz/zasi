@@ -44,7 +44,8 @@ def evidence():
         "health": {
             "status": "passed",
             "ready_url": "https://staging.example.com/health/ready",
-            "image": CANDIDATE,
+            "observed_commit": COMMIT,
+            "observed_image": CANDIDATE,
         },
         "world_room": {
             "status": "passed",
@@ -182,10 +183,23 @@ class ProductionGoGateTests(unittest.TestCase):
         with self.assertRaisesRegex(GateError, "/health/ready"):
             self.validate(item)
 
-    def test_health_must_prove_candidate_digest(self):
+    def test_health_must_observe_candidate_commit(self):
         item = evidence()
-        item["health"]["image"] = PREVIOUS
-        with self.assertRaisesRegex(GateError, "health.image"):
+        item["health"]["observed_commit"] = "d" * 40
+        with self.assertRaisesRegex(GateError, "health.observed_commit"):
+            self.validate(item)
+
+    def test_health_must_observe_candidate_digest(self):
+        item = evidence()
+        item["health"]["observed_image"] = PREVIOUS
+        with self.assertRaisesRegex(GateError, "health.observed_image"):
+            self.validate(item)
+
+    def test_self_asserted_health_image_does_not_replace_observed_identity(self):
+        item = evidence()
+        del item["health"]["observed_image"]
+        item["health"]["image"] = CANDIDATE
+        with self.assertRaisesRegex(GateError, "health.observed_image"):
             self.validate(item)
 
     def test_world_room_must_bind_to_staging_origin(self):
