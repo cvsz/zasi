@@ -52,6 +52,7 @@ class ReadinessTests(unittest.TestCase):
                     "ZASI_API_KEY": "readiness-test-secret",
                     "ZASI_DATABASE_URL": "postgresql://zasi:test@127.0.0.1:5432/zasi_test",
                     "ZASI_REDIS_URL": "redis://127.0.0.1:6379/0",
+                    "ZASI_CORS_ORIGINS": "https://staging.example.com",
                     "ZASI_DATABASE_PATH": str(root / "control-plane.db"),
                 }
             )
@@ -93,6 +94,7 @@ class ReadinessTests(unittest.TestCase):
                     "ZASI_API_KEY": "readiness-test-secret",
                     "ZASI_DATABASE_URL": "postgresql://zasi:test@127.0.0.1:5432/zasi_test",
                     "ZASI_REDIS_URL": "redis://127.0.0.1:6379/0",
+                    "ZASI_CORS_ORIGINS": "https://staging.example.com",
                     "ZASI_DATABASE_PATH": str(root / "control-plane.db"),
                 }
             )
