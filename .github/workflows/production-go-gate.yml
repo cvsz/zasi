@@ -21,7 +21,7 @@ jobs:
           python-version: "3.11"
       - name: Run production GO gate tests
         run: python -m unittest tests.test_production_go_gate -v
-      - name: Verify validator rejects an unprotected main branch
+      - name: Verify validator rejects missing repository governance
         run: |
           set -euo pipefail
           cat > "$RUNNER_TEMP/no-go.json" <<'JSON'
@@ -38,10 +38,11 @@ jobs:
             "rollback": {"status": "passed", "image": "ghcr.io/cvsz/zasi@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "health_status": "passed", "world_room_status": "passed", "duration_seconds": 30}
           }
           JSON
+          printf '[]\n' > "$RUNNER_TEMP/rulesets.json"
           if python scripts/production_go_gate.py \
             --evidence "$RUNNER_TEMP/no-go.json" \
             --expected-commit aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
-            --main-protected false; then
-            echo "validator incorrectly allowed GO on an unprotected main branch" >&2
+            --rulesets "$RUNNER_TEMP/rulesets.json"; then
+            echo "validator incorrectly allowed GO without an active production ruleset" >&2
             exit 1
           fi
