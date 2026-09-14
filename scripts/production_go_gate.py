@@ -58,7 +58,10 @@ def _passed(obj: Any, name: str) -> dict[str, Any]:
 
 def _https(value: Any, name: str) -> str:
     _require(isinstance(value, str) and value, f"{name} is required")
-    parsed = urlparse(value)
+    try:
+        parsed = urlparse(value)
+    except ValueError as exc:
+        raise GateError(f"{name} is not a valid URL") from exc
     _require(parsed.scheme == "https" and bool(parsed.netloc), f"{name} must be an https URL")
     _require(parsed.hostname is not None, f"{name} must include a hostname")
     try:
