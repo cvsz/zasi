@@ -58,7 +58,7 @@ class ReadinessTests(unittest.TestCase):
         self.assertEqual(result["checks"]["frontend_bundle"], "unavailable")
         self.assertEqual(result["status"], "degraded")
 
-    def test_staging_without_release_identity_is_degraded(self):
+    def test_staging_without_artifact_release_identity_is_degraded(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             frontend = root / "frontend"
@@ -70,9 +70,13 @@ class ReadinessTests(unittest.TestCase):
             try:
                 with (
                     patch("backend.readiness.frontend_dist_path", return_value=frontend),
+                    patch("backend.readiness.RELEASE_COMMIT_PATH", root / "missing-release-commit"),
                     patch.dict(
                         "os.environ",
-                        {"ZASI_RELEASE_COMMIT": "", "ZASI_RELEASE_IMAGE": ""},
+                        {
+                            "ZASI_RELEASE_COMMIT": "a" * 40,
+                            "ZASI_RELEASE_IMAGE": "ghcr.io/cvsz/zasi@sha256:" + "b" * 64,
+                        },
                     ),
                 ):
                     result = probe(
@@ -86,26 +90,31 @@ class ReadinessTests(unittest.TestCase):
 
         self.assertEqual(result["checks"]["release_identity"], "unavailable")
         self.assertEqual(result["release_identity"]["commit"], None)
-        self.assertEqual(result["release_identity"]["image"], None)
+        self.assertEqual(result["release_identity"]["source"], None)
         self.assertEqual(result["status"], "degraded")
 
-    def test_staging_reports_valid_immutable_release_identity(self):
+    def test_staging_reports_artifact_derived_release_commit(self):
         commit = "a" * 40
-        image = "ghcr.io/cvsz/zasi@sha256:" + "b" * 64
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             frontend = root / "frontend"
             frontend.mkdir()
             (frontend / "index.html").write_text("ready", encoding="utf-8")
+            release_commit = root / ".zasi-release-commit"
+            release_commit.write_text(commit + "\n", encoding="utf-8")
             store = ControlPlaneStore(str(root / "control-plane.db"))
             store.initialize()
             settings = self._staging_settings(str(root / "control-plane.db"))
             try:
                 with (
                     patch("backend.readiness.frontend_dist_path", return_value=frontend),
+                    patch("backend.readiness.RELEASE_COMMIT_PATH", release_commit),
                     patch.dict(
                         "os.environ",
-                        {"ZASI_RELEASE_COMMIT": commit, "ZASI_RELEASE_IMAGE": image},
+                        {
+                            "ZASI_RELEASE_COMMIT": "d" * 40,
+                            "ZASI_RELEASE_IMAGE": "ghcr.io/cvsz/zasi@sha256:" + "e" * 64,
+                        },
                     ),
                 ):
                     result = probe(
@@ -119,8 +128,37 @@ class ReadinessTests(unittest.TestCase):
 
         self.assertEqual(result["checks"]["release_identity"], "ready")
         self.assertEqual(result["release_identity"]["commit"], commit)
-        self.assertEqual(result["release_identity"]["image"], image)
+        self.assertEqual(result["release_identity"]["source"], "artifact")
+        self.assertNotIn("image", result["release_identity"])
         self.assertEqual(result["status"], "ready")
+
+    def test_malformed_artifact_release_commit_is_degraded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            frontend = root / "frontend"
+            frontend.mkdir()
+            (frontend / "index.html").write_text("ready", encoding="utf-8")
+            release_commit = root / ".zasi-release-commit"
+            release_commit.write_text("not-a-sha\n", encoding="utf-8")
+            store = ControlPlaneStore(str(root / "control-plane.db"))
+            store.initialize()
+            settings = self._staging_settings(str(root / "control-plane.db"))
+            try:
+                with (
+                    patch("backend.readiness.frontend_dist_path", return_value=frontend),
+                    patch("backend.readiness.RELEASE_COMMIT_PATH", release_commit),
+                ):
+                    result = probe(
+                        store,
+                        settings,
+                        ToolRegistry(),
+                        redis_runtime=HealthyRedis(),
+                    )
+            finally:
+                store.close()
+
+        self.assertEqual(result["checks"]["release_identity"], "unavailable")
+        self.assertEqual(result["status"], "degraded")
 
 
 if __name__ == "__main__":
