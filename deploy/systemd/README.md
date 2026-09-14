@@ -29,11 +29,13 @@ sudo systemctl enable --now zasi-staging-container.service
 sudo systemctl status zasi-staging-container.service
 ```
 
-Verify the application commit from the externally reachable readiness endpoint, then verify the running image independently through the Docker runtime:
+Verify the running image first through the Docker runtime, then verify the application commit from the externally reachable readiness endpoint. This order matches the evidence timeline enforced by `scripts/production_go_gate.py`, so the helper-generated `runtime.observed_at` naturally precedes `health.observed_at`.
 
 ```bash
-curl -fsS "$ZASI_STAGING_ORIGIN/health/ready"
 bash scripts/observe_container_image.sh zasi-staging "$ZASI_IMAGE"
+curl -fsS "$ZASI_STAGING_ORIGIN/health/ready"
 ```
+
+Record the readiness observation timestamp when the external request succeeds. Continue the same exercise in order with World Room, canary, and rollback observations; do not reorder phase timestamps or refresh only the top-level envelope timestamp.
 
 The runtime observer compares the running container image ID with the locally resolved immutable digest and emits the `runtime` JSON object required by `evidence/staging/README.md`. Production GO remains `NO-GO` unless this real staging observation, World Room smoke, canary, rollback evidence, and live GitHub governance all pass.

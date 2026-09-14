@@ -89,14 +89,29 @@ def _same_origin(value: Any, name: str, staging_url: str) -> str:
     return result
 
 
-def _timestamp(value: Any) -> datetime:
-    _require(isinstance(value, str) and value.endswith("Z"), "observed_at must be an RFC3339 UTC timestamp ending in Z")
+def _timestamp(value: Any, name: str = "observed_at") -> datetime:
+    _require(isinstance(value, str) and value.endswith("Z"), f"{name} must be an RFC3339 UTC timestamp ending in Z")
     try:
         result = datetime.fromisoformat(value[:-1] + "+00:00")
     except ValueError as exc:
-        raise GateError("observed_at is not a valid timestamp") from exc
-    _require(result.tzinfo is not None, "observed_at must include timezone information")
+        raise GateError(f"{name} is not a valid timestamp") from exc
+    _require(result.tzinfo is not None, f"{name} must include timezone information")
     return result.astimezone(timezone.utc)
+
+
+def _phase_timestamp(
+    obj: dict[str, Any],
+    name: str,
+    *,
+    previous: datetime | None,
+    envelope: datetime,
+) -> datetime:
+    observed = _timestamp(obj.get("observed_at"), f"{name}.observed_at")
+    _require(observed <= envelope, f"{name}.observed_at cannot be after top-level observed_at")
+    _require(envelope - observed <= MAX_EVIDENCE_AGE, f"{name}.observed_at is stale relative to the evidence envelope")
+    if previous is not None:
+        _require(observed >= previous, f"{name}.observed_at must not precede the previous exercise phase")
+    return observed
 
 
 def validate_governance(rulesets: Any) -> dict[str, Any]:
@@ -202,10 +217,12 @@ def validate_evidence(
     _require(current_time - observed_at <= MAX_EVIDENCE_AGE, "staging evidence is stale; observed_at must be within the last 6 hours")
 
     runtime = _passed(data.get("runtime"), "runtime")
+    runtime_at = _phase_timestamp(runtime, "runtime", previous=None, envelope=observed_at)
     _require(runtime.get("inspector") == "docker", "runtime.inspector must be 'docker'")
     _require(runtime.get("observed_image") == candidate_image, "runtime.observed_image must equal candidate_image")
 
     health = _passed(data.get("health"), "health")
+    health_at = _phase_timestamp(health, "health", previous=runtime_at, envelope=observed_at)
     ready_url = _same_origin(health.get("ready_url"), "health.ready_url", staging_url)
     ready = urlparse(ready_url)
     _require(ready.path.rstrip("/") == "/health/ready", "health.ready_url must target /health/ready")
@@ -214,11 +231,13 @@ def validate_evidence(
     _require(health.get("identity_source") == "artifact", "health.identity_source must be 'artifact'")
 
     world_room = _passed(data.get("world_room"), "world_room")
+    world_room_at = _phase_timestamp(world_room, "world_room", previous=health_at, envelope=observed_at)
     _require(isinstance(world_room.get("smoke_case"), str) and world_room["smoke_case"].strip(), "world_room.smoke_case is required")
     _same_origin(world_room.get("endpoint_url"), "world_room.endpoint_url", staging_url)
     _require(world_room.get("image") == candidate_image, "world_room.image must equal candidate_image")
 
     canary = _passed(data.get("canary"), "canary")
+    canary_at = _phase_timestamp(canary, "canary", previous=world_room_at, envelope=observed_at)
     _same_origin(canary.get("endpoint_url"), "canary.endpoint_url", staging_url)
     _require(canary.get("image") == candidate_image, "canary.image must equal candidate_image")
     request_count = canary.get("request_count")
@@ -229,6 +248,7 @@ def validate_evidence(
     _require(isinstance(p95_ms, (int, float)) and not isinstance(p95_ms, bool) and 0 < float(p95_ms) <= 2000, "canary.p95_ms must be > 0 and <= 2000")
 
     rollback = _passed(data.get("rollback"), "rollback")
+    _phase_timestamp(rollback, "rollback", previous=canary_at, envelope=observed_at)
     _same_origin(rollback.get("endpoint_url"), "rollback.endpoint_url", staging_url)
     _require(rollback.get("image") == previous_image, "rollback.image must equal previous_image")
     _require(rollback.get("inspector") == "docker", "rollback.inspector must be 'docker'")
@@ -248,6 +268,7 @@ def validate_evidence(
         "checks": {
             "main_governance": PASS,
             "freshness": PASS,
+            "phase_timeline": PASS,
             "runtime_identity": PASS,
             "health": PASS,
             "world_room": PASS,

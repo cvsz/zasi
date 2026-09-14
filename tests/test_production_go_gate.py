@@ -43,23 +43,27 @@ def evidence():
         "observed_at": "2026-09-13T00:00:00Z",
         "runtime": {
             "status": "passed",
+            "observed_at": "2026-09-12T23:40:00Z",
             "inspector": "docker",
             "observed_image": CANDIDATE,
         },
         "health": {
             "status": "passed",
+            "observed_at": "2026-09-12T23:45:00Z",
             "ready_url": "https://staging.example.com/health/ready",
             "observed_commit": COMMIT,
             "identity_source": "artifact",
         },
         "world_room": {
             "status": "passed",
+            "observed_at": "2026-09-12T23:50:00Z",
             "smoke_case": "join, speak, receive realtime response",
             "endpoint_url": "https://staging.example.com/world-room",
             "image": CANDIDATE,
         },
         "canary": {
             "status": "passed",
+            "observed_at": "2026-09-12T23:55:00Z",
             "endpoint_url": "https://staging.example.com/health/ready",
             "image": CANDIDATE,
             "request_count": 100,
@@ -68,6 +72,7 @@ def evidence():
         },
         "rollback": {
             "status": "passed",
+            "observed_at": "2026-09-13T00:00:00Z",
             "endpoint_url": "https://staging.example.com/health/ready",
             "image": PREVIOUS,
             "inspector": "docker",
@@ -93,6 +98,7 @@ class ProductionGoGateTests(unittest.TestCase):
         result = self.validate(evidence())
         self.assertEqual(result["decision"], "GO")
         self.assertEqual(result["checks"]["main_governance"], "passed")
+        self.assertEqual(result["checks"]["phase_timeline"], "passed")
         self.assertEqual(result["checks"]["runtime_identity"], "passed")
 
     def test_explicit_default_https_port_is_same_origin(self):
@@ -282,6 +288,30 @@ class ProductionGoGateTests(unittest.TestCase):
         with self.assertRaisesRegex(GateError, "request_count"):
             self.validate(item)
 
+    def test_each_phase_requires_observed_at(self):
+        item = evidence()
+        del item["world_room"]["observed_at"]
+        with self.assertRaisesRegex(GateError, "world_room.observed_at"):
+            self.validate(item)
+
+    def test_phase_cannot_be_stale_behind_fresh_envelope(self):
+        item = evidence()
+        item["runtime"]["observed_at"] = "2026-09-12T17:59:59Z"
+        with self.assertRaisesRegex(GateError, "runtime.observed_at is stale"):
+            self.validate(item)
+
+    def test_phase_timeline_cannot_move_backwards(self):
+        item = evidence()
+        item["canary"]["observed_at"] = "2026-09-12T23:49:59Z"
+        with self.assertRaisesRegex(GateError, "canary.observed_at must not precede"):
+            self.validate(item)
+
+    def test_phase_cannot_be_after_evidence_envelope(self):
+        item = evidence()
+        item["rollback"]["observed_at"] = "2026-09-13T00:00:01Z"
+        with self.assertRaisesRegex(GateError, "rollback.observed_at cannot be after"):
+            self.validate(item)
+
     def test_stale_evidence_is_rejected(self):
         item = evidence()
         item["observed_at"] = "2026-09-12T18:59:59Z"
@@ -290,8 +320,8 @@ class ProductionGoGateTests(unittest.TestCase):
 
     def test_six_hour_old_evidence_is_still_valid(self):
         item = evidence()
-        item["observed_at"] = "2026-09-12T19:00:00Z"
-        self.assertEqual(self.validate(item)["decision"], "GO")
+        boundary_now = datetime(2026, 9, 13, 6, 0, 0, tzinfo=timezone.utc)
+        self.assertEqual(self.validate(item, now=boundary_now)["decision"], "GO")
 
     def test_future_evidence_is_rejected(self):
         item = evidence()
