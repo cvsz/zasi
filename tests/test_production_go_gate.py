@@ -83,6 +83,7 @@ def evidence():
             "identity_source": "artifact",
             "world_room_endpoint_url": "https://staging.example.com/world-room",
             "world_room_smoke_case": "join, speak, receive realtime response after rollback",
+            "world_room_status": "passed",
             "world_room_image": PREVIOUS,
             "duration_seconds": 45,
         },
@@ -287,6 +288,12 @@ class ProductionGoGateTests(unittest.TestCase):
         item = evidence()
         item["rollback"]["world_room_image"] = CANDIDATE
         with self.assertRaisesRegex(GateError, "rollback.world_room_image"):
+            self.validate(item)
+
+    def test_rollback_world_room_must_be_successful(self):
+        item = evidence()
+        item["rollback"]["world_room_status"] = "failed"
+        with self.assertRaisesRegex(GateError, "rollback.world_room_status"):
             self.validate(item)
 
     def test_url_credentials_are_rejected(self):
