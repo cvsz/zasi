@@ -70,6 +70,8 @@ def evidence():
             "status": "passed",
             "endpoint_url": "https://staging.example.com/health/ready",
             "image": PREVIOUS,
+            "inspector": "docker",
+            "observed_image": PREVIOUS,
             "health_status": "passed",
             "world_room_status": "passed",
             "duration_seconds": 45,
@@ -260,6 +262,18 @@ class ProductionGoGateTests(unittest.TestCase):
         item = evidence()
         item["rollback"]["image"] = CANDIDATE
         with self.assertRaisesRegex(GateError, "rollback.image"):
+            self.validate(item)
+
+    def test_rollback_runtime_must_observe_previous_digest(self):
+        item = evidence()
+        item["rollback"]["observed_image"] = CANDIDATE
+        with self.assertRaisesRegex(GateError, "rollback.observed_image"):
+            self.validate(item)
+
+    def test_rollback_runtime_must_use_supported_inspector(self):
+        item = evidence()
+        item["rollback"]["inspector"] = "application-env"
+        with self.assertRaisesRegex(GateError, "rollback.inspector"):
             self.validate(item)
 
     def test_boolean_is_not_accepted_as_numeric_evidence(self):
