@@ -33,6 +33,72 @@ class ReadinessTests(unittest.TestCase):
         self.assertEqual(result["checks"]["frontend_bundle"], "unavailable")
         self.assertEqual(result["status"], "degraded")
 
+    def test_staging_without_release_identity_is_degraded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            frontend = root / "frontend"
+            frontend.mkdir()
+            (frontend / "index.html").write_text("ready", encoding="utf-8")
+            store = ControlPlaneStore(str(root / "control-plane.db"))
+            store.initialize()
+            settings = Settings.from_mapping(
+                {
+                    "ZASI_PROFILE": "staging",
+                    "ZASI_API_KEY": "readiness-test-secret",
+                    "ZASI_DATABASE_PATH": str(root / "control-plane.db"),
+                }
+            )
+            try:
+                with (
+                    patch("backend.readiness.frontend_dist_path", return_value=frontend),
+                    patch.dict(
+                        "os.environ",
+                        {"ZASI_RELEASE_COMMIT": "", "ZASI_RELEASE_IMAGE": ""},
+                    ),
+                ):
+                    result = probe(store, settings, ToolRegistry())
+            finally:
+                store.close()
+
+        self.assertEqual(result["checks"]["release_identity"], "unavailable")
+        self.assertEqual(result["release_identity"]["commit"], None)
+        self.assertEqual(result["release_identity"]["image"], None)
+        self.assertEqual(result["status"], "degraded")
+
+    def test_staging_reports_valid_immutable_release_identity(self):
+        commit = "a" * 40
+        image = "ghcr.io/cvsz/zasi@sha256:" + "b" * 64
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            frontend = root / "frontend"
+            frontend.mkdir()
+            (frontend / "index.html").write_text("ready", encoding="utf-8")
+            store = ControlPlaneStore(str(root / "control-plane.db"))
+            store.initialize()
+            settings = Settings.from_mapping(
+                {
+                    "ZASI_PROFILE": "staging",
+                    "ZASI_API_KEY": "readiness-test-secret",
+                    "ZASI_DATABASE_PATH": str(root / "control-plane.db"),
+                }
+            )
+            try:
+                with (
+                    patch("backend.readiness.frontend_dist_path", return_value=frontend),
+                    patch.dict(
+                        "os.environ",
+                        {"ZASI_RELEASE_COMMIT": commit, "ZASI_RELEASE_IMAGE": image},
+                    ),
+                ):
+                    result = probe(store, settings, ToolRegistry())
+            finally:
+                store.close()
+
+        self.assertEqual(result["checks"]["release_identity"], "ready")
+        self.assertEqual(result["release_identity"]["commit"], commit)
+        self.assertEqual(result["release_identity"]["image"], image)
+        self.assertEqual(result["status"], "ready")
+
 
 if __name__ == "__main__":
     unittest.main()
