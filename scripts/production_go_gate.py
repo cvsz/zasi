@@ -231,6 +231,8 @@ def validate_evidence(
     rollback = _passed(data.get("rollback"), "rollback")
     _same_origin(rollback.get("endpoint_url"), "rollback.endpoint_url", staging_url)
     _require(rollback.get("image") == previous_image, "rollback.image must equal previous_image")
+    _require(rollback.get("inspector") == "docker", "rollback.inspector must be 'docker'")
+    _require(rollback.get("observed_image") == previous_image, "rollback.observed_image must equal previous_image")
     _require(rollback.get("health_status") == PASS, "rollback.health_status must be 'passed'")
     _require(rollback.get("world_room_status") == PASS, "rollback.world_room_status must be 'passed'")
     duration = rollback.get("duration_seconds")

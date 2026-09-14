@@ -10,15 +10,16 @@ A production release tag is allowed only when `scripts/production_go_gate.py` va
 - `observed_at` is a real RFC3339 UTC timestamp no more than **6 hours old** at release time. Future timestamps and stale evidence are rejected.
 - `staging_url`, readiness, World Room, canary, and rollback endpoints use HTTPS and the same staging origin.
 - the container artifact contains `/app/.zasi-release-commit`, baked at image build time from the exact Git commit; `/health/ready` reports that value as `release_identity.commit` with `release_identity.source=artifact`.
-- the running container digest is verified outside the application through Docker runtime inspection. `scripts/observe_container_image.sh <container> <candidate_image>` must succeed and its JSON becomes the `runtime` evidence object.
+- the running candidate container digest is verified outside the application through Docker runtime inspection. `scripts/observe_container_image.sh <container> <candidate_image>` must succeed and its JSON becomes the `runtime` evidence object.
 - `health.observed_commit` is copied from the live external `/health/ready` response and must equal `candidate_commit`; `health.identity_source` must be `artifact`.
 - `runtime.observed_image` must equal the exact immutable `candidate_image` and `runtime.inspector` must be `docker`.
 - World Room and canary evidence identify the exact `candidate_image` digest.
 - controlled canary evidence contains at least 20 requests, error rate <= 1%, and p95 <= 2000 ms.
 - rollback redeployed the exact `previous_image` digest in <= 300 seconds on that same staging origin.
+- after rollback, `scripts/observe_container_image.sh <container> <previous_image>` must independently verify the running previous digest; copy its `inspector` and `observed_image` values into the rollback evidence object.
 - health and World Room checks passed again after rollback.
 
-Do not inject release identity through `ZASI_RELEASE_COMMIT` or `ZASI_RELEASE_IMAGE`. Those caller-controlled values are not accepted as production evidence. The commit identity must come from the built artifact, while the image digest must be verified independently by the container runtime.
+Do not inject release identity through `ZASI_RELEASE_COMMIT` or `ZASI_RELEASE_IMAGE`. Those caller-controlled values are not accepted as production evidence. The commit identity must come from the built artifact, while both candidate and rollback image digests must be verified independently by the container runtime.
 
 ## Required JSON shape
 
@@ -59,6 +60,8 @@ Do not inject release identity through `ZASI_RELEASE_COMMIT` or `ZASI_RELEASE_IM
     "status": "passed",
     "endpoint_url": "https://<real-staging-host>/health/ready",
     "image": "ghcr.io/cvsz/zasi@sha256:<previous-64-hex-digest>",
+    "inspector": "docker",
+    "observed_image": "ghcr.io/cvsz/zasi@sha256:<previous-64-hex-digest>",
     "health_status": "passed",
     "world_room_status": "passed",
     "duration_seconds": 45
