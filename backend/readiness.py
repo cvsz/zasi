@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+from pathlib import Path
 from typing import Any, Dict
 
 from backend.frontend_assets import frontend_dist_path
@@ -12,10 +13,17 @@ from src.control_plane.execution import ToolRegistry
 from src.control_plane.storage import CURRENT_SCHEMA_VERSION, ControlPlaneStore
 
 SHA40 = re.compile(r"^[0-9a-f]{40}$")
-IMMUTABLE_GHCR_IMAGE = re.compile(
-    r"^ghcr\.io/[a-z0-9_.-]+/[a-z0-9_.-]+@sha256:[0-9a-f]{64}$"
-)
 RELEASE_IDENTITY_PROFILES = {"staging", "production"}
+RELEASE_COMMIT_PATH = Path("/app/.zasi-release-commit")
+
+
+def _artifact_release_commit() -> str | None:
+    """Read the immutable commit identity baked into the built runtime artifact."""
+    try:
+        value = RELEASE_COMMIT_PATH.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return value if SHA40.fullmatch(value) is not None else None
 
 
 def probe(
@@ -44,17 +52,12 @@ def probe(
     bundle_path = str(frontend_dist_path() / "index.html")
     checks["frontend_bundle"] = "ready" if os.path.isfile(bundle_path) else "unavailable"
 
-    release_commit = os.getenv("ZASI_RELEASE_COMMIT", "").strip()
-    release_image = os.getenv("ZASI_RELEASE_IMAGE", "").strip()
-    release_identity_ready = (
-        SHA40.fullmatch(release_commit) is not None
-        and IMMUTABLE_GHCR_IMAGE.fullmatch(release_image) is not None
-    )
-    checks["release_identity"] = "ready" if release_identity_ready else "unavailable"
+    release_commit = _artifact_release_commit()
+    checks["release_identity"] = "ready" if release_commit is not None else "unavailable"
     release_identity = {
         "status": checks["release_identity"],
-        "commit": release_commit if SHA40.fullmatch(release_commit) is not None else None,
-        "image": release_image if IMMUTABLE_GHCR_IMAGE.fullmatch(release_image) is not None else None,
+        "commit": release_commit,
+        "source": "artifact" if release_commit is not None else None,
     }
 
     ready = (
