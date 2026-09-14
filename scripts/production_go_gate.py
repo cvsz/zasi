@@ -89,6 +89,14 @@ def _same_origin(value: Any, name: str, staging_url: str) -> str:
     return result
 
 
+def _canonical_world_room(value: Any, name: str, staging_url: str) -> str:
+    result = _same_origin(value, name, staging_url)
+    parsed = urlparse(result)
+    _require(parsed.path.rstrip("/") == "/world-room", f"{name} must target /world-room")
+    _require(parsed.query == "", f"{name} must not contain a query string")
+    return result
+
+
 def _timestamp(value: Any, name: str = "observed_at") -> datetime:
     _require(isinstance(value, str) and value.endswith("Z"), f"{name} must be an RFC3339 UTC timestamp ending in Z")
     try:
@@ -236,7 +244,7 @@ def validate_evidence(
     world_room = _passed(data.get("world_room"), "world_room")
     world_room_at = _phase_timestamp(world_room, "world_room", previous=health_at, envelope=observed_at)
     _require(isinstance(world_room.get("smoke_case"), str) and world_room["smoke_case"].strip(), "world_room.smoke_case is required")
-    _same_origin(world_room.get("endpoint_url"), "world_room.endpoint_url", staging_url)
+    _canonical_world_room(world_room.get("endpoint_url"), "world_room.endpoint_url", staging_url)
     _require(world_room.get("image") == candidate_image, "world_room.image must equal candidate_image")
 
     canary = _passed(data.get("canary"), "canary")
@@ -261,7 +269,7 @@ def validate_evidence(
     _require(rollback.get("observed_image") == previous_image, "rollback.observed_image must equal previous_image")
     _require(rollback.get("observed_commit") == previous_commit, "rollback.observed_commit must equal previous_commit")
     _require(rollback.get("identity_source") == "artifact", "rollback.identity_source must be 'artifact'")
-    _same_origin(rollback.get("world_room_endpoint_url"), "rollback.world_room_endpoint_url", staging_url)
+    _canonical_world_room(rollback.get("world_room_endpoint_url"), "rollback.world_room_endpoint_url", staging_url)
     _require(
         isinstance(rollback.get("world_room_smoke_case"), str) and rollback["world_room_smoke_case"].strip(),
         "rollback.world_room_smoke_case is required",
