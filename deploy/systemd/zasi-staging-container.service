@@ -1,0 +1,32 @@
+[Unit]
+Description=ZASI immutable staging container
+After=network-online.target docker.service postgresql.service redis-server.service
+Wants=network-online.target docker.service
+Requires=docker.service
+ConditionPathExists=/etc/zasi/staging/zasi-secrets.cred
+ConditionPathExists=/etc/zasi/staging/release.env
+
+[Service]
+Type=simple
+User=root
+Group=root
+EnvironmentFile=/etc/zasi/staging/release.env
+LoadCredentialEncrypted=zasi-secrets:/etc/zasi/staging/zasi-secrets.cred
+ExecStart=/opt/zasi/scripts/run_staging_container.sh
+ExecStop=-/usr/bin/docker stop --time 20 zasi-staging
+Restart=on-failure
+RestartSec=5s
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ReadWritePaths=/var/lib/docker /run/docker.sock
+
+[Install]
+WantedBy=multi-user.target
