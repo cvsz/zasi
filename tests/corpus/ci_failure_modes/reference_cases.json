@@ -1,5 +1,6 @@
 {
   "schema_version": 1,
+  "evidence_contract": {"version":1,"runner":"python -m unittest tests.test_reference_corpus tests.test_reference_corpus_evidence","deterministic":true,"required_assertions":["security-gate-covered","governance-gap-covered","dr-blocker-covered","sensitive-data-redacted"],"redaction_required":true,"forbidden_fixture_data":["credentials","tokens","secrets","pii"]},
   "cases": [
     {"id":"trivy-high-cve","signal":"Trivy exits 1 on HIGH vulnerability","expected":{"classification":"security-gate","action":"patch-or-expiring-exception"}},
     {"id":"docker-publish-skipped","signal":"publish job skipped after security job failure","expected":{"classification":"expected-fail-closed","action":"fix-upstream-gate"}},
