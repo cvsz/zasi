@@ -28,15 +28,17 @@
 **Files:**
 - Existing: `docs/arin/ARIN_MASTER_ARCHITECTURE_SPECIFICATION.md`
 - Existing: `docs/arin/project-center/REPOSITORY-MAP.md`
-- Create later during execution: `docs/arin/project-center/ADR-TEMPLATE.md`
-- Create later during execution: `docs/arin/project-center/MIGRATION-LEDGER.md`
+- Added: `docs/arin/project-center/ADR-TEMPLATE.md`
+- Added: `docs/arin/project-center/MIGRATION-LEDGER.md`
 
 **Produces:** repository admission/removal rules, ADR template, migration ledger format.
 
-- [ ] Add an ADR template requiring capability gap, alternatives, owner, integration mode, security/privacy/safety impact, license/provenance, test evidence, migration, rollback and decommission plan.
-- [ ] Add migration ledger states: `candidate -> assessed -> approved -> integrating -> verified -> canonical`, plus `rejected` and `rolled-back`.
-- [ ] Add tests/lint or docs validation if the repository already provides documentation validation hooks.
-- [ ] Commit as a standalone governance change.
+- [x] Add an ADR template requiring capability gap, alternatives, owner, integration mode, security/privacy/safety impact, license/provenance, test evidence, migration, rollback and decommission plan.
+- [x] Add migration ledger states: `candidate -> assessed -> approved -> integrating -> verified -> canonical`, plus `rejected` and `rolled-back`.
+- [x] Verify the exact PR head through the repository's existing GitHub Actions workflows. At head `b2184b2cab96da7511dd3e9c04f44f2a7207a486`, Production GO Gate Contract, Lint & Code Style, Security Evidence Pack, Docker Container Image Build & Publish, Immutable Rollback Evidence, CodeQL Security Analysis, HA and Canary Rehearsal Evidence, and Backup Restore and DR Evidence completed successfully; the umbrella `ZASI CI/CD Pipeline` was still in progress when Task 1 execution began. The two governance files added afterward must receive exact-head workflow evidence before Task 1 is promoted to `verified`.
+- [x] Commit the governance files as bounded documentation changes on PR #107's branch. Runtime behavior is unchanged.
+
+**Task 1 state:** `integrating` — implementation is present; exact-head CI for the latest governance commits is still required before marking the migration-ledger entry `verified`.
 
 ### Task 2: Build exact repository capability matrix
 
