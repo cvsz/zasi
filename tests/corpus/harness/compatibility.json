@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
-  "required_capabilities": ["read-repo","run-tests","respect-repo-instructions","report-evidence"],
+  "evidence_contract": {"version":1,"runner":"python -m unittest tests.test_reference_corpus tests.test_reference_corpus_evidence","deterministic":true,"required_assertions":["required-harness-surfaces","all-declared-capabilities","compatible-expectation"],"metric":"required-capability-coverage","minimum_score":1.0},
+  "required_capabilities": ["agent","read-repo","run-tests","respect-repo-instructions","report-evidence"],
   "harnesses": [
     {"name":"claude","surface":"CLAUDE.md/.claude","expected":"compatible"},
     {"name":"codex","surface":"AGENTS.md/.agents","expected":"compatible"},
