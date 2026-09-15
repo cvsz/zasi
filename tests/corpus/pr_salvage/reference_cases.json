@@ -1,5 +1,6 @@
 {
   "schema_version": 1,
+  "evidence_contract": {"version":1,"runner":"python -m unittest tests.test_reference_corpus tests.test_reference_corpus_evidence","deterministic":true,"required_assertions":["closed-action-set","stale-green-salvage","failed-ci-repair","unresolved-review-blocks","reopen-re-review"]},
   "cases": [
     {"id":"stale-green-pr","input":{"state":"open","ci":"success","stale_days":21,"review_threads":"resolved"},"expected_action":"salvage-review"},
     {"id":"stale-red-pr","input":{"state":"open","ci":"failure","stale_days":21,"review_threads":"resolved"},"expected_action":"repair-before-merge"},
