@@ -20,7 +20,7 @@ This matrix records evidence-backed reuse decisions. A repository is not promote
 | ARIN ↔ ZARVIS voice/perception adapter | `cvsz/zasi` | future bounded adapter | `api-service` | `missing` | Requires ARIN consent/session tickets, retention/deletion semantics, interruption/disconnect tests, cross-session isolation and explicit no-action-authority contract before integration. |
 | Bounded tools / MCP patterns | `cvsz/zasi` | `cvsz/zcoder@7153e8b7a48e9d7f9f1976fae2b23f270ac44dab` | `api-service` / narrow adapter | `partial` | Source commit is GitHub-signature verified and MIT licensed. Current merge updates pinned CodeQL/container/release/SBOM workflow dependencies, but the available exact-SHA PR-workflow query returned no runs. Keep this source `partial` until reproducible containment/MCP CI/security evidence is attached; do not inherit unrestricted shell/filesystem/network authority. |
 | ARIN ↔ ZCoder tool adapter | `cvsz/zasi` | future allowlisted adapter | `api-service` | `missing` | Requires capability descriptors, per-tool risk classes, deny-by-default filesystem/network/tool tests, approval policy, bounded timeout/cancellation and exact-head integration evidence. |
-| Mission-control UX / operations patterns | `cvsz/zasi` | `cvsz/zdash` | `reference-only` pending assessment | `reference-only` | No runtime dependency approved. License/dependency/component evidence still required. |
+| Mission-control UX / operations patterns | `cvsz/zasi` | `cvsz/zdash@1c5c6b856cc3caeddefc90c9fb99a8449e4d35c5` | `reference-only` | `reference-only` | Source commit is GitHub-signature verified and MIT licensed. The available exact-SHA PR-workflow query returned no runs, so no CI/security readiness is inferred. Use information-hierarchy/operations patterns only; no runtime dependency or component port is approved without dependency, permission-state, stale-state and realtime-reconnection evidence. |
 | Enterprise installer / release patterns | `cvsz/zasi` | `cvsz/zanything` | `reference-only` pending assessment | `reference-only` | Roadmap/ledger claims are not implementation evidence; exact source evidence is still required. |
 | Infrastructure | `cvsz/zasi` | `cvsz/z-platform` | explicit dependency only | `missing` | No ARIN infrastructure gap has yet justified admission. |
 | Deployment / edge | `cvsz/zasi` | `cvsz/zeaz-platform` | explicit dependency only | `missing` | No ARIN deployment gap has yet justified admission. |
@@ -55,6 +55,15 @@ This matrix records evidence-backed reuse decisions. A repository is not promote
 - ARIN decision: ZCoder remains independently owned. Reuse only bounded service/contracts or containment patterns after their evidence is verified; never copy the repository wholesale or inherit ambient shell, filesystem, network, MCP or credential authority.
 - Promotion boundary: bounded-tool/MCP source capability remains `partial`; the ARIN adapter remains `missing` until Task 6 provides deny-by-default contract tests and exact-head integration evidence.
 
+## zDash assessment — 2026-09-15
+
+- Exact source commit: `1c5c6b856cc3caeddefc90c9fb99a8449e4d35c5` (`main`).
+- Commit provenance: GitHub-signature verified commit.
+- License: MIT, copyright 2026 cvsz.
+- Exact-SHA pull-request workflow query returned no workflow runs; therefore this assessment does not claim exact-head CI/security verification or production readiness.
+- ARIN decision: zDash remains independently owned and `reference-only`. Reuse mission-control information hierarchy and operational UX patterns only after checking component/dependency provenance. Do not add a zDash runtime dependency or copy the application wholesale.
+- Promotion boundary: Task 14 still requires ARIN-owned critical-state/device-health/task/safety/incident hierarchy, realtime reconnection and stale-state tests, permission-state tests, and a redacted diagnostic bundle before mission control can be called verified.
+
 ## Next assessments
 
-Finish reproducible ZCoder containment/MCP evidence when available; meanwhile the next evidence-only assessment is `cvsz/zdash`, followed by `cvsz/zanything`. `z-platform` and `zeaz-platform` remain excluded unless an explicit ARIN infrastructure/deployment gap appears.
+Finish reproducible ZCoder containment/MCP evidence when available; the next evidence-only curated assessment is `cvsz/zanything`. `z-platform` and `zeaz-platform` remain excluded unless an explicit ARIN infrastructure/deployment gap appears.
