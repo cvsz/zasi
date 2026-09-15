@@ -30,6 +30,13 @@ class ZKnowbaseReadContract:
         tenant = self.tenant_id.strip()
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             raise KnowledgeContractError("zknowbase base_url must be an absolute http(s) URL")
+        try:
+            hostname = parsed.hostname
+            parsed.port
+        except ValueError as exc:
+            raise KnowledgeContractError("zknowbase base_url has an invalid authority") from exc
+        if not hostname:
+            raise KnowledgeContractError("zknowbase base_url must include a hostname")
         if parsed.query or parsed.fragment or parsed.username or parsed.password:
             raise KnowledgeContractError(
                 "zknowbase base_url must not contain credentials, query, or fragment"
