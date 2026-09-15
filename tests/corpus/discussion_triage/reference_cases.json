@@ -1,5 +1,6 @@
 {
   "schema_version": 1,
+  "evidence_contract": {"version":1,"runner":"python -m unittest tests.test_reference_corpus tests.test_reference_corpus_evidence","deterministic":true,"required_assertions":["all-triage-classes-covered","accepted-answer-classified","unanswered-help-request-detected"]},
   "cases": [
     {"id":"informational","input":{"body":"Sharing benchmark results; no action requested.","accepted_answer":false,"responses":0},"expected_class":"informational"},
     {"id":"answered","input":{"body":"How do I enable the local rollback drill?","accepted_answer":true,"responses":2},"expected_class":"answered"},
