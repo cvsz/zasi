@@ -1,6 +1,6 @@
 import pytest
 
-from backend.app.arin.knowledge import KnowledgeContractError, ZKnowbaseReadContract
+from backend.arin.knowledge import KnowledgeContractError, ZKnowbaseReadContract
 
 
 def contract(**overrides):
@@ -38,6 +38,9 @@ def test_query_contract_forces_non_streaming_bounded_request():
     "overrides",
     [
         {"base_url": "file:///tmp/zknowbase"},
+        {"base_url": "https://?x=1"},
+        {"base_url": "http://#fragment"},
+        {"base_url": "https://user:pass@zknowbase.local"},
         {"api_key": "   "},
         {"tenant_id": ""},
         {"timeout_seconds": 0},
@@ -47,6 +50,11 @@ def test_query_contract_forces_non_streaming_bounded_request():
 def test_unsafe_configuration_fails_before_request(overrides):
     with pytest.raises(KnowledgeContractError):
         contract(**overrides)
+
+
+def test_api_key_is_redacted_from_contract_representation():
+    adapter = contract(api_key="do-not-log-this")
+    assert "do-not-log-this" not in repr(adapter)
 
 
 def test_empty_query_and_unbounded_top_k_are_rejected():
