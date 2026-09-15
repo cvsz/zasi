@@ -73,6 +73,39 @@ class ZKnowbaseReadContractTests(unittest.TestCase):
         with self.assertRaises(KnowledgeTransportError):
             client.query("safe state")
 
+    def test_maps_search_and_query_citations_to_tenant_bound_evidence(self):
+        client = ZKnowbaseReadClient(contract())
+        citation = {
+            "document_id": "doc-1", "document_name": "Safety Manual", "tenant_id": "tenant-a",
+            "chunk_id": "chunk-7", "chunk_index": 7, "score": 0.91,
+            "text": "Enter the safe state.", "source_uri": "manuals/safety.md",
+        }
+        for payload in ({"results": [citation]}, {"answer": "Stop [S1].", "sources": [citation]}):
+            with self.subTest(payload=payload):
+                evidence = client.evidence(payload)
+                self.assertEqual(len(evidence), 1)
+                self.assertEqual(evidence[0].document_id, "doc-1")
+                self.assertEqual(evidence[0].tenant_id, "tenant-a")
+                self.assertEqual(evidence[0].chunk_id, "chunk-7")
+                self.assertEqual(evidence[0].source_uri, "manuals/safety.md")
+
+    def test_evidence_mapping_fails_closed_on_missing_or_cross_tenant_provenance(self):
+        client = ZKnowbaseReadClient(contract())
+        valid = {
+            "document_id": "doc-1", "document_name": "Safety Manual", "tenant_id": "tenant-a",
+            "chunk_id": "chunk-7", "chunk_index": 7, "score": 0.91, "text": "Safe state.",
+        }
+        invalid_payloads = [
+            {},
+            {"results": [{**valid, "tenant_id": "tenant-b"}]},
+            {"sources": [{key: value for key, value in valid.items() if key != "document_id"}]},
+            {"results": [{**valid, "chunk_index": "7"}]},
+        ]
+        for payload in invalid_payloads:
+            with self.subTest(payload=payload):
+                with self.assertRaises(KnowledgeTransportError):
+                    client.evidence(payload)
+
 
 if __name__ == "__main__":
     unittest.main()
