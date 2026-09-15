@@ -1,4 +1,4 @@
-"""Bounded read-only ARIN -> zknowbase contract and transport.
+"""Bounded read-only ARIN -> zknowbase contract, transport, and evidence mapping.
 
 The adapter deliberately exposes only search/query reads. It never owns
 zknowbase credentials, tenant selection, ingestion, or provider state. Callers
@@ -20,6 +20,20 @@ class KnowledgeContractError(ValueError):
 
 class KnowledgeTransportError(RuntimeError):
     """Raised when zknowbase cannot provide a valid bounded read response."""
+
+
+@dataclass(frozen=True)
+class KnowledgeEvidence:
+    """Tenant-bound provenance copied from a verified zknowbase citation."""
+
+    document_id: str
+    document_name: str
+    tenant_id: str
+    chunk_id: str
+    chunk_index: int
+    score: float
+    text: str
+    source_uri: str | None = None
 
 
 @dataclass(frozen=True)
@@ -98,6 +112,43 @@ class ZKnowbaseReadClient:
 
     def query(self, question: str, *, top_k: int = 5, filters: Mapping[str, Any] | None = None) -> dict[str, Any]:
         return self._send(self.contract.query_request(question, top_k=top_k, filters=filters))
+
+    def evidence(self, payload: Mapping[str, Any]) -> tuple[KnowledgeEvidence, ...]:
+        """Map search/query citations into tenant-bound ZASI evidence.
+
+        Evidence is accepted only when every citation has the zknowbase source
+        contract and belongs to the authenticated tenant. Partial or malformed
+        provenance fails closed rather than silently dropping fields.
+        """
+        raw_sources = payload.get("sources", payload.get("results"))
+        if not isinstance(raw_sources, list):
+            raise KnowledgeTransportError("zknowbase response is missing citation provenance")
+        evidence: list[KnowledgeEvidence] = []
+        for source in raw_sources:
+            if not isinstance(source, dict):
+                raise KnowledgeTransportError("zknowbase citation must be a JSON object")
+            required = ("document_id", "document_name", "tenant_id", "chunk_id", "chunk_index", "score", "text")
+            if any(key not in source for key in required):
+                raise KnowledgeTransportError("zknowbase citation provenance is incomplete")
+            if source["tenant_id"] != self.contract.tenant_id:
+                raise KnowledgeTransportError("zknowbase citation tenant mismatch")
+            if not isinstance(source["chunk_index"], int) or isinstance(source["chunk_index"], bool):
+                raise KnowledgeTransportError("zknowbase citation chunk_index is invalid")
+            if not isinstance(source["score"], (int, float)) or isinstance(source["score"], bool):
+                raise KnowledgeTransportError("zknowbase citation score is invalid")
+            text_fields = ("document_id", "document_name", "tenant_id", "chunk_id", "text")
+            if any(not isinstance(source[key], str) or not source[key].strip() for key in text_fields):
+                raise KnowledgeTransportError("zknowbase citation text provenance is invalid")
+            source_uri = source.get("source_uri")
+            if source_uri is not None and not isinstance(source_uri, str):
+                raise KnowledgeTransportError("zknowbase citation source_uri is invalid")
+            evidence.append(KnowledgeEvidence(
+                document_id=source["document_id"], document_name=source["document_name"],
+                tenant_id=source["tenant_id"], chunk_id=source["chunk_id"],
+                chunk_index=source["chunk_index"], score=float(source["score"]),
+                text=source["text"], source_uri=source_uri,
+            ))
+        return tuple(evidence)
 
     def _send(self, request: tuple[str, dict[str, str], dict[str, Any]]) -> dict[str, Any]:
         url, headers, body = request
