@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import time
 import urllib.error
@@ -23,6 +24,21 @@ def _validate_endpoint(url: str) -> None:
     parsed = urlparse(url)
     if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password or parsed.fragment:
         raise ValueError("endpoint must be an HTTPS URL without credentials or fragment")
+
+
+def _artifact_digest(payload: dict[str, object]) -> str:
+    """Return the SHA-256 of the canonical JSON measurement payload."""
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+
+def verify_artifact(result: dict[str, object]) -> bool:
+    """Verify that a measurement result still matches its canonical payload digest."""
+    digest = result.get("artifact_sha256")
+    if not isinstance(digest, str) or not digest.startswith("sha256:"):
+        return False
+    payload = {key: value for key, value in result.items() if key != "artifact_sha256"}
+    return digest == _artifact_digest(payload)
 
 
 def measure(url: str, requests: int, timeout: float) -> dict[str, object]:
@@ -52,7 +68,8 @@ def measure(url: str, requests: int, timeout: float) -> dict[str, object]:
 
     ordered = sorted(durations)
     p95_index = max(0, min(len(ordered) - 1, int(len(ordered) * 0.95 + 0.999999) - 1))
-    return {
+    result: dict[str, object] = {
+        "schema_version": 1,
         "status": "passed" if failures / requests <= 0.01 and ordered[p95_index] <= 2000 else "failed",
         "observed_at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
         "measurement_source": "external-http-probe",
@@ -62,6 +79,8 @@ def measure(url: str, requests: int, timeout: float) -> dict[str, object]:
         "error_rate": failures / requests,
         "p95_ms": round(ordered[p95_index], 3),
     }
+    result["artifact_sha256"] = _artifact_digest(result)
+    return result
 
 
 def main() -> int:
