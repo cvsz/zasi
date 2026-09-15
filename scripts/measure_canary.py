@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import statistics
 import time
 import urllib.error
 import urllib.request
@@ -13,25 +12,40 @@ from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 
-def measure(url: str, requests: int, timeout: float) -> dict[str, object]:
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Reject redirects so evidence cannot silently measure another endpoint."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001, ANN201
+        return None
+
+
+def _validate_endpoint(url: str) -> None:
     parsed = urlparse(url)
     if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password or parsed.fragment:
         raise ValueError("endpoint must be an HTTPS URL without credentials or fragment")
+
+
+def measure(url: str, requests: int, timeout: float) -> dict[str, object]:
+    _validate_endpoint(url)
     if requests < 20:
         raise ValueError("requests must be at least 20")
     if timeout <= 0:
         raise ValueError("timeout must be positive")
 
+    opener = urllib.request.build_opener(_NoRedirect())
     durations: list[float] = []
     failures = 0
     for _ in range(requests):
         started = time.perf_counter()
         try:
-            with urllib.request.urlopen(url, timeout=timeout) as response:  # noqa: S310 -- HTTPS validated above
-                response.read(1)
-                if not 200 <= response.status < 400:
+            with opener.open(url, timeout=timeout) as response:  # noqa: S310 -- HTTPS validated above
+                # Consume the complete response under the configured socket timeout so
+                # p95 represents end-to-end response latency, not time-to-first-byte.
+                response.read()
+                final_url = response.geturl()
+                if final_url != url or not 200 <= response.status < 300:
                     failures += 1
-        except (urllib.error.URLError, TimeoutError, OSError):
+        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError):
             failures += 1
         finally:
             durations.append((time.perf_counter() - started) * 1000)
