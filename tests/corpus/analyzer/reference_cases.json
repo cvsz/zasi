@@ -1,5 +1,6 @@
 {
   "schema_version": 1,
+  "evidence_contract": {"version":1,"runner":"python -m unittest tests.test_reference_corpus tests.test_reference_corpus_evidence","deterministic":true,"required_assertions":["unique-case-ids","closed-severity-set","expected-findings"]},
   "cases": [
     {"id":"analyzer-missing-timeout","input":{"artifact":"workflow","signals":["external-call","no-timeout"]},"expected":{"severity":"high","findings":["missing-timeout"]}},
     {"id":"analyzer-secret-safe","input":{"artifact":"config","signals":["secret-provider","redacted-log"]},"expected":{"severity":"none","findings":[]}},
