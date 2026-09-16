@@ -63,6 +63,52 @@ class ToolCapabilityDescriptorTests(unittest.TestCase):
         with self.assertRaises(ToolCapabilityError):
             authorize_tool_execution(descriptor, ToolExecutionAuthorization(policy_allowed=False))
 
+    def test_policy_denial_cannot_be_overridden_by_filesystem_authority(self):
+        descriptor = ToolCapabilityDescriptor(
+            capability_id="arin.workspace-write",
+            version="1",
+            operation=OperationClass.WRITE,
+            risk_class=ToolRiskClass.PRIVILEGED,
+            filesystem_roots=("/workspace",),
+            filesystem_write=True,
+            approval_required=True,
+        )
+        with self.assertRaises(ToolCapabilityError):
+            authorize_tool_execution(
+                descriptor,
+                ToolExecutionAuthorization(policy_allowed=False, approval_evidence="approval-123"),
+            )
+
+    def test_policy_denial_cannot_be_overridden_by_network_allowlist(self):
+        descriptor = ToolCapabilityDescriptor(
+            capability_id="arin.fetch-approved",
+            version="1",
+            operation=OperationClass.NETWORK,
+            risk_class=ToolRiskClass.PRIVILEGED,
+            network_destinations=("https://tools.internal.example",),
+            approval_required=True,
+        )
+        with self.assertRaises(ToolCapabilityError):
+            authorize_tool_execution(
+                descriptor,
+                ToolExecutionAuthorization(policy_allowed=False, approval_evidence="approval-123"),
+            )
+
+    def test_policy_denial_cannot_be_overridden_by_subprocess_authority(self):
+        descriptor = ToolCapabilityDescriptor(
+            capability_id="arin.exec-approved",
+            version="1",
+            operation=OperationClass.EXECUTE,
+            risk_class=ToolRiskClass.CRITICAL,
+            subprocess_allowed=True,
+            approval_required=True,
+        )
+        with self.assertRaises(ToolCapabilityError):
+            authorize_tool_execution(
+                descriptor,
+                ToolExecutionAuthorization(policy_allowed=False, approval_evidence="approval-123"),
+            )
+
     def test_privileged_execution_requires_approval_evidence(self):
         descriptor = ToolCapabilityDescriptor(
             capability_id="arin.write",
