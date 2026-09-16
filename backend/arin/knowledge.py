@@ -8,6 +8,7 @@ must provide a tenant-scoped ``knowledge:read`` service key.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Mapping
 from urllib.parse import urlsplit, urlunsplit
 
@@ -22,6 +23,13 @@ class KnowledgeTransportError(RuntimeError):
     """Raised when zknowbase cannot provide a valid bounded read response."""
 
 
+class KnowledgeRequirement(str, Enum):
+    """Whether an ARIN operation may safely continue without knowledge."""
+
+    REQUIRED = "required"
+    OPTIONAL = "optional"
+
+
 @dataclass(frozen=True)
 class KnowledgeEvidence:
     """Tenant-bound provenance copied from a verified zknowbase citation."""
@@ -34,6 +42,21 @@ class KnowledgeEvidence:
     score: float
     text: str
     source_uri: str | None = None
+
+
+@dataclass(frozen=True)
+class KnowledgeReadOutcome:
+    """Explicit result for policy-aware knowledge reads.
+
+    Optional reads may degrade to ``payload=None`` only for transport/service
+    unavailability. Authorization, tenant, malformed-response, and provenance
+    failures remain hard failures because degrading them could hide a security
+    or integrity boundary violation.
+    """
+
+    payload: dict[str, Any] | None
+    degraded: bool = False
+    reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -113,6 +136,16 @@ class ZKnowbaseReadClient:
     def query(self, question: str, *, top_k: int = 5, filters: Mapping[str, Any] | None = None) -> dict[str, Any]:
         return self._send(self.contract.query_request(question, top_k=top_k, filters=filters))
 
+    def search_with_requirement(self, query: str, *, requirement: KnowledgeRequirement, top_k: int = 5, filters: Mapping[str, Any] | None = None) -> KnowledgeReadOutcome:
+        return self._read_with_requirement(
+            self.contract.search_request(query, top_k=top_k, filters=filters), requirement
+        )
+
+    def query_with_requirement(self, question: str, *, requirement: KnowledgeRequirement, top_k: int = 5, filters: Mapping[str, Any] | None = None) -> KnowledgeReadOutcome:
+        return self._read_with_requirement(
+            self.contract.query_request(question, top_k=top_k, filters=filters), requirement
+        )
+
     def evidence(self, payload: Mapping[str, Any]) -> tuple[KnowledgeEvidence, ...]:
         """Map search/query citations into tenant-bound ZASI evidence.
 
@@ -149,6 +182,16 @@ class ZKnowbaseReadClient:
                 text=source["text"], source_uri=source_uri,
             ))
         return tuple(evidence)
+
+    def _read_with_requirement(self, request: tuple[str, dict[str, str], dict[str, Any]], requirement: KnowledgeRequirement) -> KnowledgeReadOutcome:
+        if not isinstance(requirement, KnowledgeRequirement):
+            raise KnowledgeContractError("knowledge requirement must be explicit")
+        try:
+            return KnowledgeReadOutcome(payload=self._send(request))
+        except KnowledgeTransportError as exc:
+            if requirement is KnowledgeRequirement.OPTIONAL and str(exc) == "zknowbase read unavailable":
+                return KnowledgeReadOutcome(payload=None, degraded=True, reason="zknowbase unavailable")
+            raise
 
     def _send(self, request: tuple[str, dict[str, str], dict[str, Any]]) -> dict[str, Any]:
         url, headers, body = request
