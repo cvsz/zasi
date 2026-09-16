@@ -187,7 +187,9 @@ class ZKnowbaseReadClient:
         if not isinstance(requirement, KnowledgeRequirement):
             raise KnowledgeContractError("knowledge requirement must be explicit")
         try:
-            return KnowledgeReadOutcome(payload=self._send(request))
+            payload = self._send(request)
+            self.evidence(payload)
+            return KnowledgeReadOutcome(payload=payload)
         except KnowledgeTransportError as exc:
             if requirement is KnowledgeRequirement.OPTIONAL and str(exc) == "zknowbase read unavailable":
                 return KnowledgeReadOutcome(payload=None, degraded=True, reason="zknowbase unavailable")
@@ -198,7 +200,7 @@ class ZKnowbaseReadClient:
         try:
             with httpx.Client(timeout=self.contract.timeout_seconds, transport=self.transport) as client:
                 response = client.post(url, headers=headers, json=body)
-        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+        except (httpx.TimeoutException, httpx.NetworkError, httpx.ProxyError) as exc:
             raise KnowledgeTransportError("zknowbase read unavailable") from exc
         if response.status_code in {401, 403}:
             raise KnowledgeTransportError("zknowbase read authorization failed")
