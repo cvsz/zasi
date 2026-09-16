@@ -1,20 +1,27 @@
 """Bounded, transport-neutral ARIN contract for a future ZCoder adapter.
 
-This module validates request/response envelopes only. It does not connect to
-ZCoder, execute tools, grant filesystem/network/subprocess authority, or expose
-any physical-actuation path.
+This module validates request/response envelopes and provides an in-process
+fake/local transport for contract testing only. It does not connect to ZCoder,
+execute tools, grant filesystem/network/subprocess authority, or expose any
+physical-actuation path.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Mapping
+import asyncio
+from dataclasses import dataclass, field, replace
+import json
+from typing import Any, Awaitable, Callable, Mapping
 
 from backend.arin.tools import OperationClass, ToolCapabilityDescriptor
 
 
 class ToolAdapterError(ValueError):
     """Raised when an adapter envelope violates ARIN's fail-closed contract."""
+
+
+class ToolTransportError(RuntimeError):
+    """Normalized fail-closed transport failure without backend detail leakage."""
 
 
 def _required(value: str, name: str) -> str:
@@ -83,3 +90,49 @@ class ToolAdapterResponse:
             raise ToolAdapterError("response session does not match request")
         if self.request_id != request.request_id:
             raise ToolAdapterError("response request id does not match request")
+
+
+LocalHandler = Callable[[ToolAdapterRequest], Awaitable[Mapping[str, Any]]]
+
+
+class LocalToolTransport:
+    """In-process fake transport used to prove adapter boundaries before networking."""
+
+    def __init__(self, handler: LocalHandler, *, max_result_bytes: int = 4096) -> None:
+        if not callable(handler):
+            raise ToolTransportError("transport unavailable")
+        if not isinstance(max_result_bytes, int) or isinstance(max_result_bytes, bool) or max_result_bytes <= 0:
+            raise ToolTransportError("invalid transport bounds")
+        self._handler = handler
+        self._max_result_bytes = max_result_bytes
+
+    async def send(
+        self, request: ToolAdapterRequest, descriptor: ToolCapabilityDescriptor
+    ) -> ToolAdapterResponse:
+        try:
+            request.validate_capability(descriptor)
+            sanitized = replace(request, service_token=None)
+            raw = await asyncio.wait_for(
+                self._handler(sanitized), timeout=request.timeout_seconds
+            )
+            if not isinstance(raw, Mapping):
+                raise ToolAdapterError("response must be a mapping")
+            response = ToolAdapterResponse(
+                tenant_id=raw.get("tenant_id"),
+                session_id=raw.get("session_id"),
+                request_id=raw.get("request_id"),
+                result=raw.get("result"),
+            )
+            response.validate_for(request)
+            encoded = json.dumps(response.result, separators=(",", ":"), default=str).encode("utf-8")
+            if len(encoded) > self._max_result_bytes:
+                raise ToolAdapterError("response exceeds transport bounds")
+            return response
+        except asyncio.CancelledError:
+            raise
+        except (asyncio.TimeoutError, TimeoutError):
+            raise ToolTransportError("transport unavailable") from None
+        except (ToolAdapterError, TypeError, ValueError, OSError):
+            raise ToolTransportError("transport unavailable") from None
+        except Exception:
+            raise ToolTransportError("transport unavailable") from None
