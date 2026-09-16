@@ -33,10 +33,10 @@
 
 ### Task 3: ARIN compatibility and identity migration — `incomplete`
 
-- [ ] Inventory user-visible and API-stable JARVIS/ZARVIS names in ZASI and selected ZARVIS scope.
-- [ ] Define stable IDs versus ARIN display/product names.
-- [ ] Define compatibility aliases and deprecation windows before public-contract changes.
-- [ ] Add regression tests before executable/API identifier renames.
+- [x] Inventory user-visible and API-stable JARVIS/ZARVIS names in ZASI and selected ZARVIS scope (`docs/arin/ARIN_IDENTITY_AND_COMPATIBILITY.md`; `ARIN-MIG-0015` verified at PR #136).
+- [x] Define stable IDs versus ARIN display/product names (stable/machine vs display identity policy recorded in `ARIN_IDENTITY_AND_COMPATIBILITY.md`).
+- [x] Define compatibility aliases and deprecation windows before public-contract changes (rules 1–7 in `ARIN_IDENTITY_AND_COMPATIBILITY.md`; no calendar deadline invented).
+- [ ] Add regression tests before executable/API identifier renames (`tests/test_arin_identity_compatibility.py`; 22 tests pass locally; `ARIN-MIG-0016` integrating — exact-head PR required before promotion).
 
 ### Task 4: Canonical ARIN contracts — `incomplete`
 
