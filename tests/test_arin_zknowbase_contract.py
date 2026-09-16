@@ -4,6 +4,7 @@ import httpx
 
 from backend.arin.knowledge import (
     KnowledgeContractError,
+    KnowledgeRequirement,
     KnowledgeTransportError,
     ZKnowbaseReadClient,
     ZKnowbaseReadContract,
@@ -72,6 +73,39 @@ class ZKnowbaseReadContractTests(unittest.TestCase):
         client = ZKnowbaseReadClient(contract(), transport=httpx.MockTransport(handler))
         with self.assertRaises(KnowledgeTransportError):
             client.query("safe state")
+
+    def test_required_knowledge_fails_closed_when_unavailable(self):
+        def handler(request):
+            raise httpx.ReadTimeout("timed out", request=request)
+        client = ZKnowbaseReadClient(contract(), transport=httpx.MockTransport(handler))
+        with self.assertRaisesRegex(KnowledgeTransportError, "read unavailable"):
+            client.query_with_requirement("safe state", requirement=KnowledgeRequirement.REQUIRED)
+
+    def test_optional_knowledge_degrades_only_on_unavailability(self):
+        def handler(request):
+            raise httpx.ConnectError("offline", request=request)
+        client = ZKnowbaseReadClient(contract(), transport=httpx.MockTransport(handler))
+        outcome = client.search_with_requirement("manual", requirement=KnowledgeRequirement.OPTIONAL)
+        self.assertTrue(outcome.degraded)
+        self.assertIsNone(outcome.payload)
+        self.assertEqual(outcome.reason, "zknowbase unavailable")
+
+    def test_optional_knowledge_never_masks_security_or_integrity_failures(self):
+        responses = [
+            httpx.Response(403, json={"detail": "denied"}),
+            httpx.Response(200, text="not-json"),
+            httpx.Response(503, json={}),
+        ]
+        for response in responses:
+            with self.subTest(status=response.status_code):
+                client = ZKnowbaseReadClient(contract(), transport=httpx.MockTransport(lambda request, r=response: r))
+                with self.assertRaises(KnowledgeTransportError):
+                    client.search_with_requirement("manual", requirement=KnowledgeRequirement.OPTIONAL)
+
+    def test_knowledge_requirement_must_be_explicit_enum(self):
+        client = ZKnowbaseReadClient(contract(), transport=httpx.MockTransport(lambda request: httpx.Response(200, json={"results": []})))
+        with self.assertRaises(KnowledgeContractError):
+            client.search_with_requirement("manual", requirement="optional")  # type: ignore[arg-type]
 
     def test_maps_search_and_query_citations_to_tenant_bound_evidence(self):
         client = ZKnowbaseReadClient(contract())
