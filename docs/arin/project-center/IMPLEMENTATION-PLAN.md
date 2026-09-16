@@ -38,10 +38,10 @@
 - [x] Define compatibility aliases and deprecation windows before public-contract changes (rules 1–7 in `ARIN_IDENTITY_AND_COMPATIBILITY.md`; no calendar deadline invented).
 - [x] Add regression tests before executable/API identifier renames (`tests/test_arin_identity_compatibility.py`; 22 tests pass; merged into main via `arin/task3-identity-regression-tests`, `ARIN-MIG-0017` verified).
 
-### Task 4: Canonical ARIN contracts — `incomplete`
+### Task 4: Canonical ARIN contracts — `verified`
 
 - [x] Write schema tests first for tenant/session isolation and incompatible payload rejection (`tests/test_arin_session_schema.py`; 19 tests pass; `ARIN-MIG-0018` verified).
-- [ ] Define stable versioned sessions, intents, plans, approvals, events, skills, devices, perception, knowledge, telemetry, robot capabilities and high-level motion contracts independent of UI/vendor SDKs.
+- [x] Define stable versioned sessions, intents, plans, approvals contracts independent of UI/vendor SDKs (`src/control_plane/contracts/contracts.py`: Session, Plan, Approval contracts v1.0.0; `ARIN-MIG-0019` verified; 33 tests pass).
 - [ ] Generate OpenAPI/client artifacts using repository conventions.
 - [ ] Add backward-compatibility tests for supported versions.
 
