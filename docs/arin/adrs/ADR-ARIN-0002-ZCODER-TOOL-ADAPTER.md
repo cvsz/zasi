@@ -3,7 +3,7 @@
 ## Metadata
 
 - ADR ID: `ADR-ARIN-0002`
-- Status: `proposed`
+- Status: `accepted`
 - Date: 2026-09-16
 - Owner: ARIN Project Center
 - Related capability: bounded tools / MCP execution
@@ -95,8 +95,8 @@ A real ZCoder endpoint is not required for the first contract slice; fake/local 
 
 ## Migration plan
 
-1. Accept this ADR through normal review/CI.
-2. Add ARIN-owned adapter request/response schemas and failing tests first.
+1. Accept this ADR through normal review/CI. **Completed by merged PR #129.**
+2. Add ARIN-owned adapter request/response schemas and failing tests first. **Completed and verified by PR #130 exact head `7c45e8ab807d0451d30afd252b3a49285c224399`.**
 3. Add fake/local transport proving deny-by-default behavior.
 4. Add a disabled-by-default real service endpoint only after contract/security evidence is green.
 5. Enable one low-risk read-only capability first.
@@ -115,7 +115,9 @@ If the adapter is replaced, preserve capability IDs/version compatibility for th
 
 - Source commit/tag: `cvsz/zcoder@7153e8b7a48e9d7f9f1976fae2b23f270ac44dab`
 - Existing ARIN evidence: PR #126 security requirements; PR #127 capability descriptors; PR #128 denial-policy regressions
-- Target PR: pending
-- CI/workflow evidence: exact-head evidence required
-- Security review: required before acceptance
-- Migration ledger entry: to be updated in the target PR
+- ADR acceptance: merged PR #129
+- Adapter contract: merged PR #130, exact head `7c45e8ab807d0451d30afd252b3a49285c224399`
+- CI/workflow evidence: all nine exact-head ZASI gates passed for PR #130
+- Security review: capability ID/version/operation authority binding added before merge; exact-head CodeQL and Security Evidence passed
+- Migration ledger entry: `ARIN-MIG-0012`
+- Follow-up: fake/local transport and failure-boundary tests before any real endpoint
