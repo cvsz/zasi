@@ -1,4 +1,4 @@
-.PHONY: all setup test test-agent-platform test-api test-control-plane test-identity-foundation test-js typecheck test-all coverage clean build build-web sbom install server run docker-build docker-run ci help
+.PHONY: all setup test test-agent-platform test-api test-control-plane test-identity-foundation test-js typecheck test-all coverage clean build build-web client client-build client-dev sbom install server run docker-build docker-run ci help
 
 PYTHON ?= python3
 PIP ?= $(PYTHON) -m pip
@@ -76,6 +76,15 @@ server:
 run:
 	ZASI_API_KEY="$${ZASI_API_KEY:?ZASI_API_KEY must be set}" $(PYTHON) -m backend.app
 
+client:
+	ZASI_API_KEY="$${ZASI_API_KEY:?ZASI_API_KEY must be set}" npm run electron
+
+client-build: build-web
+	ZASI_ELECTRON_RUNTIME_ROOT="$${ZASI_ELECTRON_RUNTIME_ROOT:?ZASI_ELECTRON_RUNTIME_ROOT must point to platform Python runtimes}" npm run electron-build
+
+client-dev:
+	npm run dev
+
 docker-build:
 	docker build -t zasi:32.0.0 .
 
@@ -100,4 +109,7 @@ help:
 	@echo "  make install     - Build and install wheel"
 	@echo "  make server      - Start the authoritative authenticated ASGI control plane"
 	@echo "  make run         - Start the authoritative authenticated ASGI control plane"
+	@echo "  make client      - Launch the cross-platform Electron desktop client"
+	@echo "  make client-build - Package cross-platform desktop bundles (Linux, macOS, Windows)"
+	@echo "  make client-dev  - Start the Vite development client"
 	@echo "  make docker-build - Build the non-root control-plane image"

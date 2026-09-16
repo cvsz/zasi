@@ -134,6 +134,20 @@ Agents should rely on standard `Makefile` targets and standard test runners:
   make server
   ```
   *(Requires `ZASI_API_KEY` in environment; fails closed if missing).*
+- **Cross-Platform Desktop Client**:
+  ```bash
+  ZASI_API_KEY="your-secret-key" npm run electron
+  # or
+  make client
+  ```
+  *(Requires `ZASI_API_KEY` in environment; launches the Electron desktop cockpit against the local backend).*
+- **Cross-Platform Packaging**:
+  ```bash
+  ZASI_ELECTRON_RUNTIME_ROOT="/path/to/runtimes" npm run electron-build
+  # or
+  ZASI_ELECTRON_RUNTIME_ROOT="/path/to/runtimes" make client-build
+  ```
+  *(Packages Linux AppImage, macOS dmg, and Windows nsis cross-platform binaries; requires per-platform relocatable Python runtime environments).*
 
 ---
 
