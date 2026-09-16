@@ -4,76 +4,41 @@ This matrix records evidence-backed reuse decisions. A repository is not promote
 
 ## Status vocabulary
 
-- `verified` — the claimed source capability and applicable CI/security evidence were verified at the recorded source commit. This does not by itself verify an ARIN integration.
+- `verified` — the claimed source capability or bounded ARIN integration has exact evidence at the recorded commit/PR head. This does not imply broader production readiness.
 - `partial` — useful implementation exists but required ARIN contracts/evidence are incomplete.
 - `reference-only` — patterns may inform ARIN; no runtime dependency is approved.
 - `missing` — the required capability was not evidenced at the assessed source commit.
 
 ## Capability ownership
 
-| ARIN capability | Canonical owner | Source / adapter | Mode | Source status | Evidence / constraints |
+| ARIN capability | Canonical owner | Source / adapter | Mode | Status | Evidence / constraints |
 |---|---|---|---|---|---|
 | Governed control plane, policy, approvals, events | `cvsz/zasi` | native | core | `verified` | Canonical ARIN owner; existing ZASI release/security gates remain authoritative. |
-| Long-term document knowledge / RAG | `cvsz/zknowbase` | `cvsz/zknowbase@c71da3da3277d3cdd5f37435b7274c6f8f595946` | `api-service` | `verified` | Source head is a verified GitHub merge commit; MIT licensed. Exact-head `CI` run 225 and `Security` run 105 completed successfully. Keep Qdrant/Ollama/backend credentials behind zknowbase; ARIN consumes scoped service contracts rather than copying the repository. |
-| ARIN ↔ zknowbase contract adapter | `cvsz/zasi` | future bounded adapter | `api-service` | `missing` | Source service is evidenced, but ARIN contract tests, timeout/failure semantics, scoped credential handling and provenance mapping are not implemented/verified yet. Task 5 remains blocked on that bounded integration slice. |
-| Voice/perception/action patterns | `cvsz/zasi` | `cvsz/zworkforce@634599e02f85d42a63535eb8c5410d6383f64d36/packages/zarvis` | `api-service` or `reference-only` | `verified` | Source commit is GitHub-signature verified and MIT licensed. Exact-head push workflows include successful `ZARVIS` run #143 and `CodeQL` run #785. Reuse service/contracts only; do not copy the package wholesale or treat source verification as ARIN integration verification. |
-| ARIN ↔ ZARVIS voice/perception adapter | `cvsz/zasi` | future bounded adapter | `api-service` | `missing` | Requires ARIN consent/session tickets, retention/deletion semantics, interruption/disconnect tests, cross-session isolation and explicit no-action-authority contract before integration. |
-| Bounded tools / MCP patterns | `cvsz/zasi` | `cvsz/zcoder@7153e8b7a48e9d7f9f1976fae2b23f270ac44dab` | `api-service` / narrow adapter | `partial` | Source commit is GitHub-signature verified and MIT licensed. Current merge updates pinned CodeQL/container/release/SBOM workflow dependencies, but the available exact-SHA PR-workflow query returned no runs. Keep this source `partial` until reproducible containment/MCP CI/security evidence is attached; do not inherit unrestricted shell/filesystem/network authority. |
-| ARIN ↔ ZCoder tool adapter | `cvsz/zasi` | future allowlisted adapter | `api-service` | `missing` | Requires capability descriptors, per-tool risk classes, deny-by-default filesystem/network/tool tests, approval policy, bounded timeout/cancellation and exact-head integration evidence. |
-| Mission-control UX / operations patterns | `cvsz/zasi` | `cvsz/zdash@1c5c6b856cc3caeddefc90c9fb99a8449e4d35c5` | `reference-only` | `reference-only` | Source commit is GitHub-signature verified and MIT licensed. The available exact-SHA PR-workflow query returned no runs, so no CI/security readiness is inferred. Use information-hierarchy/operations patterns only; no runtime dependency or component port is approved without dependency, permission-state, stale-state and realtime-reconnection evidence. |
-| Enterprise installer / release patterns | `cvsz/zasi` | `cvsz/zanything@21f84667137ead7c818c5bb3df7eecfe7b790b2a` | `reference-only` | `reference-only` | Source commit is GitHub-signature verified and MIT licensed. Exact-head CodeQL run #56 and Gold Master Evidence run #8 succeeded; the release workflow scopes OIDC/attestation write permissions to the provenance job. Reuse installer/release/provenance patterns only; no runtime dependency or production-readiness inheritance is approved. |
-| Infrastructure | `cvsz/zasi` | `cvsz/z-platform` | explicit dependency only | `missing` | No ARIN infrastructure gap has yet justified admission. |
-| Deployment / edge | `cvsz/zasi` | `cvsz/zeaz-platform` | explicit dependency only | `missing` | No ARIN deployment gap has yet justified admission. |
+| Long-term document knowledge / RAG | `cvsz/zknowbase` | `cvsz/zknowbase@c71da3da3277d3cdd5f37435b7274c6f8f595946` | `api-service` | `verified` | Source exact-head CI/security verified. Keep Qdrant/Ollama/backend credentials behind zknowbase. |
+| ARIN ↔ zknowbase bounded adapter foundation | `cvsz/zasi` | `backend/arin/knowledge.py`, `backend/arin/knowledge_write.py` | `api-service` | `verified` | PRs #115, #122-#125 and `ARIN-MIG-0008` verify read contract/transport, provenance, explicit write authorization gate and required/optional degraded behavior. Write transport remains absent; canonical promotion still requires ADR plus consumer/rollback evidence. |
+| Voice/perception/action source patterns | `cvsz/zasi` | `cvsz/zworkforce@634599e02f85d42a63535eb8c5410d6383f64d36/packages/zarvis` | `api-service` or `reference-only` | `verified` | Source ZARVIS/CodeQL evidence verified. Reuse service/contracts only; no wholesale source copy. |
+| ARIN ↔ ZARVIS voice/perception adapter | `cvsz/zasi` | future bounded adapter | `api-service` | `missing` | Requires consent/session tickets, retention/deletion, interruption/disconnect, isolation and explicit no-action-authority contract. |
+| Bounded tools / MCP source patterns | `cvsz/zasi` | `cvsz/zcoder@7153e8b7a48e9d7f9f1976fae2b23f270ac44dab` | `api-service` / narrow adapter | `partial` | Source assessment remains conservative; ARIN extracted containment/security requirements without inheriting ambient authority. |
+| ARIN ↔ ZCoder bounded adapter foundation | `cvsz/zasi` | `backend/arin/tools.py`, `backend/arin/zcoder_adapter.py` | narrow adapter | `verified` | PRs #126-#132 and `ARIN-MIG-0009`-`0013` verify containment requirements, capability/risk contracts, policy-denial regressions, service-first ADR/contract and fake/local transport. No live ZCoder endpoint or runtime authority is enabled. |
+| Live ZCoder service endpoint | `cvsz/zasi` | future separately admitted endpoint | `api-service` | `missing` | Requires separate transport/policy/negative-test/rollback admission. |
+| Mission-control UX / operations patterns | `cvsz/zasi` | `cvsz/zdash@1c5c6b856cc3caeddefc90c9fb99a8449e4d35c5` | `reference-only` | `reference-only` | Reuse information hierarchy/operations patterns only; no runtime dependency approved. |
+| Enterprise installer / release patterns | `cvsz/zasi` | `cvsz/zanything@21f84667137ead7c818c5bb3df7eecfe7b790b2a` | `reference-only` | `reference-only` | Source CodeQL/Gold Master evidence verified; no ARIN readiness inheritance. |
+| Infrastructure | `cvsz/zasi` | `cvsz/z-platform` | explicit dependency only | `missing` | No ARIN infrastructure gap has justified admission. |
+| Deployment / edge | `cvsz/zasi` | `cvsz/zeaz-platform` | explicit dependency only | `missing` | No ARIN deployment gap has justified admission. |
+| Physical humanoid actuation | deterministic safety boundary | none admitted | disabled | `missing` | Physical actuation remains disabled until simulator, deterministic safety and exact supported-adapter HIL release gates pass. |
 
-## zknowbase assessment — 2026-09-15
+## Source assessment pins
 
-- Exact source commit: `c71da3da3277d3cdd5f37435b7274c6f8f595946` (`main`).
-- Commit provenance: GitHub-verified merge commit.
-- License: MIT, copyright 2026 cvsz.
-- Exact-head workflow evidence: `CI` run `32569233252` / run number 225 = success; `Security` run `32569233221` / run number 105 = success.
-- Repository release-safety evidence names required CI contexts (`backend`, `retrieval-quality`, `performance`, `frontend`, `compose`) and security contexts (`python-dependencies`, `frontend-dependencies`, `secrets`, `dependency-review`).
-- ARIN decision: retain zknowbase as an independently owned knowledge service. Do not copy its backend, Qdrant state, provider credentials or frontend into ZASI.
-- Promotion boundary: this assessment promotes only the **source knowledge/RAG capability** to `verified`. The ARIN integration remains `missing` until Task 5 supplies contract tests and exact-head integration evidence.
+- zknowbase: `c71da3da3277d3cdd5f37435b7274c6f8f595946`; MIT; exact-head CI run 225 and Security run 105 succeeded.
+- ZARVIS scope only: `cvsz/zworkforce@634599e02f85d42a63535eb8c5410d6383f64d36/packages/zarvis`; MIT; ZARVIS run #143 and CodeQL run #785 succeeded.
+- ZCoder: `7153e8b7a48e9d7f9f1976fae2b23f270ac44dab`; MIT; source remains independently owned and its source assessment remains conservative. ARIN-native bounded boundary evidence is recorded separately in `ARIN-MIG-0009`-`0013`.
+- zDash: `1c5c6b856cc3caeddefc90c9fb99a8449e4d35c5`; MIT; reference-only because exact-head CI/security and dependency/permission/realtime evidence remain incomplete.
+- zAnything: `21f84667137ead7c818c5bb3df7eecfe7b790b2a`; MIT; exact-head CodeQL #56 and Gold Master Evidence #8 succeeded; reference-only.
 
-## ZARVIS assessment — 2026-09-15
+## Promotion boundaries
 
-- Exact source commit: `634599e02f85d42a63535eb8c5410d6383f64d36` (`cvsz/zworkforce` `main`).
-- Commit provenance: GitHub-signature verified commit.
-- License: MIT, copyright 2026 cvsz.
-- Exact-head workflow evidence: GitHub Actions reports six workflows for this SHA; confirmed successful `ZARVIS` run `34801287433` / run number 143 and successful `CodeQL` run `34801287496` / run number 785.
-- Assessed scope is only `packages/zarvis`; the surrounding zWorkforce platform is not admitted as an ARIN dependency by this assessment.
-- ARIN decision: keep ZARVIS independently owned. Prefer its service/versioned-contract boundary or use it as reference evidence. Do not wholesale-port voice, perception, task, action, or console code into ZASI.
-- Safety boundary: source verification does not authorize physical actuation. Perception/voice output has no direct actuator authority in ARIN; any future robot path must terminate at the deterministic safety supervisor and satisfy simulator/HIL gates.
-- Promotion boundary: source voice/perception/action patterns are `verified`; the ARIN adapter remains `missing` until Task 7 provides consent/session, retention, isolation, interruption/disconnect and no-action-authority contract tests with exact-head integration evidence.
+A verified source capability does not verify an ARIN integration. A verified bounded ARIN contract/transport does not make the external service canonical or authorize additional authority. Canonical promotion follows the migration ledger requirements for accepted ADRs, consumer migration, compatibility/rollback evidence and deprecation decisions.
 
-## ZCoder assessment — 2026-09-15
+The initial curated evidence-only source sweep is complete. `z-platform` and `zeaz-platform` remain excluded unless an explicit ARIN infrastructure/deployment gap appears.
 
-- Exact source commit: `7153e8b7a48e9d7f9f1976fae2b23f270ac44dab` (`main`).
-- Commit provenance: GitHub-signature verified merge commit.
-- License: MIT, copyright 2024-2026 AI Model Coder.
-- Source evidence at this commit includes pinned CodeQL actions and pinned release/container SBOM tooling. The available exact-SHA pull-request workflow query returned no workflow runs, so this assessment does not claim exact-head CI/security verification.
-- ARIN decision: ZCoder remains independently owned. Reuse only bounded service/contracts or containment patterns after their evidence is verified; never copy the repository wholesale or inherit ambient shell, filesystem, network, MCP or credential authority.
-- Promotion boundary: bounded-tool/MCP source capability remains `partial`; the ARIN adapter remains `missing` until Task 6 provides deny-by-default contract tests and exact-head integration evidence.
-
-## zDash assessment — 2026-09-15
-
-- Exact source commit: `1c5c6b856cc3caeddefc90c9fb99a8449e4d35c5` (`main`).
-- Commit provenance: GitHub-signature verified commit.
-- License: MIT, copyright 2026 cvsz.
-- Exact-SHA pull-request workflow query returned no workflow runs; therefore this assessment does not claim exact-head CI/security verification or production readiness.
-- ARIN decision: zDash remains independently owned and `reference-only`. Reuse mission-control information hierarchy and operational UX patterns only after checking component/dependency provenance. Do not add a zDash runtime dependency or copy the application wholesale.
-- Promotion boundary: Task 14 still requires ARIN-owned critical-state/device-health/task/safety/incident hierarchy, realtime reconnection and stale-state tests, permission-state tests, and a redacted diagnostic bundle before mission control can be called verified.
-
-## zAnything assessment — 2026-09-15
-
-- Exact source commit: `21f84667137ead7c818c5bb3df7eecfe7b790b2a` (`main`).
-- Commit provenance: GitHub-signature verified merge commit.
-- License: MIT, copyright 2026 cvsz.
-- Exact-head workflow evidence: `CodeQL` run `34964732360` / run number 56 = success; `Gold Master Evidence` run `34964732343` / run number 8 = success.
-- Release provenance hardening at this commit moves write authority out of workflow-global permissions: repository evidence receives `contents: read`, while only the dedicated provenance job receives `id-token: write` and `attestations: write` after repository evidence succeeds.
-- ARIN decision: keep zAnything independently owned and `reference-only`. Reuse bounded installer, packaging, SBOM, provenance, upgrade/rollback and release-evidence patterns only where an ARIN-owned implementation gap is demonstrated; do not copy the repository wholesale or inherit its production-readiness claims.
-- Promotion boundary: this verifies the cited source release-evidence capability only. ARIN Task 15 still requires ARIN-owned cross-platform install/update/repair/rollback/uninstall/offline evidence, and Task 16 requires ARIN exact-head release evidence before ARIN can claim Gold Master readiness.
-
-## Next assessments
-
-The initial curated evidence-only source sweep is complete. Remaining incomplete work should now follow the implementation plan's smallest bounded ARIN-owned gaps, beginning with existing candidate/adapter requirements rather than admitting more repositories. `z-platform` and `zeaz-platform` remain excluded unless an explicit ARIN infrastructure/deployment gap appears.
+Physical actuation is disabled. No entry here authorizes direct LLM, browser, mobile, generic tool/MCP, raw joint, torque, velocity, PWM or vendor-actuator control.
