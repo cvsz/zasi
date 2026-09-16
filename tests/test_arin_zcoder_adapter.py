@@ -1,10 +1,24 @@
 import unittest
 
+from backend.arin.tools import (
+    OperationClass,
+    ToolCapabilityDescriptor,
+    ToolRiskClass,
+)
 from backend.arin.zcoder_adapter import (
     ToolAdapterError,
     ToolAdapterRequest,
     ToolAdapterResponse,
 )
+
+
+def read_descriptor():
+    return ToolCapabilityDescriptor(
+        capability_id="arin.read-evidence",
+        version="1",
+        operation=OperationClass.READ,
+        risk_class=ToolRiskClass.LOW,
+    )
 
 
 class ZCoderAdapterContractTests(unittest.TestCase):
@@ -15,10 +29,11 @@ class ZCoderAdapterContractTests(unittest.TestCase):
             tenant_id="tenant-a",
             session_id="session-a",
             request_id="req-1",
-            operation="read",
+            operation=OperationClass.READ,
             payload={"query": "status"},
             timeout_seconds=5.0,
         )
+        request.validate_capability(read_descriptor())
         self.assertEqual(request.tenant_id, "tenant-a")
         self.assertEqual(request.session_id, "session-a")
 
@@ -30,7 +45,7 @@ class ZCoderAdapterContractTests(unittest.TestCase):
                 "tenant_id": "tenant-a",
                 "session_id": "session-a",
                 "request_id": "req-1",
-                "operation": "read",
+                "operation": OperationClass.READ,
                 "payload": {},
                 "timeout_seconds": 5.0,
             }
@@ -46,10 +61,61 @@ class ZCoderAdapterContractTests(unittest.TestCase):
                 tenant_id="tenant-a",
                 session_id="session-a",
                 request_id="req-1",
-                operation="read",
+                operation=OperationClass.READ,
                 payload={},
                 timeout_seconds=31.0,
             )
+
+    def test_request_rejects_unknown_operation(self):
+        with self.assertRaises(ToolAdapterError):
+            ToolAdapterRequest(
+                capability_id="arin.read-evidence",
+                capability_version="1",
+                tenant_id="tenant-a",
+                session_id="session-a",
+                request_id="req-1",
+                operation="admin",
+                payload={},
+            )
+
+    def test_request_rejects_capability_identity_mismatch(self):
+        request = ToolAdapterRequest(
+            capability_id="arin.other",
+            capability_version="1",
+            tenant_id="tenant-a",
+            session_id="session-a",
+            request_id="req-1",
+            operation=OperationClass.READ,
+            payload={},
+        )
+        with self.assertRaises(ToolAdapterError):
+            request.validate_capability(read_descriptor())
+
+    def test_request_rejects_capability_version_mismatch(self):
+        request = ToolAdapterRequest(
+            capability_id="arin.read-evidence",
+            capability_version="2",
+            tenant_id="tenant-a",
+            session_id="session-a",
+            request_id="req-1",
+            operation=OperationClass.READ,
+            payload={},
+        )
+        with self.assertRaises(ToolAdapterError):
+            request.validate_capability(read_descriptor())
+
+    def test_request_rejects_operation_authority_escalation(self):
+        request = ToolAdapterRequest(
+            capability_id="arin.read-evidence",
+            capability_version="1",
+            tenant_id="tenant-a",
+            session_id="session-a",
+            request_id="req-1",
+            operation=OperationClass.WRITE,
+            payload={"path": "/workspace/file"},
+        )
+        with self.assertRaises(ToolAdapterError):
+            request.validate_capability(read_descriptor())
 
     def test_response_must_match_request_identity(self):
         request = ToolAdapterRequest(
@@ -58,7 +124,7 @@ class ZCoderAdapterContractTests(unittest.TestCase):
             tenant_id="tenant-a",
             session_id="session-a",
             request_id="req-1",
-            operation="read",
+            operation=OperationClass.READ,
             payload={},
         )
         response = ToolAdapterResponse(
@@ -77,7 +143,7 @@ class ZCoderAdapterContractTests(unittest.TestCase):
             tenant_id="tenant-a",
             session_id="session-a",
             request_id="req-1",
-            operation="read",
+            operation=OperationClass.READ,
             payload={},
             service_token="super-secret-token",
         )
