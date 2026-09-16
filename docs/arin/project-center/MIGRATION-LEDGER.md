@@ -4,63 +4,45 @@ This is the evidence ledger for repository/service admission and consolidation i
 
 ## State machine
 
-```text
-candidate -> assessed -> approved -> integrating -> verified -> canonical
-     |          |           |             |           |
-     +----------+-----------+-------------+-----------> rejected
-                            |
-                            +-------------------------> rolled-back
-```
+`candidate -> assessed -> approved -> integrating -> verified -> canonical`, with `rejected` and `rolled-back` terminal alternatives. No entry may skip directly from `candidate` to `canonical`.
 
-### State requirements
-
-| State | Required evidence |
-|---|---|
-| `candidate` | Concrete ARIN capability gap and proposed source owner |
-| `assessed` | Current source commit, license/provenance, contracts, CI/security evidence, alternatives and risks reviewed |
-| `approved` | Accepted ADR naming canonical owner, integration mode, migration and rollback plan |
-| `integrating` | Bounded implementation PR with tests; default-safe behavior preserved |
-| `verified` | Required unit/contract/integration/security/operational evidence green at the exact integration head |
-| `canonical` | Consumer migration complete, ownership documented, rollback proven, old path deprecation recorded |
-| `rejected` | Reason and evidence retained; no runtime dependency added |
-| `rolled-back` | Rollback trigger, recovery evidence, resulting canonical owner and follow-up recorded |
-
-No entry may skip directly from `candidate` to `canonical`.
+A `verified` entry requires exact integration-head evidence. `canonical` additionally requires accepted ownership/ADR where applicable, consumer migration, compatibility/rollback evidence and an explicit prior-path deprecation decision.
 
 ## Current curated ARIN set
 
-The following entries are admitted only for assessment. Inclusion here does **not** claim production readiness or authorize source copying.
-
 | Capability | Repository / scope | Intended mode | State | Canonical decision |
 |---|---|---|---|---|
-| ARIN governed control plane | `cvsz/zasi` | native/core | `canonical` | ZASI owns ARIN policy, approvals, events and core contracts |
-| Knowledge/RAG | `cvsz/zknowbase` | `api-service` | `assessed` | Source capability verified at `c71da3da3277d3cdd5f37435b7274c6f8f595946`; bounded ARIN read transport is integrating and remains non-canonical until exact-head evidence and ADR requirements pass |
-| Voice/perception/action patterns | `cvsz/zworkforce` → `packages/zarvis` | `api-service` or `reference-only` | `assessed` | Source patterns verified at `634599e02f85d42a63535eb8c5410d6383f64d36`; ARIN adapter remains unimplemented and no source copy is approved |
-| Bounded tools/MCP | `cvsz/zcoder` | `api-service` / narrow adapter | `candidate` | Source is pinned and MIT licensed, but the assessment is incomplete: public contracts, alternatives/risks, and reproducible exact-head containment/MCP CI/security evidence still require review; ARIN adapter is missing |
-| Mission-control UX/ops patterns | `cvsz/zdash` | `reference-only` | `candidate` | Source pinned at `1c5c6b856cc3caeddefc90c9fb99a8449e4d35c5` and MIT licensed, but exact-head CI/security and full dependency/permission/realtime risk evidence remain incomplete; no runtime dependency approved |
-| Enterprise installer/release patterns | `cvsz/zanything` | `reference-only` | `assessed` | Source pinned at `21f84667137ead7c818c5bb3df7eecfe7b790b2a`, MIT licensed, with exact-head successful CodeQL #56 and Gold Master Evidence #8; reuse remains reference-only and does not confer ARIN release readiness |
-| Infrastructure | `cvsz/z-platform` | explicit dependency only | `candidate` | Admit only for a demonstrated ARIN infrastructure gap |
-| Deployment/edge | `cvsz/zeaz-platform` | explicit dependency only | `candidate` | Admit only for a demonstrated ARIN deployment gap |
+| ARIN governed control plane | `cvsz/zasi` | native/core | `canonical` | ZASI owns ARIN policy, approvals, events and core contracts. |
+| Knowledge/RAG | `cvsz/zknowbase` | `api-service` | `assessed` | Source verified; bounded ARIN adapter foundation is separately `verified` as `ARIN-MIG-0008`; canonical promotion requires ADR + consumer/rollback evidence. |
+| Voice/perception patterns | `cvsz/zworkforce/packages/zarvis` | `api-service` / reference | `assessed` | Source verified; ARIN Task 7 adapter is not implemented. |
+| Bounded tools/MCP | `cvsz/zcoder` | narrow adapter | `approved` | ADR accepted; ARIN contract/fake-local transport verified through `ARIN-MIG-0013`; live endpoint disabled. |
+| Mission-control patterns | `cvsz/zdash` | reference-only | `candidate` | No runtime dependency approved. |
+| Installer/release patterns | `cvsz/zanything` | reference-only | `assessed` | Source release evidence verified; no ARIN readiness inheritance. |
+| Infrastructure | `cvsz/z-platform` | explicit dependency only | `candidate` | No demonstrated ARIN gap. |
+| Deployment/edge | `cvsz/zeaz-platform` | explicit dependency only | `candidate` | No demonstrated ARIN gap. |
 
 ## Migration records
 
-| ID | Capability | Source ref | Target | ADR | State | Exact-head evidence | Rollback evidence | Notes |
-|---|---|---|---|---|---|---|---|---|
-| `ARIN-MIG-0001` | Project Center governance | `cvsz/zasi@b8c1438318b1fe6393c5061c98c02a624ff8ec63` | `docs/arin/project-center` | N/A (bootstrap governance) | `verified` | Exact PR #107 head passed required gates | Documentation-only changes can be reverted | Governance evidence verified |
-| `ARIN-MIG-0002` | Deterministic reference-corpus evidence contracts | `cvsz/zasi@8fb26fc3560631aebbb643586e369a052a577f4a` | `tests/corpus` | N/A | `verified` | Exact PR #108 head passed required gates | Revert PR #108 merge | Evidence contract verified |
-| `ARIN-MIG-0003` | Knowledge/RAG source assessment | `cvsz/zknowbase@c71da3da3277d3cdd5f37435b7274c6f8f595946` | ZASI knowledge adapter | Pending integration ADR | `assessed` | Source commit verified; source CI/Security evidenced | Drop integration without system mutation | Source assessment only |
-| `ARIN-MIG-0004` | Voice/perception/action source assessment | `cvsz/zworkforce@634599e02f85d42a63535eb8c5410d6383f64d36/packages/zarvis` | future bounded adapter | Pending integration ADR | `assessed` | Source signature and ZARVIS/CodeQL evidence recorded | No runtime dependency/source copy | Physical actuation disabled |
-| `ARIN-MIG-0005` | Bounded tools/MCP source assessment | `cvsz/zcoder@7153e8b7a48e9d7f9f1976fae2b23f270ac44dab` | future bounded tool adapter | Pending integration ADR | `candidate` | Assessment incomplete | No runtime dependency/source copy | Remains candidate |
-| `ARIN-MIG-0006` | Mission-control UX/operations source assessment | `cvsz/zdash@1c5c6b856cc3caeddefc90c9fb99a8449e4d35c5` | future ARIN mission control | Pending if source ported | `candidate` | Exact-head CI/security not claimed | Evidence-only documentation reversible | Reference-only |
-| `ARIN-MIG-0007` | Enterprise installer/release source assessment | `cvsz/zanything@21f84667137ead7c818c5bb3df7eecfe7b790b2a` | future ARIN installer/release | N/A | `assessed` | Exact-head CodeQL and Gold Master Evidence succeeded | Evidence-only documentation reversible | Reference-only |
-| `ARIN-MIG-0008` | ARIN ↔ zknowbase read-contract foundation | `cvsz/zknowbase@c71da3da3277d3cdd5f37435b7274c6f8f595946` | `backend/arin/knowledge.py` | Pending integration ADR before production enablement | `integrating` | PR #115 contract foundation passed exact-head gates; current transport slice requires its own exact-head evidence | Disable/remove ARIN knowledge client; no write scope, data migration, credential store, or source copy | Read-only search/query only; tenant/scoped key/bounded timeout enforced; transport now fails closed on auth, network/timeout, non-success and malformed responses; physical actuation unaffected |
+| ID | Capability | Source ref | Target | State | Exact-head evidence / boundary |
+|---|---|---|---|---|---|
+| `ARIN-MIG-0001` | Project Center governance | `cvsz/zasi@b8c1438318b1fe6393c5061c98c02a624ff8ec63` | `docs/arin/project-center` | `verified` | PR #107 exact head passed required gates; documentation-only rollback. |
+| `ARIN-MIG-0002` | Deterministic reference corpus | `cvsz/zasi@8fb26fc3560631aebbb643586e369a052a577f4a` | `tests/corpus` | `verified` | PR #108 exact head passed required gates. |
+| `ARIN-MIG-0003` | Knowledge/RAG source assessment | `cvsz/zknowbase@c71da3da3277d3cdd5f37435b7274c6f8f595946` | ZASI knowledge adapter | `assessed` | Source CI/security evidenced; source remains independently owned. |
+| `ARIN-MIG-0004` | Voice/perception source assessment | `cvsz/zworkforce@634599e02f85d42a63535eb8c5410d6383f64d36/packages/zarvis` | future bounded adapter | `assessed` | Source ZARVIS/CodeQL evidence recorded; no runtime dependency/source copy; physical actuation disabled. |
+| `ARIN-MIG-0005` | Bounded tools/MCP source assessment | `cvsz/zcoder@7153e8b7a48e9d7f9f1976fae2b23f270ac44dab` | bounded tool adapter | `approved` | `ADR-ARIN-0002` accepted; no live runtime authority. |
+| `ARIN-MIG-0006` | Mission-control source assessment | `cvsz/zdash@1c5c6b856cc3caeddefc90c9fb99a8449e4d35c5` | future ARIN mission control | `candidate` | Reference-only; exact-head readiness not claimed. |
+| `ARIN-MIG-0007` | Installer/release source assessment | `cvsz/zanything@21f84667137ead7c818c5bb3df7eecfe7b790b2a` | future ARIN installer/release | `assessed` | Exact-head CodeQL and Gold Master Evidence succeeded; reference-only. |
+| `ARIN-MIG-0008` | ARIN ↔ zknowbase bounded integration | `cvsz/zknowbase@c71da3da3277d3cdd5f37435b7274c6f8f595946` | `backend/arin/knowledge.py`, `backend/arin/knowledge_write.py` | `verified` | PRs #115, #122-#125 verify contract/read transport/provenance/write-policy gate/degraded behavior. Write transport absent; canonical promotion blocked on ADR + consumer/rollback evidence. |
+| `ARIN-MIG-0009` | Tool/MCP security requirements | `cvsz/zcoder@7153e8b7a48e9d7f9f1976fae2b23f270ac44dab` | `docs/arin/integrations/ZCODER.md` | `verified` | PR #126 head `a8c4bc8b9f3700f96e8146e7064f6452b3dabb4e`, nine gates. No actuator authority. |
+| `ARIN-MIG-0010` | Tool capability/risk contract | same ZCoder source | `backend/arin/tools.py` | `verified` | PR #127 head `c2f4ec7aa2c4f507bab6fadd2a8abc7f95d6acfb`, nine gates; omitted authority defaults denied. |
+| `ARIN-MIG-0011` | Denied-authority regressions | `cvsz/zasi@397583d7afdd7085409610d08ce357cc94d959e7` | tool tests | `verified` | PR #128 head `bf08f733ce29573359bcff4c6b8935ebd68bd9d2`, nine gates; policy denial remains authoritative. |
+| `ARIN-MIG-0012` | ZCoder service-first adapter decision/contract | pinned ZCoder source | `backend/arin/zcoder_adapter.py` | `verified` | ADR accepted; PR #130 head `7c45e8ab807d0451d30afd252b3a49285c224399`, nine gates. Transport-neutral only. |
+| `ARIN-MIG-0013` | ZCoder fake/local transport | `cvsz/zasi@5d01b318cd415e9b0f484eb0bec2467e6392e393` | `backend/arin/zcoder_adapter.py` | `verified` | PR #132 exact head passed nine gates; validates capability/identity/timeout/cancellation/result bounds/failure normalization/token non-inheritance. Live endpoint disabled. |
+| `ARIN-MIG-0014` | Project Center evidence/checklist truth reconciliation | `cvsz/zasi@10fb2fa7bb3b12cd1cd75626d47f70de945e9099` | `docs/arin/project-center` | `verified` | PR #135 head `d2b624918a4d3aec76916eda3e00616dff91bead` passed all nine required gates and merged as signed main `b0f5a5725fbcfaea53fb3e0135b35f5ca483d596`. Documentation truth now reflects bounded verified work without claiming live ZCoder runtime or later ARIN tasks. |
+| `ARIN-MIG-0015` | ARIN legacy identity/compatibility inventory | `cvsz/zasi@b0f5a5725fbcfaea53fb3e0135b35f5ca483d596`; `cvsz/zworkforce@634599e02f85d42a63535eb8c5410d6383f64d36/packages/zarvis` | `docs/arin/ARIN_IDENTITY_AND_COMPATIBILITY.md` | `integrating` | Inventory separates ARIN display identity from stable legacy machine identifiers, preserves retired `/api/jarvis/*` fail-closed semantics, and defines regression/deprecation requirements before rename. Documentation-only; no runtime dependency, source copy, alias authority, or actuation path. Exact-head PR evidence required before promotion. |
 
-## Promotion rules
+## Safety and portfolio boundary
 
-An entry can move to `verified` only when evidence is attached to the exact integration head. An entry can move to `canonical` only when its ADR is accepted, consumers have migrated, compatibility/rollback behavior is tested, and the prior owner/path has an explicit deprecation decision.
+Physical actuation remains disabled. No source assessment, bounded adapter, simulator, documentation or cognitive/tool output authorizes raw joint, torque, velocity, PWM or vendor-actuator commands. Physical integration additionally requires deterministic safety-supervisor and exact supported-adapter HIL evidence.
 
-Physical humanoid integrations additionally require deterministic safety-supervisor evidence and hardware-in-the-loop evidence for the exact supported adapter before any physical actuation can be considered canonical.
-
-## Portfolio boundary
-
-ARIN work must not archive, delete, rename, transfer, or mass-copy unrelated repositories. Portfolio cleanup is a separate approved program with its own inventory, migration evidence and rollback process.
+ARIN work must not archive, delete, rename, transfer or mass-copy unrelated repositories. Portfolio cleanup is a separate approved program.
