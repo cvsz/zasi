@@ -40,7 +40,7 @@
 
 ### Task 4: Canonical ARIN contracts — `incomplete`
 
-- [ ] Write schema tests first for tenant/session isolation and incompatible payload rejection.
+- [x] Write schema tests first for tenant/session isolation and incompatible payload rejection (`tests/test_arin_session_schema.py`; 19 tests pass; `ARIN-MIG-0018` verified).
 - [ ] Define stable versioned sessions, intents, plans, approvals, events, skills, devices, perception, knowledge, telemetry, robot capabilities and high-level motion contracts independent of UI/vendor SDKs.
 - [ ] Generate OpenAPI/client artifacts using repository conventions.
 - [ ] Add backward-compatibility tests for supported versions.
