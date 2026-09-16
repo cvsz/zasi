@@ -31,12 +31,12 @@
 - [x] Pin source/integration commit and PR evidence in `CAPABILITY-MATRIX.md`, `EVIDENCE-MATRIX.md`, and `MIGRATION-LEDGER.md`.
 - [x] Keep production-readiness claims independent from roadmap/checklist state.
 
-### Task 3: ARIN compatibility and identity migration — `incomplete`
+### Task 3: ARIN compatibility and identity migration — `verified`
 
 - [x] Inventory user-visible and API-stable JARVIS/ZARVIS names in ZASI and selected ZARVIS scope (`docs/arin/ARIN_IDENTITY_AND_COMPATIBILITY.md`; `ARIN-MIG-0015` verified at PR #136).
 - [x] Define stable IDs versus ARIN display/product names (stable/machine vs display identity policy recorded in `ARIN_IDENTITY_AND_COMPATIBILITY.md`).
 - [x] Define compatibility aliases and deprecation windows before public-contract changes (rules 1–7 in `ARIN_IDENTITY_AND_COMPATIBILITY.md`; no calendar deadline invented).
-- [x] Add regression tests before executable/API identifier renames (`tests/test_arin_identity_compatibility.py`; 22 tests pass; merged into main via `arin/task3-identity-regression-tests`, `ARIN-MIG-0016` verified).
+- [x] Add regression tests before executable/API identifier renames (`tests/test_arin_identity_compatibility.py`; 22 tests pass; merged into main via `arin/task3-identity-regression-tests`, `ARIN-MIG-0017` verified).
 
 ### Task 4: Canonical ARIN contracts — `incomplete`
 
