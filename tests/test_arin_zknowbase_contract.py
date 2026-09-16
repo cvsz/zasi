@@ -17,6 +17,16 @@ def contract(**overrides):
     return ZKnowbaseReadContract(**values)
 
 
+def citation(**overrides):
+    value = {
+        "document_id": "doc-1", "document_name": "Safety Manual", "tenant_id": "tenant-a",
+        "chunk_id": "chunk-7", "chunk_index": 7, "score": 0.91,
+        "text": "Enter the safe state.", "source_uri": "manuals/safety.md",
+    }
+    value.update(overrides)
+    return value
+
+
 class ZKnowbaseReadContractTests(unittest.TestCase):
     def test_search_contract_is_read_only_and_tenant_scoped(self):
         adapter = contract()
@@ -90,6 +100,27 @@ class ZKnowbaseReadContractTests(unittest.TestCase):
         self.assertIsNone(outcome.payload)
         self.assertEqual(outcome.reason, "zknowbase unavailable")
 
+    def test_optional_knowledge_degrades_on_proxy_unavailability(self):
+        def handler(request):
+            raise httpx.ProxyError("proxy offline", request=request)
+        client = ZKnowbaseReadClient(contract(), transport=httpx.MockTransport(handler))
+        outcome = client.search_with_requirement("manual", requirement=KnowledgeRequirement.OPTIONAL)
+        self.assertTrue(outcome.degraded)
+        self.assertIsNone(outcome.payload)
+
+    def test_policy_aware_reads_validate_provenance_before_success(self):
+        invalid_payloads = [
+            {},
+            {"results": [citation(tenant_id="tenant-b")]},
+            {"sources": [{key: value for key, value in citation().items() if key != "document_id"}]},
+        ]
+        for payload in invalid_payloads:
+            for requirement in (KnowledgeRequirement.REQUIRED, KnowledgeRequirement.OPTIONAL):
+                with self.subTest(payload=payload, requirement=requirement):
+                    client = ZKnowbaseReadClient(contract(), transport=httpx.MockTransport(lambda request, p=payload: httpx.Response(200, json=p)))
+                    with self.assertRaises(KnowledgeTransportError):
+                        client.search_with_requirement("manual", requirement=requirement)
+
     def test_optional_knowledge_never_masks_security_or_integrity_failures(self):
         responses = [
             httpx.Response(403, json={"detail": "denied"}),
@@ -109,12 +140,8 @@ class ZKnowbaseReadContractTests(unittest.TestCase):
 
     def test_maps_search_and_query_citations_to_tenant_bound_evidence(self):
         client = ZKnowbaseReadClient(contract())
-        citation = {
-            "document_id": "doc-1", "document_name": "Safety Manual", "tenant_id": "tenant-a",
-            "chunk_id": "chunk-7", "chunk_index": 7, "score": 0.91,
-            "text": "Enter the safe state.", "source_uri": "manuals/safety.md",
-        }
-        for payload in ({"results": [citation]}, {"answer": "Stop [S1].", "sources": [citation]}):
+        source = citation()
+        for payload in ({"results": [source]}, {"answer": "Stop [S1].", "sources": [source]}):
             with self.subTest(payload=payload):
                 evidence = client.evidence(payload)
                 self.assertEqual(len(evidence), 1)
@@ -125,10 +152,7 @@ class ZKnowbaseReadContractTests(unittest.TestCase):
 
     def test_evidence_mapping_fails_closed_on_missing_or_cross_tenant_provenance(self):
         client = ZKnowbaseReadClient(contract())
-        valid = {
-            "document_id": "doc-1", "document_name": "Safety Manual", "tenant_id": "tenant-a",
-            "chunk_id": "chunk-7", "chunk_index": 7, "score": 0.91, "text": "Safe state.",
-        }
+        valid = citation(source_uri=None)
         invalid_payloads = [
             {},
             {"results": [{**valid, "tenant_id": "tenant-b"}]},
