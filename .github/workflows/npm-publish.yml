@@ -41,6 +41,6 @@ jobs:
           npm run build
 
       - name: Publish to npm
+        # Trusted publishing via GitHub OIDC (id-token: write above).
+        # No NODE_AUTH_TOKEN: a static token would override the OIDC exchange.
         run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
