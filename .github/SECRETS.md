@@ -58,6 +58,36 @@ For cloud provider federation, use OIDC instead of static secrets:
 3. Reference in workflow: environment: production
 4. Cloud provider assumes GitHub OIDC role automatically
 
+
+## Manual Environment Creation
+
+All GitHub API tokens are currently expired. To create environments manually:
+
+1. Go to Settings -> Environments -> New environment
+2. Create: release, production, staging
+3. Add secrets per environment (see above)
+4. Add variables as needed
+
+### Environment Configuration
+
+#### release
+| Secret | Description | Rotation |
+|---|---|---|
+| PYPI_TOKEN | PyPI publishing | Quarterly |
+| GITHUB_TOKEN | Release publishing | Auto |
+
+#### production
+| Secret | Description | Rotation |
+|---|---|---|
+| DEPLOY_KEY | Deployment SSH key | Annually |
+| DATABASE_URL | Production DB URL | On rotation |
+
+#### staging
+| Secret | Description | Rotation |
+|---|---|---|
+| STAGING_DB_URL | Staging DB URL | On rotation |
+| STAGING_REDIS_URL | Staging Redis URL | On rotation |
+
 ## Security Best Practices
 
 1. Principle of least privilege
