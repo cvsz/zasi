@@ -38,11 +38,11 @@
 - [x] Define compatibility aliases and deprecation windows before public-contract changes (rules 1–7 in `ARIN_IDENTITY_AND_COMPATIBILITY.md`; no calendar deadline invented).
 - [x] Add regression tests before executable/API identifier renames (`tests/test_arin_identity_compatibility.py`; 22 tests pass; merged into main via `arin/task3-identity-regression-tests`, `ARIN-MIG-0017` verified).
 
-### Task 4: Canonical ARIN contracts — `verified`
+### Task 4: Canonical ARIN contracts — `verified bounded foundation; compatibility closure incomplete`
 
 - [x] Write schema tests first for tenant/session isolation and incompatible payload rejection (`tests/test_arin_session_schema.py`; 19 tests pass; `ARIN-MIG-0018` verified).
 - [x] Define stable versioned sessions, intents, plans, approvals contracts independent of UI/vendor SDKs (`src/control_plane/contracts/contracts.py`: Session, Plan, Approval contracts v1.0.0; `ARIN-MIG-0019` verified; 33 tests pass).
-- [ ] Generate OpenAPI/client artifacts using repository conventions.
+- [x] Generate OpenAPI/client artifacts using repository conventions (PR #141 exact head `1caebc064cbd644770ae5bc2503fad6c5c52415a` passed all nine required gates; `ARIN-MIG-0020` verified).
 - [ ] Add backward-compatibility tests for supported versions.
 
 ### Task 5: zknowbase integration — `verified bounded foundation; canonical promotion incomplete`
