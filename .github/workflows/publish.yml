@@ -4,6 +4,12 @@ on:
   workflow_run:
     workflows: ["Create GitHub Release"]
     types: [completed]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Published release tag whose assets should be (re)published to PyPI"
+        required: true
+        default: "v32.0.2"
 
 permissions:
   contents: read
@@ -12,10 +18,11 @@ jobs:
   publish:
     name: Publish Python Package to PyPI
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      startsWith(github.event.workflow_run.head_branch, 'v') &&
-      github.event.workflow_run.head_repository.full_name == github.repository
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       startsWith(github.event.workflow_run.head_branch, 'v') &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     environment:
       name: pypi
@@ -26,11 +33,13 @@ jobs:
       contents: read
     steps:
       - name: Checkout the signed release workflow revision
+        if: github.event_name != 'workflow_dispatch'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Download signed release artifact
+        if: github.event_name != 'workflow_dispatch'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: zasi-signed-release
@@ -38,6 +47,18 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           repository: ${{ github.repository }}
           run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Download published release assets
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          gh release download "${{ inputs.release_tag }}" \
+            --repo "${{ github.repository }}" \
+            --dir dist \
+            --clobber
 
       - name: Verify signed release artifact
         env:
