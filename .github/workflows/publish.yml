@@ -57,9 +57,16 @@ jobs:
           done
           (cd dist && sha256sum --check SHA256SUMS)
 
+      - name: Stage PyPI distributions
+        run: |
+          set -euo pipefail
+          mkdir -p pypi-dist
+          cp dist/*.whl dist/*.tar.gz pypi-dist/
+          test -n "$(ls -A pypi-dist)"
+
       - name: Publish package distributions to PyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
         with:
-          packages-dir: dist/
+          packages-dir: pypi-dist/
           password: ${{ secrets.PYPI_TOKEN }}
           skip-existing: true
