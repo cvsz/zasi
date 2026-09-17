@@ -22,6 +22,10 @@ from typing import Iterable, List, Optional, Sequence
 class ReleaseSigningError(RuntimeError):
     """Raised when a release cannot be signed and verified safely."""
 
+    def __init__(self, message: str, *, stage: str = "unknown") -> None:
+        super().__init__(message)
+        self.stage = stage
+
 
 _FINGERPRINT_PATTERN = re.compile(r"^[0-9A-Fa-f]{16,64}$")
 
@@ -34,7 +38,7 @@ def discover_release_artifacts(output_dir: Path) -> List[Path]:
     """Return the required primary release files in deterministic order."""
 
     if not output_dir.is_dir() or output_dir.is_symlink():
-        raise ReleaseSigningError("release output directory is invalid")
+        raise ReleaseSigningError("release output directory is invalid", stage="artifacts")
     wheels = sorted(
         path for path in output_dir.glob("*.whl") if _regular_file(path)
     )
@@ -44,7 +48,7 @@ def discover_release_artifacts(output_dir: Path) -> List[Path]:
     sbom = output_dir / "zasi-sbom.cdx.json"
     if not wheels or not sdists or not _regular_file(sbom):
         raise ReleaseSigningError(
-            "release output must contain a wheel, sdist, and CycloneDX SBOM"
+            "release output must contain a wheel, sdist, and CycloneDX SBOM", stage="artifacts"
         )
     return wheels + sdists + [sbom]
 
@@ -55,11 +59,11 @@ def build_checksum_manifest(paths: Iterable[Path]) -> str:
     material = sorted(paths, key=lambda path: path.name)
     names = [path.name for path in material]
     if len(names) != len(set(names)):
-        raise ReleaseSigningError("release artifact basenames must be unique")
+        raise ReleaseSigningError("release artifact basenames must be unique", stage="artifacts")
     lines = []
     for path in material:
         if not _regular_file(path):
-            raise ReleaseSigningError("release artifact is not a regular file")
+            raise ReleaseSigningError("release artifact is not a regular file", stage="artifacts")
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
         lines.append(f"{digest}  {path.name}")
     return "\n".join(lines) + "\n"
@@ -91,7 +95,7 @@ def _run_gpg(
             timeout=120,
         )
     except (OSError, subprocess.SubprocessError) as exc:
-        raise ReleaseSigningError("GPG release operation failed") from exc
+        raise ReleaseSigningError("GPG release operation failed", stage="gpg") from exc
 
 
 def _require_secret_key(fingerprint: str) -> None:
@@ -104,7 +108,7 @@ def _require_secret_key(fingerprint: str) -> None:
         if line.startswith("fpr:") and len(line.split(":")) > 9
     }
     if fingerprint.lower() not in fingerprints:
-        raise ReleaseSigningError("configured release signing key is unavailable")
+        raise ReleaseSigningError("configured release signing key is unavailable", stage="key")
 
 
 def _sign(path: Path, fingerprint: str, passphrase: str) -> Path:
@@ -123,7 +127,7 @@ def _sign(path: Path, fingerprint: str, passphrase: str) -> Path:
         passphrase=passphrase,
     )
     if not _regular_file(signature):
-        raise ReleaseSigningError("GPG did not create a release signature")
+        raise ReleaseSigningError("GPG did not create a release signature", stage="sign")
     _run_gpg(["--verify", str(signature), str(path)])
     signature.chmod(0o644)
     return signature
@@ -140,10 +144,10 @@ def sign_release_artifacts(
     if not isinstance(fingerprint, str) or not _FINGERPRINT_PATTERN.fullmatch(
         fingerprint.strip()
     ):
-        raise ReleaseSigningError("release signing fingerprint is invalid")
+        raise ReleaseSigningError("release signing fingerprint is invalid", stage="input")
     fingerprint = fingerprint.strip()
     if not isinstance(passphrase, str):
-        raise ReleaseSigningError("release signing passphrase is invalid")
+        raise ReleaseSigningError("release signing passphrase is invalid", stage="input")
     _require_secret_key(fingerprint)
     artifacts = discover_release_artifacts(output_dir)
     checksum_path = output_dir / "SHA256SUMS"
@@ -157,7 +161,7 @@ def sign_release_artifacts(
     public_key = output_dir / "ZASI_RELEASE_SIGNING_KEY.asc"
     exported = _run_gpg(["--armor", "--export", fingerprint]).stdout
     if not exported.strip():
-        raise ReleaseSigningError("GPG did not export the release public key")
+        raise ReleaseSigningError("GPG did not export the release public key", stage="export")
     public_key.write_text(exported, encoding="utf-8")
     public_key.chmod(0o644)
     _run_gpg(["--import-options", "show-only", "--import", str(public_key)])
@@ -189,10 +193,14 @@ def main(argv: Optional[Iterable[str]] = None) -> int:
         )
         print(json.dumps({"status": "signed", **report}, sort_keys=True))
         return 0
-    except ReleaseSigningError:
+    except ReleaseSigningError as exc:
         print(
             json.dumps(
-                {"status": "failed", "error": "release_signing_unavailable"},
+                {
+                    "status": "failed",
+                    "error": "release_signing_unavailable",
+                    "stage": exc.stage,
+                },
                 sort_keys=True,
             ),
             file=sys.stderr,
