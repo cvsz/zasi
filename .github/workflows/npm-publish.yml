@@ -43,4 +43,7 @@ jobs:
       - name: Publish to npm
         # Trusted publishing via GitHub OIDC (id-token: write above).
         # No NODE_AUTH_TOKEN: a static token would override the OIDC exchange.
-        run: npm publish --access public
+        # npm >= 11.5.1 is required for the OIDC exchange; runners may ship older npm.
+        run: |
+          npm install -g "npm@>=11.5.1"
+          npm publish --access public
