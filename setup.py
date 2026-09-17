@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="zasi",
-    version="32.0.0",
+    version="32.0.1",
     description="Governed J.A.R.V.I.S. control-plane reference platform",
     packages=find_packages(),
     py_modules=["main"],

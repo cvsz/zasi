@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: zasi-jarvis:32.0.0-control-plane
+    image: zasi-jarvis:32.0.1-control-plane
     container_name: zasi-jarvis
     ports:
       - "127.0.0.1:8080:8080"

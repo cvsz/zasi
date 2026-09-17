@@ -1,6 +1,6 @@
 {
   "name": "zasi-cockpit",
-  "version": "32.0.0",
+  "version": "32.0.1",
   "description": "ZASI J.A.R.V.I.S. governed control-plane cockpit — React 19 + React Router v7 + TypeScript entrypoint",
   "main": "electron/main.js",
   "scripts": {
