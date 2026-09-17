@@ -43,6 +43,14 @@ jobs:
           npm run typecheck
           npm run build
 
+      - name: Diagnose OIDC preconditions (presence only, never values)
+        run: |
+          node --version
+          npm --version
+          node -e "for (const k of ['GITHUB_ACTIONS','ACTIONS_ID_TOKEN_REQUEST_URL','ACTIONS_ID_TOKEN_REQUEST_TOKEN']) console.log(k + '=' + (process.env[k] ? 'set' : 'unset')); console.log('NODE_AUTH_TOKEN=' + (process.env.NODE_AUTH_TOKEN ? 'set' : 'unset'))"
+          echo "--- userconfig (auth redacted) ---"
+          sed 's/\(_authToken=\).*/\1<redacted-or-empty>/' "${NPM_CONFIG_USERCONFIG:-/dev/null}" 2>/dev/null || echo "(no userconfig file)"
+
       - name: Publish to npm
         # Trusted publishing via GitHub OIDC (id-token: write above).
         # No NODE_AUTH_TOKEN: a static token would override the OIDC exchange.
