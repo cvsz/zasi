@@ -106,6 +106,10 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$ZASI_RELEASE_GPG_PRIVATE_KEY"
+          mkdir -p ~/.gnupg
+          chmod 700 ~/.gnupg
+          printf '%s\n' "allow-loopback-pinentry" >> ~/.gnupg/gpg-agent.conf
+          gpg-connect-agent reloadagent /bye || true
           printf '%s' "$ZASI_RELEASE_GPG_PRIVATE_KEY" | gpg --batch --import
 
       - name: Sign and verify release artifacts
