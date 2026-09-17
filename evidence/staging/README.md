@@ -5,7 +5,7 @@
 A production release tag is allowed only when `scripts/production_go_gate.py` validates all of the following against the exact release commit:
 
 - `main` is protected by GitHub branch/ruleset governance.
-- `candidate_commit` is the exact 40-character release commit SHA.
+- `candidate_commit` is the exact 40-character commit SHA of the exercised code tree. It must either equal the release (tag) commit or be a strict ancestor of it; in the ancestor case the release commit must add **nothing but** `evidence/staging/latest.json` on top of the candidate, so the exercised artifact is bit-identical to the released artifact. (Strict equality is unsatisfiable: the image digest depends on the tag SHA, which depends on the evidence naming the digest.)
 - `previous_commit` is the exact 40-character commit baked into the previous immutable image and differs from `candidate_commit`.
 - `candidate_image` and `previous_image` are immutable `ghcr.io/...@sha256:...` references and are different.
 - top-level `observed_at` is a real RFC3339 UTC timestamp no more than **6 hours old** at release time. Future timestamps and stale evidence are rejected.
