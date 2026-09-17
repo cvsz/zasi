@@ -243,6 +243,35 @@ class ControlPlaneAPITests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(body["checks"]["database"], "ready")
             self.assertEqual(body["checks"]["redis"], "disabled")
 
+    async def test_world_room_reports_unreachable_proxy_honestly(self):
+        async with self.client() as client:
+            response = await client.get("/world-room")
+            self.assertEqual(response.status_code, 200)
+            body = response.json()
+            self.assertEqual(body["status"], "failed")
+            self.assertFalse(body["proxy"]["reachable"])
+            self.assertIn("error", body["proxy"])
+
+    async def test_world_room_reports_live_proxy_contract(self):
+        import io
+        from unittest import mock
+
+        payload = json.dumps({"ok": True, "configured": False, "model": "gpt-realtime-2.1"}).encode()
+        fake_response = mock.MagicMock()
+        fake_response.read.return_value = payload
+        fake_response.status = 200
+        fake_response.__enter__.return_value = fake_response
+        async with self.client() as client:
+            with mock.patch("urllib.request.urlopen", return_value=fake_response):
+                response = await client.get("/world-room")
+            self.assertEqual(response.status_code, 200)
+            body = response.json()
+            self.assertEqual(body["status"], "passed")
+            self.assertTrue(body["proxy"]["reachable"])
+            self.assertEqual(body["proxy"]["status_code"], 200)
+            self.assertFalse(body["proxy"]["proxy_configured"])
+            self.assertEqual(body["proxy"]["proxy_model"], "gpt-realtime-2.1")
+
     async def test_invalid_audit_cursor_is_a_bounded_client_error(self):
         async with self.client() as client:
             session = await client.post(

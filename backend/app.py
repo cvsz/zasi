@@ -25,6 +25,7 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 from backend.compatibility import COMPATIBILITY_ROUTES
 from backend.frontend_assets import frontend_dist_path
+from backend.readiness import _artifact_release_commit
 from backend.readiness import probe as readiness_probe
 from src.control_plane.config import ConfigurationError, Settings
 from src.control_plane.briefing import BriefingAggregator
@@ -826,6 +827,39 @@ def create_app(
                 {"checks": readiness_state["checks"]},
             )
         return readiness_state
+
+    @app.get("/world-room")
+    async def world_room_smoke():
+        """Genuine World Room smoke surface: probe the realtime proxy and report artifact identity.
+
+        Probes ``WORLD_ROOM_PROXY_URL/health`` (default loopback :8090) and
+        reports exactly what was observed; it never claims an audio session
+        was established when only the proxy contract was verified.
+        """
+        import urllib.request
+
+        proxy_url = os.environ.get("WORLD_ROOM_PROXY_URL", "http://127.0.0.1:8090").rstrip("/")
+        probe: dict = {"url": proxy_url, "reachable": False}
+        try:
+            with urllib.request.urlopen(proxy_url + "/health", timeout=5) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+            probe.update(
+                {
+                    "reachable": True,
+                    "status_code": response.status,
+                    "proxy_configured": bool(payload.get("configured")),
+                    "proxy_model": payload.get("model"),
+                }
+            )
+        except Exception as exc:
+            probe["error"] = type(exc).__name__
+        release_commit = _artifact_release_commit()
+        return {
+            "status": "passed" if probe["reachable"] else "failed",
+            "artifact_commit": release_commit,
+            "artifact_source": "artifact" if release_commit is not None else None,
+            "proxy": probe,
+        }
 
     @app.post("/api/v2/sessions", status_code=201)
     async def create_session(payload: SessionRequest, request: Request):
