@@ -51,6 +51,31 @@ jobs:
           echo "--- userconfig (auth redacted) ---"
           sed 's/\(_authToken=\).*/\1<redacted-or-empty>/' "${NPM_CONFIG_USERCONFIG:-/dev/null}" 2>/dev/null || echo "(no userconfig file)"
 
+      - name: Diagnose OIDC exchange (status codes only, never tokens)
+        run: |
+          node -e "
+          (async () => {
+            const audience = 'npm:registry.npmjs.org';
+            const url = new URL(process.env.ACTIONS_ID_TOKEN_REQUEST_URL);
+            url.searchParams.append('audience', audience);
+            const r1 = await fetch(url.href, { headers: { Accept: 'application/json', Authorization: 'Bearer ' + process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN } });
+            console.log('mint-status=' + r1.status);
+            if (!r1.ok) return;
+            const idToken = (await r1.json()).value;
+            const r2 = await fetch('https://registry.npmjs.org/-/npm/v1/oidc/token/exchange/package/zasi-cockpit', {
+              method: 'POST',
+              headers: { Authorization: 'Bearer ' + idToken, 'Content-Type': 'application/json' },
+            });
+            console.log('exchange-status=' + r2.status);
+            if (r2.status !== 200 && r2.status !== 201) {
+              const body = await r2.text();
+              console.log('exchange-error-body=' + body.slice(0, 200));
+            } else {
+              console.log('exchange-ok-token-received=true');
+            }
+          })().catch((e) => console.log('diagnostic-error=' + e.message));
+          "
+
       - name: Publish to npm
         # Trusted publishing via GitHub OIDC (id-token: write above).
         # No NODE_AUTH_TOKEN: a static token would override the OIDC exchange.
