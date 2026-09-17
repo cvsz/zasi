@@ -3,7 +3,7 @@
 ## Metadata
 
 - ADR ID: `ADR-ARIN-0003`
-- Status: `proposed`
+- Status: `accepted`
 - Date: 2026-09-17
 - Owner: ARIN Project Center
 - Related capability: knowledge / grounded RAG
@@ -12,7 +12,7 @@
 
 ## Capability gap
 
-ARIN needs grounded knowledge retrieval with provenance while keeping the independently owned zknowbase service outside the ZASI trust boundary. The bounded adapter foundation is already verified by PRs #115 and #122-#125, but `ARIN-MIG-0008` cannot become canonical until an integration decision and consumer migration/rollback evidence are reviewed.
+ARIN needs grounded knowledge retrieval with provenance while keeping the independently owned zknowbase service outside the ZASI trust boundary. The bounded adapter foundation is already verified by PRs #115 and #122-#125. The API/service integration decision was accepted through PR #165 at exact head `2ef5d9072d5c9eb2b4fd0b84a1fe1340c41cb384`, which passed the repository's required workflow groups and merged as signed commit `6762e442df18709772d10b792e39c9286a31ec02`. `ARIN-MIG-0008` still cannot become canonical until consumer migration/rollback evidence is reviewed.
 
 ## Decision
 
@@ -20,7 +20,7 @@ Use `api-service`. ZASI remains the canonical owner of ARIN tenant/session ident
 
 Do not copy or vendor zknowbase into ZASI. The adapter is a narrow authenticated service boundary. Read-only search/query is the only admitted transport in the verified foundation. Write/ingest authorization may be evaluated by policy, but no mutation transport is admitted by this ADR.
 
-This ADR is deliberately `proposed`. Acceptance requires normal review and exact-head CI. Canonical promotion additionally requires explicit consumer migration and rollback evidence; accepting this ADR alone is insufficient.
+This ADR is accepted for the bounded API/service integration mode. Acceptance does not promote `ARIN-MIG-0008` to canonical and does not claim production readiness. Canonical promotion additionally requires explicit consumer migration and rollback evidence.
 
 ## Alternatives considered
 
@@ -66,8 +66,9 @@ The bounded foundation is recorded by `ARIN-MIG-0008`:
 3. PR #123 — provenance/citation mapping into ARIN evidence.
 4. PR #124 — explicit scope/policy/approval gate for write/ingest authorization; mutation transport remains absent.
 5. PR #125 — required knowledge fail-closed behavior and narrowly normalized optional degradation.
+6. PR #165 exact head `2ef5d9072d5c9eb2b4fd0b84a1fe1340c41cb384` — ADR acceptance candidate passed the required workflow groups and merged as signed commit `6762e442df18709772d10b792e39c9286a31ec02`.
 
-These establish a verified adapter foundation, not canonical ownership or production readiness.
+These establish an accepted, verified adapter foundation, not canonical promotion or production readiness.
 
 ## Consumer migration evidence required before canonical promotion
 
@@ -83,7 +84,7 @@ Before canonical promotion, add evidence that disabling/removing zknowbase endpo
 
 ## Migration plan
 
-1. Review and accept this ADR through normal PR/CI.
+1. Review and accept this ADR through normal PR/CI. **Completed by PR #165; reconciliation records the accepted state.**
 2. Inventory actual ARIN knowledge consumers and direct zknowbase call sites.
 3. Add/extend tests first for the smallest real consumer migration.
 4. Migrate that consumer to the existing ARIN adapter contract without expanding authority.
@@ -99,6 +100,6 @@ No repository or service is decommissioned by this ADR. If a prior direct consum
 
 - Source commit: `cvsz/zknowbase@c71da3da3277d3cdd5f37435b7274c6f8f595946`
 - Existing bounded integration: PRs #115, #122, #123, #124, #125; `ARIN-MIG-0008`
-- ADR status: proposed; acceptance pending exact-head review/CI
+- ADR acceptance: PR #165 exact head `2ef5d9072d5c9eb2b4fd0b84a1fe1340c41cb384`; signed merge `6762e442df18709772d10b792e39c9286a31ec02`
 - Canonical promotion: blocked on consumer migration and rollback evidence
 - Physical actuation: disabled; no actuator authority admitted

@@ -45,14 +45,15 @@
 - [x] Generate OpenAPI/client artifacts using repository conventions (PR #141 exact head `1caebc064cbd644770ae5bc2503fad6c5c52415a` passed all nine required gates; `ARIN-MIG-0020` verified).
 - [x] Add backward-compatibility tests for supported versions (`tests/test_arin_contract_compatibility.py`; PR #145 exact head `c5114c33076328cc94d0f6aee2c005fae76eafae` passed required gates and merged as signed commit `23a57fbe7fd2c1b3e1d5c7c40284b53e796a7aac`; `ARIN-MIG-0021` verified).
 
-### Task 5: zknowbase integration — `verified bounded foundation; canonical promotion incomplete`
+### Task 5: zknowbase integration — `verified bounded foundation; ADR accepted; canonical promotion incomplete`
 
 - [x] Contract foundation and fake/local boundary tests established (PR #115).
 - [x] Read-only search/query transport uses scoped credentials and bounded timeouts (PR #122).
 - [x] Provenance/citation mapping into ARIN evidence (PR #123).
 - [x] Write/ingest authorization gate requires explicit scope/policy/approval; mutation transport remains absent (PR #124).
 - [x] Required knowledge fails closed while optional knowledge degrades only for normalized transport unavailability; malformed/cross-tenant/provenance failures remain hard failures (PR #125).
-- [ ] Accept integration ADR and prove consumer migration/rollback before `ARIN-MIG-0008` can become canonical.
+- [x] Accept API/service integration ADR (PR #165 exact head `2ef5d9072d5c9eb2b4fd0b84a1fe1340c41cb384`; signed merge `6762e442df18709772d10b792e39c9286a31ec02`).
+- [ ] Inventory actual ARIN knowledge consumers/direct zknowbase call sites and prove consumer migration/rollback before `ARIN-MIG-0008` can become canonical.
 
 ### Task 6: Tool/MCP execution boundary — `verified bounded foundation; live endpoint disabled`
 
