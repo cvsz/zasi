@@ -1,53 +1,53 @@
 {
   "schema_version": 1,
-  "candidate_commit": "faafc28ebcc023f3e60312634a993be4c0708c68",
-  "previous_commit": "cc3cbcc5457f409d7e4f8a42547c6551cb7bbab3",
-  "candidate_image": "ghcr.io/cvsz/zasi@sha256:1c22ec059aa3a476fff7f33cca0d60923c965b1f910d6db5a723fdff04dc181d",
-  "previous_image": "ghcr.io/cvsz/zasi@sha256:43dae08ebb8a81088fa079bfab63a4313deaa36bd18ba8821fc7a4132cf719a4",
+  "candidate_commit": "ec4f9b9c767fb7b10a28ea3c17eddb363f80bc86",
+  "previous_commit": "faafc28ebcc023f3e60312634a993be4c0708c68",
+  "candidate_image": "ghcr.io/cvsz/zasi@sha256:222d243fabb3c774416dd68aaacd63556d944c49ebeafeeae81d44617acd3ee2",
+  "previous_image": "ghcr.io/cvsz/zasi@sha256:1c22ec059aa3a476fff7f33cca0d60923c965b1f910d6db5a723fdff04dc181d",
   "staging_url": "https://192.168.1.119:8443",
-  "observed_at": "2026-09-17T05:24:58Z",
+  "observed_at": "2026-09-17T05:47:40Z",
   "runtime": {
     "status": "passed",
-    "observed_at": "2026-09-17T05:24:06.984589Z",
+    "observed_at": "2026-09-17T05:46:50.117894Z",
     "inspector": "docker",
-    "observed_image": "ghcr.io/cvsz/zasi@sha256:1c22ec059aa3a476fff7f33cca0d60923c965b1f910d6db5a723fdff04dc181d"
+    "observed_image": "ghcr.io/cvsz/zasi@sha256:222d243fabb3c774416dd68aaacd63556d944c49ebeafeeae81d44617acd3ee2"
   },
   "health": {
     "status": "passed",
-    "observed_at": "2026-09-17T05:24:10Z",
+    "observed_at": "2026-09-17T05:46:52Z",
     "ready_url": "https://192.168.1.119:8443/health/ready",
-    "observed_commit": "faafc28ebcc023f3e60312634a993be4c0708c68",
+    "observed_commit": "ec4f9b9c767fb7b10a28ea3c17eddb363f80bc86",
     "identity_source": "artifact"
   },
   "world_room": {
     "status": "passed",
-    "observed_at": "2026-09-17T05:24:12Z",
-    "smoke_case": "world-room realtime proxy contract verified live on staging host: proxy /health reachable (200), model gpt-realtime-2.1, upstream unconfigured (no OpenAI key) so no audio session was exchanged; app smoke endpoint passed with artifact commit faafc28",
+    "observed_at": "2026-09-17T05:46:54Z",
+    "smoke_case": "world-room realtime proxy contract verified live on staging host: proxy /health reachable (200), model gpt-realtime-2.1, upstream unconfigured (no OpenAI key) so no audio session was exchanged; app smoke endpoint passed with artifact commit ec4f9b9",
     "endpoint_url": "https://192.168.1.119:8443/world-room",
-    "image": "ghcr.io/cvsz/zasi@sha256:1c22ec059aa3a476fff7f33cca0d60923c965b1f910d6db5a723fdff04dc181d"
+    "image": "ghcr.io/cvsz/zasi@sha256:222d243fabb3c774416dd68aaacd63556d944c49ebeafeeae81d44617acd3ee2"
   },
   "canary": {
     "status": "passed",
-    "observed_at": "2026-09-17T05:24:25Z",
+    "observed_at": "2026-09-17T05:46:56Z",
     "endpoint_url": "https://192.168.1.119:8443/health/ready",
-    "image": "ghcr.io/cvsz/zasi@sha256:1c22ec059aa3a476fff7f33cca0d60923c965b1f910d6db5a723fdff04dc181d",
+    "image": "ghcr.io/cvsz/zasi@sha256:222d243fabb3c774416dd68aaacd63556d944c49ebeafeeae81d44617acd3ee2",
     "request_count": 100,
     "error_rate": 0.0,
-    "p95_ms": 175.5
+    "p95_ms": 110.9
   },
   "rollback": {
     "status": "passed",
-    "observed_at": "2026-09-17T05:24:31.080600Z",
+    "observed_at": "2026-09-17T05:47:05.863016Z",
     "ready_url": "https://192.168.1.119:8443/health/ready",
-    "image": "ghcr.io/cvsz/zasi@sha256:43dae08ebb8a81088fa079bfab63a4313deaa36bd18ba8821fc7a4132cf719a4",
+    "image": "ghcr.io/cvsz/zasi@sha256:1c22ec059aa3a476fff7f33cca0d60923c965b1f910d6db5a723fdff04dc181d",
     "inspector": "docker",
-    "observed_image": "ghcr.io/cvsz/zasi@sha256:43dae08ebb8a81088fa079bfab63a4313deaa36bd18ba8821fc7a4132cf719a4",
-    "observed_commit": "cc3cbcc5457f409d7e4f8a42547c6551cb7bbab3",
+    "observed_image": "ghcr.io/cvsz/zasi@sha256:1c22ec059aa3a476fff7f33cca0d60923c965b1f910d6db5a723fdff04dc181d",
+    "observed_commit": "faafc28ebcc023f3e60312634a993be4c0708c68",
     "identity_source": "artifact",
     "world_room_endpoint_url": "https://192.168.1.119:8443/world-room",
-    "world_room_smoke_case": "post-rollback world-room proxy contract re-verified live on staging host: proxy /health reachable (200), model gpt-realtime-2.1, upstream unconfigured; app smoke endpoint passed with artifact commit cc3cbcc",
+    "world_room_smoke_case": "post-rollback world-room proxy contract re-verified live on staging host: proxy /health reachable (200), model gpt-realtime-2.1, upstream unconfigured; app smoke endpoint passed with artifact commit faafc28",
     "world_room_status": "passed",
-    "world_room_image": "ghcr.io/cvsz/zasi@sha256:43dae08ebb8a81088fa079bfab63a4313deaa36bd18ba8821fc7a4132cf719a4",
-    "duration_seconds": 14
+    "world_room_image": "ghcr.io/cvsz/zasi@sha256:1c22ec059aa3a476fff7f33cca0d60923c965b1f910d6db5a723fdff04dc181d",
+    "duration_seconds": 11
   }
 }
