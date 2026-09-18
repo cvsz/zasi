@@ -53,7 +53,8 @@
 - [x] Write/ingest authorization gate requires explicit scope/policy/approval; mutation transport remains absent (PR #124).
 - [x] Required knowledge fails closed while optional knowledge degrades only for normalized transport unavailability; malformed/cross-tenant/provenance failures remain hard failures (PR #125).
 - [x] Accept API/service integration ADR (PR #165 exact head `2ef5d9072d5c9eb2b4fd0b84a1fe1340c41cb384`; signed merge `6762e442df18709772d10b792e39c9286a31ec02`).
-- [ ] Inventory actual ARIN knowledge consumers/direct zknowbase call sites and prove consumer migration/rollback before `ARIN-MIG-0008` can become canonical.
+- [x] Inventory actual ARIN knowledge consumers/direct zknowbase call sites (PR #168; no separate production consumer existed at inventory time).
+- [ ] Verify the bounded server-side runtime consumer in `backend/arin/knowledge_runtime.py` with exact-head CI and rollback/compatibility evidence before `ARIN-MIG-0008` can become canonical. The candidate keeps service credentials server-held, rejects tenant mismatch before I/O, preserves session/provenance, keeps required reads fail-closed and permits optional degradation only for normalized unavailability.
 
 ### Task 6: Tool/MCP execution boundary — `verified bounded foundation; live endpoint disabled`
 
