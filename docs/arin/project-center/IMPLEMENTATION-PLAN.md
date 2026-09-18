@@ -54,7 +54,8 @@
 - [x] Required knowledge fails closed while optional knowledge degrades only for normalized transport unavailability; malformed/cross-tenant/provenance failures remain hard failures (PR #125).
 - [x] Accept API/service integration ADR (PR #165 exact head `2ef5d9072d5c9eb2b4fd0b84a1fe1340c41cb384`; signed merge `6762e442df18709772d10b792e39c9286a31ec02`).
 - [x] Inventory actual ARIN knowledge consumers/direct zknowbase call sites (PR #168; no separate production consumer existed at inventory time).
-- [ ] Verify the bounded server-side runtime consumer in `backend/arin/knowledge_runtime.py` with exact-head CI and rollback/compatibility evidence before `ARIN-MIG-0008` can become canonical. The candidate keeps service credentials server-held, rejects tenant mismatch before I/O, preserves session/provenance, keeps required reads fail-closed and permits optional degradation only for normalized unavailability.
+- [x] Verify the bounded server-side runtime consumer in `backend/arin/knowledge_runtime.py` (PR #169 exact head `c6b2761dc9ca14e438ea7fb053ee4f8a70db6444` passed all nine required gates; signed merge `bd939aa95caeaf63783678b10d824410a03bbd5e`). Service credentials remain server-held, tenant mismatch fails before I/O, session/provenance is preserved, required reads fail closed and optional degradation is limited to normalized unavailability.
+- [ ] Verify additive compatibility/rollback regressions proving the pre-existing read contract remains usable without data/schema/write migration before `ARIN-MIG-0008` can become canonical.
 
 ### Task 6: Tool/MCP execution boundary — `verified bounded foundation; live endpoint disabled`
 
