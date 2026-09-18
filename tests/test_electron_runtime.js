@@ -156,6 +156,31 @@ function testPackagedStateRejectsRelativeOverrides() {
   );
 }
 
+function testPackagedStateRejectsAbsoluteOverridesOutsideUserData() {
+  const userDataPath = fs.mkdtempSync(path.join(os.tmpdir(), 'zasi-electron-user-data-'));
+  const outsidePath = fs.mkdtempSync(path.join(os.tmpdir(), 'zasi-electron-outside-'));
+  assert.throws(
+    () => applyPackagedStateDefaults({ ZASI_DATABASE_PATH: path.join(outsidePath, 'state.db') }, userDataPath),
+    (error) => error && error.code === 'PACKAGED_STATE_PATH_INVALID',
+  );
+  assert.throws(
+    () => applyPackagedStateDefaults({ ZASI_ARTIFACT_DIRECTORY: outsidePath }, userDataPath),
+    (error) => error && error.code === 'PACKAGED_STATE_PATH_INVALID',
+  );
+}
+
+function testPackagedStateAcceptsAbsoluteOverridesInsideUserData() {
+  const userDataPath = fs.mkdtempSync(path.join(os.tmpdir(), 'zasi-electron-user-data-'));
+  const databasePath = path.join(userDataPath, 'custom', 'state.db');
+  const artifactPath = path.join(userDataPath, 'custom', 'artifacts');
+  const launchEnv = applyPackagedStateDefaults(
+    { ZASI_DATABASE_PATH: databasePath, ZASI_ARTIFACT_DIRECTORY: artifactPath },
+    userDataPath,
+  );
+  assert.strictEqual(launchEnv.ZASI_DATABASE_PATH, databasePath);
+  assert.strictEqual(launchEnv.ZASI_ARTIFACT_DIRECTORY, artifactPath);
+}
+
 testSourceCheckoutUsesConfiguredPython();
 testPackagedCheckoutFailsWithoutBundledRuntime();
 testPackagedCheckoutResolvesOnlyCompleteBundledResources();
@@ -166,4 +191,6 @@ testPackagedCheckoutRejectsAbsolutePythonHome();
 testPackagedCheckoutRejectsRuntimeHomeSymlinkOutsideBundle();
 testPackagedStateDefaultsUseWritableUserData();
 testPackagedStateRejectsRelativeOverrides();
+testPackagedStateRejectsAbsoluteOverridesOutsideUserData();
+testPackagedStateAcceptsAbsoluteOverridesInsideUserData();
 console.log('electron runtime tests passed');
