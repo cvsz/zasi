@@ -72,7 +72,7 @@
 - [x] Define short-lived consent-bound voice/perception session tickets and retention/deletion rules. PR #173 exact head `a4218750961d440c3518b1bb681ac36cc7f122e7` merged as `f8edbfe2a6c76616703f79d5978c9aec74b4030c`; ticket issuance requires explicit consent, tenant/session binding, TTL <= 300 seconds, opt-in durable retention, and grants no action/actuator authority. ZARVIS remains reference/API-contract input only; no source is copied.
 - [ ] Implement local-first STT/TTS before optional cloud providers.
 - [ ] Add camera/vision evidence contracts with no action/actuator authority.
-- [ ] Test interruption, disconnect, deletion, unauthenticated access, cross-session and cross-tenant isolation. Revocation/disconnect fail-closed lifecycle regressions are proposed on `arin/task7-ticket-lifecycle`; keep this item unchecked until exact-head CI and merge, and keep durable-content deletion as a separate explicit policy/transport slice.
+- [x] Test interruption, disconnect, deletion, unauthenticated access, cross-session and cross-tenant isolation. PR #174 exact head `7a197738c129bb4fe02688bea58e3cbe39446ce6` merged as `2408d04471b849dd6216cb0201437da8ed8c3002`, verifying fail-closed revocation/disconnect lifecycle and tenant/session isolation. PR #175 exact head `c2cadae14e9638bad4ce32ee8c13981d886fa4bf` passed all nine required workflow groups and merged signed as `2065bf7ea138718bfbd4469b5f659207a51788a5`, verifying authenticated durable-content deletion, cross-tenant/cross-session denial, repeated-deletion denial, timestamp validation and tombstone state without raw perception payload or actuator authority.
 
 ### Task 8: Cross-platform desktop and Web/PWA — `incomplete`
 
