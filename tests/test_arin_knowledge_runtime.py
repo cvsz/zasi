@@ -127,3 +127,51 @@ def test_runtime_context_requires_authenticated_tenant_and_session():
         KnowledgeRuntimeContext(tenant_id=" ", session_id="session")
     with pytest.raises(KnowledgeContractError, match="session context"):
         KnowledgeRuntimeContext(tenant_id="tenant-a", session_id=" ")
+
+
+def test_runtime_consumer_is_compatible_with_existing_read_contract():
+    requests = []
+
+    def handler(request):
+        requests.append((request.method, request.url.path, request.headers["X-ZWorkforce-Tenant-ID"]))
+        return httpx.Response(200, json=_ok_payload(), request=request)
+
+    direct_client = _client(handler)
+    direct_payload = direct_client.query("compatibility query")
+    runtime_result = KnowledgeRuntimeConsumer(_client(handler)).query(
+        KnowledgeRuntimeContext(tenant_id="tenant-a", session_id="compat-session"),
+        "compatibility query",
+        requirement=KnowledgeRequirement.REQUIRED,
+    )
+
+    assert direct_payload == runtime_result.payload
+    assert runtime_result.evidence == direct_client.evidence(direct_payload)
+    assert requests[0] == requests[1]
+
+
+def test_runtime_consumer_rollback_requires_no_data_or_transport_migration():
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(200, json=_ok_payload(), request=request)
+
+    client = _client(handler)
+    consumer = KnowledgeRuntimeConsumer(client)
+    runtime_result = consumer.query(
+        KnowledgeRuntimeContext(tenant_id="tenant-a", session_id="rollback-session"),
+        "rollback query",
+        requirement=KnowledgeRequirement.REQUIRED,
+    )
+
+    # Rollback is removal of the additive runtime wrapper: the pre-existing read
+    # contract remains usable with the same server-held credential, tenant scope,
+    # endpoint and response schema. No data/schema/write migration is involved.
+    direct_payload = client.query("rollback query")
+
+    assert direct_payload == runtime_result.payload
+    assert client.evidence(direct_payload) == runtime_result.evidence
+    assert len(requests) == 2
+    assert all(request.method == "POST" for request in requests)
+    assert all(request.url.path == "/api/v1/rag/query" for request in requests)
+    assert all(request.headers["X-ZWorkforce-Tenant-ID"] == "tenant-a" for request in requests)
