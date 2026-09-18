@@ -69,7 +69,7 @@
 
 ### Task 7: Voice and perception — `incomplete`
 
-- [ ] Define short-lived consent-bound voice/perception session tickets and retention/deletion rules.
+- [ ] Define short-lived consent-bound voice/perception session tickets and retention/deletion rules. Bounded ticket contract and negative tests are proposed on `arin/task7-session-ticket-contract`; keep unchecked until exact-head CI and merge. ZARVIS is reference/API-contract input only; no source is copied.
 - [ ] Implement local-first STT/TTS before optional cloud providers.
 - [ ] Add camera/vision evidence contracts with no action/actuator authority.
 - [ ] Test interruption, disconnect, deletion, unauthenticated access, cross-session and cross-tenant isolation.
