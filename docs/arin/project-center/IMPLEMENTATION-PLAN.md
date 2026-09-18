@@ -69,10 +69,10 @@
 
 ### Task 7: Voice and perception — `incomplete`
 
-- [ ] Define short-lived consent-bound voice/perception session tickets and retention/deletion rules. Bounded ticket contract and negative tests are proposed on `arin/task7-session-ticket-contract`; keep unchecked until exact-head CI and merge. ZARVIS is reference/API-contract input only; no source is copied.
+- [x] Define short-lived consent-bound voice/perception session tickets and retention/deletion rules. PR #173 exact head `a4218750961d440c3518b1bb681ac36cc7f122e7` merged as `f8edbfe2a6c76616703f79d5978c9aec74b4030c`; ticket issuance requires explicit consent, tenant/session binding, TTL <= 300 seconds, opt-in durable retention, and grants no action/actuator authority. ZARVIS remains reference/API-contract input only; no source is copied.
 - [ ] Implement local-first STT/TTS before optional cloud providers.
 - [ ] Add camera/vision evidence contracts with no action/actuator authority.
-- [ ] Test interruption, disconnect, deletion, unauthenticated access, cross-session and cross-tenant isolation.
+- [ ] Test interruption, disconnect, deletion, unauthenticated access, cross-session and cross-tenant isolation. Revocation/disconnect fail-closed lifecycle regressions are proposed on `arin/task7-ticket-lifecycle`; keep this item unchecked until exact-head CI and merge, and keep durable-content deletion as a separate explicit policy/transport slice.
 
 ### Task 8: Cross-platform desktop and Web/PWA — `incomplete`
 
