@@ -65,6 +65,9 @@ jobs:
             | xargs -0 -r jq -s '.' > "$RULESET_DIR/expanded.json"
           test -s "$RULESET_DIR/expanded.json" || printf '[]\n' > "$RULESET_DIR/expanded.json"
 
+          python scripts/world_room_realtime_evidence.py \
+            --evidence evidence/staging/latest.json
+
           python scripts/production_go_gate.py \
             --evidence evidence/staging/latest.json \
             --expected-commit "$RELEASE_COMMIT" \

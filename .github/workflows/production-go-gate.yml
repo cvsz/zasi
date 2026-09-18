@@ -20,7 +20,9 @@ jobs:
         with:
           python-version: "3.11"
       - name: Run production GO gate tests
-        run: python -m unittest tests.test_production_go_gate -v
+        run: |
+          python -m unittest tests.test_production_go_gate -v
+          python -m unittest tests.test_world_room_realtime_evidence -v
       - name: Verify validator rejects missing repository governance
         run: |
           set -euo pipefail
