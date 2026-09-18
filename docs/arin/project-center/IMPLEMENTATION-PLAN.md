@@ -70,7 +70,7 @@
 ### Task 7: Voice and perception — `incomplete`
 
 - [x] Define short-lived consent-bound voice/perception session tickets and retention/deletion rules. PR #173 exact head `a4218750961d440c3518b1bb681ac36cc7f122e7` merged as `f8edbfe2a6c76616703f79d5978c9aec74b4030c`; ticket issuance requires explicit consent, tenant/session binding, TTL <= 300 seconds, opt-in durable retention, and grants no action/actuator authority. ZARVIS remains reference/API-contract input only; no source is copied.
-- [ ] Implement local-first STT/TTS before optional cloud providers.
+- [x] Implement local-first STT/TTS before optional cloud providers. PR #177 exact head `2cacd152f6061d2612ca04d12a794ef02a59f910` passed all nine required workflow groups and merged as `c091de6ab2521200da4a0354352e858f7a502597`; the ARIN-owned boundary requires an active tenant/session-bound VOICE ticket, fails closed when a local engine is unavailable, has no implicit cloud fallback, and grants no tool/device/actuator authority.
 - [ ] Add camera/vision evidence contracts with no action/actuator authority.
 - [x] Test interruption, disconnect, deletion, unauthenticated access, cross-session and cross-tenant isolation. PR #174 exact head `7a197738c129bb4fe02688bea58e3cbe39446ce6` merged as `2408d04471b849dd6216cb0201437da8ed8c3002`, verifying fail-closed revocation/disconnect lifecycle and tenant/session isolation. PR #175 exact head `c2cadae14e9638bad4ce32ee8c13981d886fa4bf` passed all nine required workflow groups and merged signed as `2065bf7ea138718bfbd4469b5f659207a51788a5`, verifying authenticated durable-content deletion, cross-tenant/cross-session denial, repeated-deletion denial, timestamp validation and tombstone state without raw perception payload or actuator authority.
 
