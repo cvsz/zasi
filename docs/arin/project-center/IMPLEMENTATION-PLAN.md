@@ -45,7 +45,7 @@
 - [x] Generate OpenAPI/client artifacts using repository conventions (PR #141 exact head `1caebc064cbd644770ae5bc2503fad6c5c52415a` passed all nine required gates; `ARIN-MIG-0020` verified).
 - [x] Add backward-compatibility tests for supported versions (`tests/test_arin_contract_compatibility.py`; PR #145 exact head `c5114c33076328cc94d0f6aee2c005fae76eafae` passed required gates and merged as signed commit `23a57fbe7fd2c1b3e1d5c7c40284b53e796a7aac`; `ARIN-MIG-0021` verified).
 
-### Task 5: zknowbase integration — `verified bounded foundation; ADR accepted; canonical promotion incomplete`
+### Task 5: zknowbase integration — `verified bounded foundation; canonical decision pending exact-head evidence`
 
 - [x] Contract foundation and fake/local boundary tests established (PR #115).
 - [x] Read-only search/query transport uses scoped credentials and bounded timeouts (PR #122).
@@ -55,7 +55,8 @@
 - [x] Accept API/service integration ADR (PR #165 exact head `2ef5d9072d5c9eb2b4fd0b84a1fe1340c41cb384`; signed merge `6762e442df18709772d10b792e39c9286a31ec02`).
 - [x] Inventory actual ARIN knowledge consumers/direct zknowbase call sites (PR #168; no separate production consumer existed at inventory time).
 - [x] Verify the bounded server-side runtime consumer in `backend/arin/knowledge_runtime.py` (PR #169 exact head `c6b2761dc9ca14e438ea7fb053ee4f8a70db6444` passed all nine required gates; signed merge `bd939aa95caeaf63783678b10d824410a03bbd5e`). Service credentials remain server-held, tenant mismatch fails before I/O, session/provenance is preserved, required reads fail closed and optional degradation is limited to normalized unavailability.
-- [ ] Verify additive compatibility/rollback regressions proving the pre-existing read contract remains usable without data/schema/write migration before `ARIN-MIG-0008` can become canonical.
+- [x] Verify additive compatibility/rollback regressions proving the pre-existing read contract remains usable without data/schema/write migration (PR #170 exact head `37fa1d3258ccc0cc462d144d3572fe344f19f1cb` passed all nine required gates; signed merge `38b27696d9d5feaaf6d8a8b85e1540e4f9bb16e8`).
+- [ ] Merge the explicit prior-path decision after exact-head CI: `knowledge_runtime.py` is canonical for new ARIN runtime consumers; the direct `KnowledgeClient` read path is rollback-only compatibility with no new feature/authority growth. Then reconcile `ARIN-MIG-0008` to `canonical`.
 
 ### Task 6: Tool/MCP execution boundary — `verified bounded foundation; live endpoint disabled`
 
