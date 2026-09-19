@@ -154,9 +154,14 @@ async function run() {
     assert.strictEqual(overviewEvidence.hasVisibleFocus, true, 'focused content must expose a visible focus treatment');
     assert.strictEqual(overviewEvidence.horizontalOverflow, false, 'narrow viewport must not introduce page-level horizontal overflow');
 
-    // The conversation landmark belongs to the J.A.R.V.I.S. route, so exercise the
-    // actual router rather than asserting mutually exclusive route content at once.
-    await window.webContents.executeJavaScript(`location.assign('/jarvis')`);
+    // Exercise the BrowserRouter through its rendered NavLink. A hard location
+    // reload would discard the intentionally in-memory authenticated session and
+    // test login recovery instead of the J.A.R.V.I.S. route contract.
+    await window.webContents.executeJavaScript(`(() => {
+      const jarvisLink = document.querySelector('a[href="/jarvis"]');
+      if (!jarvisLink) throw new Error('J.A.R.V.I.S. navigation link is unavailable');
+      jarvisLink.click();
+    })()`);
     await waitForSelector(window, '[role="log"]');
     const conversationLog = await window.webContents.executeJavaScript(`!!document.querySelector('[role="log"]')`);
     assert.strictEqual(conversationLog, true, 'conversation log landmark must render on the J.A.R.V.I.S. route');
