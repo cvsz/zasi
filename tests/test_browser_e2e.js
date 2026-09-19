@@ -55,13 +55,13 @@ async function run() {
 
     console.log('ARIN Chromium browser E2E contract checks passed');
   } finally {
-    window.destroy();
-    await app.quit();
+    if (!window.isDestroyed()) window.destroy();
   }
 }
 
-run().catch(async (error) => {
-  console.error(error);
-  try { await app.quit(); } catch {}
-  process.exitCode = 1;
-});
+run()
+  .then(() => app.quit())
+  .catch((error) => {
+    console.error(error);
+    app.exit(1);
+  });
