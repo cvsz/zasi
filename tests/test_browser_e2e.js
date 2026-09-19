@@ -1,6 +1,43 @@
 const assert = require('assert');
+const fs = require('fs');
+const http = require('http');
 const path = require('path');
 const { app, BrowserWindow } = require('electron');
+
+const DIST_ROOT = path.resolve(__dirname, '../web/dist');
+
+function startStaticServer() {
+  const server = http.createServer((request, response) => {
+    const requestPath = new URL(request.url, 'http://127.0.0.1').pathname;
+    const relativePath = requestPath === '/' ? 'index.html' : requestPath.replace(/^\/+/, '');
+    const candidate = path.resolve(DIST_ROOT, relativePath);
+    const relativeCandidate = path.relative(DIST_ROOT, candidate);
+    if (relativeCandidate.startsWith('..') || path.isAbsolute(relativeCandidate)) {
+      response.writeHead(403).end('forbidden');
+      return;
+    }
+    fs.readFile(candidate, (error, body) => {
+      if (error) {
+        response.writeHead(error.code === 'ENOENT' ? 404 : 500).end('not found');
+        return;
+      }
+      const extension = path.extname(candidate);
+      const contentType = extension === '.html' ? 'text/html; charset=utf-8'
+        : extension === '.js' ? 'text/javascript; charset=utf-8'
+          : extension === '.css' ? 'text/css; charset=utf-8'
+            : 'application/octet-stream';
+      response.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'no-store' });
+      response.end(body);
+    });
+  });
+  return new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      resolve({ server, url: `http://127.0.0.1:${address.port}/` });
+    });
+  });
+}
 
 async function waitForCockpitRender(window, timeoutMs = 15000) {
   const deadline = Date.now() + timeoutMs;
@@ -21,6 +58,7 @@ async function waitForCockpitRender(window, timeoutMs = 15000) {
 
 async function run() {
   await app.whenReady();
+  const { server, url } = await startStaticServer();
 
   const window = new BrowserWindow({
     show: false,
@@ -39,7 +77,7 @@ async function run() {
   });
 
   try {
-    await window.loadFile(path.resolve(__dirname, '../web/dist/index.html'));
+    await window.loadURL(url);
     await waitForCockpitRender(window);
 
     const evidence = await window.webContents.executeJavaScript(`(() => {
@@ -79,6 +117,7 @@ async function run() {
     console.log('ARIN Chromium browser E2E contract checks passed');
   } finally {
     if (!window.isDestroyed()) window.destroy();
+    await new Promise((resolve) => server.close(resolve));
   }
 }
 
