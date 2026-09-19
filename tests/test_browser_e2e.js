@@ -2,6 +2,18 @@ const assert = require('assert');
 const path = require('path');
 const { app, BrowserWindow } = require('electron');
 
+async function waitForCockpitRender(window, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const rendered = await window.webContents.executeJavaScript(
+      `!!document.querySelector('[aria-label="Primary navigation"]')`,
+    );
+    if (rendered) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error('cockpit did not render primary navigation before E2E timeout');
+}
+
 async function run() {
   await app.whenReady();
 
@@ -19,6 +31,7 @@ async function run() {
 
   try {
     await window.loadFile(path.resolve(__dirname, '../web/dist/index.html'));
+    await waitForCockpitRender(window);
 
     const evidence = await window.webContents.executeJavaScript(`(() => {
       const primaryNav = document.querySelector('[aria-label="Primary navigation"]');
