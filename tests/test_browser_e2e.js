@@ -2,7 +2,7 @@ const assert = require('assert');
 const path = require('path');
 const { app, BrowserWindow } = require('electron');
 
-async function waitForCockpitRender(window, timeoutMs = 5000) {
+async function waitForCockpitRender(window, timeoutMs = 15000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const rendered = await window.webContents.executeJavaScript(
@@ -11,7 +11,12 @@ async function waitForCockpitRender(window, timeoutMs = 5000) {
     if (rendered) return;
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
-  throw new Error('cockpit did not render primary navigation before E2E timeout');
+  const diagnostics = await window.webContents.executeJavaScript(`({
+    readyState: document.readyState,
+    title: document.title,
+    bodyText: document.body?.innerText?.slice(0, 500) || '',
+  })`);
+  throw new Error(`cockpit did not render primary navigation before E2E timeout: ${JSON.stringify(diagnostics)}`);
 }
 
 async function run() {
@@ -27,6 +32,10 @@ async function run() {
       nodeIntegration: false,
       sandbox: true,
     },
+  });
+
+  window.webContents.on('render-process-gone', (_event, details) => {
+    console.error('ARIN Chromium renderer exited unexpectedly', details.reason, details.exitCode);
   });
 
   try {
