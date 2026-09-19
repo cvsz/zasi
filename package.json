@@ -14,7 +14,7 @@
     "world-room:dev": "vite --config vite.world-room.config.js",
     "world-room:build": "vite build --config vite.world-room.config.js",
     "test:world-room": "node --test tests/test_world_room_static.mjs",
-    "test:browser-e2e": "npm run build && xvfb-run -a electron --no-sandbox tests/test_browser_e2e.js",
+    "test:browser-e2e": "npm run build && xvfb-run -a --server-args='-screen 0 1280x1024x24' electron --no-sandbox --disable-gpu --disable-dev-shm-usage tests/test_browser_e2e.js",
     "test": "node tests/test_components.js && node tests/test_web_secret_persistence.js && node tests/test_web_responsive_accessibility.js && node --test tests/test_npm_bulk_audit.js && npm run test:world-room && node tests/test_electron_runtime.js && node tests/test_electron_integration.js && node tests/test_electron_packaging.js && npm run test:browser-e2e"
   },
   "engines": {
