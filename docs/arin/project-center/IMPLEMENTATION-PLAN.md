@@ -76,7 +76,7 @@
 
 ### Task 8: Cross-platform desktop and Web/PWA — `incomplete`
 
-- [ ] Preserve packaged-runtime validation and writable-state protections.
+- [x] Preserve packaged-runtime validation and writable-state protections. PR #182 exact head `99c4a2aa4a4bd6daa498e8553f825f54f1479a30` passed all nine required workflow groups and merged as `98f4360a1e286b223518b3e55358b354a97e23ae`; packaged DB/artifact overrides must remain absolute and contained beneath Electron `userData`, while existing bundled-runtime validation and source-checkout behavior remain intact.
 - [ ] Add ARIN onboarding, providers, voice/vision, knowledge, devices and telemetry surfaces incrementally.
 - [ ] Ensure Web/PWA never persists provider/service secrets client-side.
 - [ ] Add responsive/accessibility/E2E tests.
