@@ -53,6 +53,10 @@ jobs:
       - name: Install and build bundled cockpit
         run: |
           npm ci --ignore-scripts --no-audit
+          # npm ci intentionally suppresses lifecycle scripts. Browser E2E needs the
+          # already lockfile-pinned Electron runtime, so provision only that known
+          # package instead of enabling arbitrary dependency install scripts.
+          node node_modules/electron/install.js
           npm run typecheck
           npm run build
           npm run world-room:build
