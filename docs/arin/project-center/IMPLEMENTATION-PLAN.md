@@ -78,7 +78,7 @@
 
 - [x] Preserve packaged-runtime validation and writable-state protections. PR #182 exact head `99c4a2aa4a4bd6daa498e8553f825f54f1479a30` passed all nine required workflow groups and merged as `98f4360a1e286b223518b3e55358b354a97e23ae`; packaged DB/artifact overrides must remain absolute and contained beneath Electron `userData`, while existing bundled-runtime validation and source-checkout behavior remain intact.
 - [ ] Add ARIN onboarding, providers, voice/vision, knowledge, devices and telemetry surfaces incrementally.
-- [ ] Ensure Web/PWA never persists provider/service secrets client-side.
+- [x] Ensure Web/PWA never persists provider/service secrets client-side. PR #184 exact head `08cf60ba8d1f3291a89e7a99bff2b952b2ec3b08` passed all nine required workflow groups and merged signed as `a2724f09d0ceaab357b5cd3ad2dbc3409a9ded8a`; the regression allowlists browser persistence to the non-secret theme preference, rejects credential-like local/session storage writes and ungoverned IndexedDB persistence, preserves password-typed credential input, and adds no device/tool/actuator authority.
 - [ ] Add responsive/accessibility/E2E tests.
 
 ### Task 9: Mobile client ADR and implementation — `incomplete`
