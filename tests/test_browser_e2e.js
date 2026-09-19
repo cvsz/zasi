@@ -9,6 +9,7 @@ async function run() {
     show: false,
     width: 390,
     height: 844,
+    useContentSize: true,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
