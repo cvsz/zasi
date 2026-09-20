@@ -14,10 +14,6 @@ function sendJson(response, status, payload) {
 function startStaticServer() {
   const server = http.createServer((request, response) => {
     const requestPath = new URL(request.url, 'http://127.0.0.1').pathname;
-
-    // The production cockpit is authenticated by design. Keep this E2E hermetic by
-    // providing only the minimum loopback API contract required to enter the shell;
-    // no production auth bypass or reusable credential is introduced.
     if (requestPath === '/api/v2/sessions' && request.method === 'POST') {
       sendJson(response, 200, { access_token: 'e2e-loopback-token', tenant_id: 'e2e-tenant', device_id: 'e2e-device' });
       return;
@@ -72,34 +68,23 @@ function startStaticServer() {
 async function waitForSelector(window, selector, timeoutMs = 15000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const rendered = await window.webContents.executeJavaScript(
-      `!!document.querySelector(${JSON.stringify(selector)})`,
-    );
+    const rendered = await window.webContents.executeJavaScript(`!!document.querySelector(${JSON.stringify(selector)})`);
     if (rendered) return;
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
-  const diagnostics = await window.webContents.executeJavaScript(`({
-    readyState: document.readyState,
-    title: document.title,
-    bodyText: document.body?.innerText?.slice(0, 500) || '',
-  })`);
+  const diagnostics = await window.webContents.executeJavaScript(`({ readyState: document.readyState, title: document.title, bodyText: document.body?.innerText?.slice(0, 500) || '' })`);
   throw new Error(`cockpit did not render ${selector} before E2E timeout: ${JSON.stringify(diagnostics)}`);
 }
 
 async function run() {
   await app.whenReady();
   const { server, url } = await startStaticServer();
-
   const window = new BrowserWindow({
     show: false,
     width: 390,
     height: 844,
     useContentSize: true,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-    },
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
 
   window.webContents.on('render-process-gone', (_event, details) => {
@@ -119,7 +104,6 @@ async function run() {
     })()`);
     await waitForSelector(window, '[aria-label="Primary navigation"]');
     await waitForSelector(window, '[role="img"][aria-label="Capability registry visualization"]');
-
     await window.webContents.executeJavaScript(`document.querySelector('[aria-label="Open command palette"]').click()`);
     await waitForSelector(window, '[aria-label="Search governed views"]');
 
@@ -130,12 +114,7 @@ async function run() {
       if (!search) throw new Error('governed-view search is unavailable for focus evidence');
       const styleSnapshot = (element) => {
         const style = getComputedStyle(element);
-        return {
-          outlineStyle: style.outlineStyle,
-          outlineWidth: style.outlineWidth,
-          outlineColor: style.outlineColor,
-          boxShadow: style.boxShadow,
-        };
+        return { outlineStyle: style.outlineStyle, outlineWidth: style.outlineWidth, outlineColor: style.outlineColor, boxShadow: style.boxShadow };
       };
       search.blur();
       const unfocusedStyle = styleSnapshot(search);
@@ -148,16 +127,14 @@ async function run() {
         focusedStyle.outlineColor !== unfocusedStyle.outlineColor ||
         focusedStyle.boxShadow !== unfocusedStyle.boxShadow
       );
-      return {
-        width: innerWidth,
-        primaryNav: !!primaryNav,
-        search: !!search,
-        visualization: !!visualization,
-        focused,
-        hasFocusSpecificVisual,
-        horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
-      };
+      return { width: innerWidth, primaryNav: !!primaryNav, search: !!search, visualization: !!visualization, focused, hasFocusSpecificVisual, horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1, unfocusedStyle, focusedStyle };
     })()`);
+
+    // Keep exact-head failures attributable without weakening or skipping any assertion.
+    console.log(`ARIN Chromium overview evidence: ${JSON.stringify(overviewEvidence)}`);
+    if (process.env.GITHUB_ACTIONS === 'true') {
+      console.log(`::notice title=ARIN Chromium overview evidence::${JSON.stringify(overviewEvidence)}`);
+    }
 
     assert.strictEqual(overviewEvidence.width, 390, 'browser must execute at the narrow mobile viewport');
     assert.strictEqual(overviewEvidence.primaryNav, true, 'primary navigation must render with an accessible name');
@@ -167,9 +144,6 @@ async function run() {
     assert.strictEqual(overviewEvidence.hasFocusSpecificVisual, true, 'focused content must expose a focus-specific visual treatment');
     assert.strictEqual(overviewEvidence.horizontalOverflow, false, 'narrow viewport must not introduce page-level horizontal overflow');
 
-    // Exercise the BrowserRouter through its rendered NavLink. A hard location
-    // reload would discard the intentionally in-memory authenticated session and
-    // test login recovery instead of the J.A.R.V.I.S. route contract.
     await window.webContents.executeJavaScript(`(() => {
       const jarvisLink = document.querySelector('a[href="/jarvis"]');
       if (!jarvisLink) throw new Error('J.A.R.V.I.S. navigation link is unavailable');
@@ -178,7 +152,6 @@ async function run() {
     await waitForSelector(window, '[role="log"]');
     const conversationLog = await window.webContents.executeJavaScript(`!!document.querySelector('[role="log"]')`);
     assert.strictEqual(conversationLog, true, 'conversation log landmark must render on the J.A.R.V.I.S. route');
-
     console.log('ARIN Chromium browser E2E contract checks passed');
   } finally {
     if (!window.isDestroyed()) window.destroy();
@@ -186,9 +159,4 @@ async function run() {
   }
 }
 
-run()
-  .then(() => app.quit())
-  .catch((error) => {
-    console.error(error);
-    app.exit(1);
-  });
+run().then(() => app.quit()).catch((error) => { console.error(error); app.exit(1); });
