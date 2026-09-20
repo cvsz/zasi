@@ -54,4 +54,9 @@ if (result.error) {
   console.error(`ARIN browser E2E launcher failed: ${result.error.message}`);
   process.exit(1);
 }
+if (result.status !== 0) {
+  console.error(
+    `ARIN browser E2E launcher exited unsuccessfully: status=${String(result.status)} signal=${String(result.signal)}`,
+  );
+}
 process.exit(result.status ?? 1);
