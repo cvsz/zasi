@@ -127,13 +127,26 @@ async function run() {
       const primaryNav = document.querySelector('[aria-label="Primary navigation"]');
       const search = document.querySelector('[aria-label="Search governed views"]');
       const visualization = document.querySelector('[role="img"][aria-label="Capability registry visualization"]');
-      const interactive = document.querySelector('button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
-      if (interactive) interactive.focus();
-      const focused = document.activeElement === interactive;
-      const focusStyle = interactive ? getComputedStyle(interactive) : null;
-      const hasVisibleFocus = !!focusStyle && (
-        focusStyle.outlineStyle !== 'none' ||
-        focusStyle.boxShadow !== 'none'
+      if (!search) throw new Error('governed-view search is unavailable for focus evidence');
+      const styleSnapshot = (element) => {
+        const style = getComputedStyle(element);
+        return {
+          outlineStyle: style.outlineStyle,
+          outlineWidth: style.outlineWidth,
+          outlineColor: style.outlineColor,
+          boxShadow: style.boxShadow,
+        };
+      };
+      search.blur();
+      const unfocusedStyle = styleSnapshot(search);
+      search.focus();
+      const focused = document.activeElement === search;
+      const focusedStyle = styleSnapshot(search);
+      const hasFocusSpecificVisual = focused && (
+        focusedStyle.outlineStyle !== unfocusedStyle.outlineStyle ||
+        focusedStyle.outlineWidth !== unfocusedStyle.outlineWidth ||
+        focusedStyle.outlineColor !== unfocusedStyle.outlineColor ||
+        focusedStyle.boxShadow !== unfocusedStyle.boxShadow
       );
       return {
         width: innerWidth,
@@ -141,7 +154,7 @@ async function run() {
         search: !!search,
         visualization: !!visualization,
         focused,
-        hasVisibleFocus,
+        hasFocusSpecificVisual,
         horizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
       };
     })()`);
@@ -151,7 +164,7 @@ async function run() {
     assert.strictEqual(overviewEvidence.search, true, 'governed-view search must render with an accessible name');
     assert.strictEqual(overviewEvidence.visualization, true, 'capability visualization must expose its text alternative');
     assert.strictEqual(overviewEvidence.focused, true, 'keyboard-focusable content must accept focus');
-    assert.strictEqual(overviewEvidence.hasVisibleFocus, true, 'focused content must expose a visible focus treatment');
+    assert.strictEqual(overviewEvidence.hasFocusSpecificVisual, true, 'focused content must expose a focus-specific visual treatment');
     assert.strictEqual(overviewEvidence.horizontalOverflow, false, 'narrow viewport must not introduce page-level horizontal overflow');
 
     // Exercise the BrowserRouter through its rendered NavLink. A hard location
