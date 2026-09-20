@@ -96,7 +96,19 @@ jobs:
           node tests/test_electron_integration.js
           node tests/test_electron_packaging.js
       - name: Run ARIN Chromium browser E2E evidence
-        run: npm run test:browser-e2e
+        shell: bash
+        run: |
+          set +e
+          npm run test:browser-e2e 2>&1 | tee "$RUNNER_TEMP/arin-browser-e2e.log"
+          status=${PIPESTATUS[0]}
+          set -e
+          {
+            echo "### ARIN Chromium browser E2E"
+            echo '```text'
+            tail -n 120 "$RUNNER_TEMP/arin-browser-e2e.log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
 
   build:
     name: Build Distribution
