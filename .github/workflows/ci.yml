@@ -79,8 +79,24 @@ jobs:
           coverage report --fail-under=60
           COVERAGE_PCT=$(coverage report | tail -1 | awk '{print $NF}')
           echo "### Coverage: $COVERAGE_PCT" >> $GITHUB_STEP_SUMMARY
-      - name: Run cockpit, World Room, and Electron boundary tests
-        run: npm test
+      # Keep the canonical npm test contract intact for local/release callers, but
+      # execute its existing components as named CI steps so a boundary regression
+      # is attributable without weakening or skipping any test.
+      - name: Run cockpit static boundary tests
+        run: |
+          node tests/test_components.js
+          node tests/test_web_secret_persistence.js
+          node tests/test_web_responsive_accessibility.js
+          node --test tests/test_npm_bulk_audit.js
+      - name: Run World Room boundary tests
+        run: npm run test:world-room
+      - name: Run Electron boundary tests
+        run: |
+          node tests/test_electron_runtime.js
+          node tests/test_electron_integration.js
+          node tests/test_electron_packaging.js
+      - name: Run ARIN Chromium browser E2E evidence
+        run: npm run test:browser-e2e
 
   build:
     name: Build Distribution
@@ -92,8 +108,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with: { python-version: "3.11" }
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with: { node-version: "22.14.0" }
       - name: Build bundled cockpit before packaging
         run: |
           npm ci --ignore-scripts --no-audit
