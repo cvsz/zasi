@@ -25,13 +25,30 @@ class ProviderSurfaceTests(unittest.TestCase):
         end = start + 1 + next_page.start()
         cls.surface = cls.source[start:end]
 
-    def test_surface_uses_authenticated_session(self) -> None:
+    def test_surface_binds_model_status_to_authenticated_session(self) -> None:
         self.assertIn("useAuth()", self.surface)
-        self.assertIn("session?.access_token", self.surface)
+        token_match = re.search(
+            r"const\s+(\w+)\s*=\s*session\?\.access_token\s*\|\|\s*null",
+            self.surface,
+        )
+        self.assertIsNotNone(token_match, "ModelsPage must derive a token from the authenticated session")
+        token_name = token_match.group(1)
+        self.assertRegex(
+            self.surface,
+            rf"useModelStatus\(\s*{re.escape(token_name)}\s*\)",
+            "provider/model status must be requested with the session-derived token",
+        )
 
     def test_surface_is_read_only(self) -> None:
-        for forbidden in ("api.post(", "api.upload(", "api.request(", "fetch("):
-            self.assertNotIn(forbidden, self.surface)
+        mutation_call = re.compile(
+            r"(?:\bapi\s*\.\s*(?:post|put|patch|delete|upload|request)|\bfetch)"
+            r"\s*(?:<[^;(){}]+>)?\s*\(",
+            re.IGNORECASE,
+        )
+        self.assertIsNone(
+            mutation_call.search(self.surface),
+            "ModelsPage must not issue browser-side mutation or direct fetch calls",
+        )
         self.assertIsNone(re.search(r"method\s*:\s*['\"](?:POST|PUT|PATCH|DELETE)['\"]", self.surface))
 
     def test_surface_does_not_handle_provider_secrets(self) -> None:
