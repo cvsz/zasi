@@ -107,6 +107,11 @@ async function run() {
     await window.webContents.executeJavaScript(`document.querySelector('[aria-label="Open command palette"]').click()`);
     await waitForSelector(window, '[aria-label="Search governed views"]');
 
+    // A hidden BrowserWindow does not automatically own renderer focus under Xvfb.
+    // Focus the webContents explicitly so Chromium evaluates :focus/:focus-visible
+    // against the same document that receives the programmatic keyboard-focus probe.
+    window.webContents.focus();
+
     const overviewEvidence = await window.webContents.executeJavaScript(`(() => {
       const primaryNav = document.querySelector('[aria-label="Primary navigation"]');
       const search = document.querySelector('[aria-label="Search governed views"]');
