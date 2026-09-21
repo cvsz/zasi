@@ -24,14 +24,17 @@ class MemorySurfaceTests(unittest.TestCase):
         end = start + 1 + next_page.start()
         cls.surface = cls.source[start:end]
 
-    def test_surface_derives_authority_from_authenticated_session(self) -> None:
-        self.assertIn("useAuth()", self.surface)
+    def _session_token_name(self) -> str:
         token_match = re.search(
             r"const\s+(\w+)\s*=\s*session\?\.access_token\s*(?:\?\?|\|\|)\s*null",
             self.surface,
         )
         self.assertIsNotNone(token_match, "MemoryPage must derive a token from the authenticated session")
-        token = token_match.group(1)
+        return token_match.group(1)
+
+    def test_surface_derives_authority_from_authenticated_session(self) -> None:
+        self.assertIn("useAuth()", self.surface)
+        token = self._session_token_name()
         self.assertRegex(
             self.surface,
             rf"useApi<JsonRecord\[\]>\([^;]+,\s*{re.escape(token)}\s*&&",
@@ -39,7 +42,9 @@ class MemorySurfaceTests(unittest.TestCase):
         )
 
     def test_surface_uses_only_governed_memory_routes(self) -> None:
-        routes = set(re.findall(r"['\"](/api/v2/[^'\"`?]+)", self.surface))
+        # Inspect string arguments beginning with /api/v2, including template
+        # literals, so a route cannot escape this guard by changing quote style.
+        routes = set(re.findall(r"(?:['\"`])(/api/v2/[^'\"`?${}]+)", self.surface))
         self.assertTrue(routes, "MemoryPage must expose governed API routes")
         for route in routes:
             self.assertTrue(
@@ -49,15 +54,16 @@ class MemorySurfaceTests(unittest.TestCase):
         self.assertNotRegex(self.surface, r"\bfetch\s*\(")
 
     def test_mutations_require_the_authenticated_token(self) -> None:
+        token = re.escape(self._session_token_name())
         self.assertRegex(
             self.surface,
-            r"api\.post\(\s*['\"]/api/v2/memory['\"]\s*,\s*token\s*,",
-            "memory creation must use the authenticated token",
+            rf"api\.post\(\s*['\"]/api/v2/memory['\"]\s*,\s*{token}\s*,",
+            "memory creation must use the session-derived authenticated token",
         )
         self.assertRegex(
             self.surface,
-            r"api\.request\(\s*`/api/v2/memory/\$\{memoryId\}`\s*,\s*\{\s*token\s*,\s*method:\s*['\"]DELETE['\"]",
-            "memory deletion must use the authenticated token",
+            rf"api\.request\(\s*`/api/v2/memory/\$\{{memoryId\}}`\s*,\s*\{{\s*{token}\s*,\s*method:\s*['\"]DELETE['\"]",
+            "memory deletion must use the session-derived authenticated token",
         )
 
     def test_surface_does_not_handle_service_credentials(self) -> None:
