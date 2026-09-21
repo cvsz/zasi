@@ -70,7 +70,27 @@ jobs:
           "$audit_env/bin/python" -m pip install '.[dev]' pip-audit
           "$audit_env/bin/pip-audit" --local
       - name: Run unit tests
-        run: python3 -m unittest discover -s tests -q
+        shell: bash
+        run: |
+          set +e
+          python3 -m unittest discover -s tests -q 2>&1 | tee "$RUNNER_TEMP/arin-unit-tests.log"
+          status=${PIPESTATUS[0]}
+          set -e
+          {
+            echo "### ARIN unit tests (Python ${{ matrix.python-version }})"
+            echo '```text'
+            tail -n 160 "$RUNNER_TEMP/arin-unit-tests.log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+      - name: Upload ARIN unit-test evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: arin-unit-tests-python-${{ matrix.python-version }}
+          path: ${{ runner.temp }}/arin-unit-tests.log
+          if-no-files-found: error
+          retention-days: 7
       - name: Run identity foundation acceptance evidence
         run: make test-identity-foundation
       - name: Run coverage
