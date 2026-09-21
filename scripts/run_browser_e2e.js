@@ -44,8 +44,13 @@ const electronArgs = [
   'tests/test_browser_e2e.js',
 ];
 
-const command = process.platform === 'linux' ? 'xvfb-run' : electronPath;
-const args = process.platform === 'linux'
+// Desktop Linux contributors may already have a usable display and should not
+// need the CI-only Xvfb utility. Headless Linux remains fail-closed through the
+// explicit xvfb-run path used by hosted CI.
+const hasLinuxDisplay = Boolean(process.env.DISPLAY || process.env.WAYLAND_DISPLAY);
+const needsXvfb = process.platform === 'linux' && !hasLinuxDisplay;
+const command = needsXvfb ? 'xvfb-run' : electronPath;
+const args = needsXvfb
   ? ['-a', '--server-args=-screen 0 1280x1024x24', electronPath, ...electronArgs]
   : electronArgs;
 
