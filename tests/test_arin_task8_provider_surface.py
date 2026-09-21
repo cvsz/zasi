@@ -28,7 +28,7 @@ class ProviderSurfaceTests(unittest.TestCase):
     def test_surface_binds_model_status_to_authenticated_session(self) -> None:
         self.assertIn("useAuth()", self.surface)
         token_match = re.search(
-            r"const\s+(\w+)\s*=\s*session\?\.access_token\s*\|\|\s*null",
+            r"const\s+(\w+)\s*=\s*session\?\.access_token\s*(?:\?\?|\|\|)\s*null",
             self.surface,
         )
         self.assertIsNotNone(token_match, "ModelsPage must derive a token from the authenticated session")
