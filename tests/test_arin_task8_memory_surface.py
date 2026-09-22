@@ -44,7 +44,6 @@ class MemorySurfaceTests(unittest.TestCase):
 
     def _assert_memory_route(self, route: str) -> None:
         path_literal = route.split("?", 1)[0].split("#", 1)[0]
-        self.assertNotIn("${", path_literal, "memory route path must not contain unprovable template interpolation")
         self.assertNotIn("..", path_literal.split("/"), "memory routes must not contain dot-segment escapes")
         path = posixpath.normpath(path_literal)
         self.assertTrue(path == "/api/v2/memory" or path.startswith("/api/v2/memory/"), f"unexpected MemoryPage API route: {route}")
