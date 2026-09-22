@@ -22,6 +22,16 @@ Record the exact-head evidence for the bounded ARIN Task 8 MemoryPage authority 
   - Backup Restore and DR Evidence
   - Immutable Rollback Evidence
 
+## Current evidence-PR gate
+
+- Evidence PR: #198 (`docs(arin): record Task 8 memory surface evidence`)
+- Last inspected exact head: `297bb2bfd6d2f406347215604d72f9760c92d6d1`
+- Exact-head workflow result: 8/9 successful; `ZASI CI/CD Pipeline` failed because the fail-closed route regression correctly rejects the current raw dynamic delete segment.
+- Runtime blocker: `MemoryPage` still constructs the DELETE route as `/api/v2/memory/${memoryId}`.
+- Canonical identifier contract: backend memory creation uses `issue_id("mem")`; `issue_id` returns `${prefix}_${secrets.token_urlsafe(16)}`.
+- Required GREEN fix: validate the browser-side delete identifier against the issued `mem_...` contract before route construction, reject any non-conforming identifier fail-closed, and only then encode the validated segment for the governed `/api/v2/memory/<id>` route. `encodeURIComponent()` alone is not accepted as the proof because dot-only input is not encoded by it.
+- Do not resolve the associated review/security gate or mark this migration verified until the runtime fix and its exact-head CI/review evidence are green.
+
 ## Verified boundary
 
 The existing MemoryPage browser surface derives its authority from the authenticated session token and is bounded to governed `/api/v2/memory` routes. The regression requires authenticated authority for memory create/delete mutations, audits `api.*` and `useApi` call paths fail-closed, rejects unprovable or escaping API paths, and rejects browser-side service/provider credential handling.
