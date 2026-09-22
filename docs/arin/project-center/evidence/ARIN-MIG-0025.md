@@ -25,8 +25,9 @@ Record the exact-head evidence for the bounded ARIN Task 8 MemoryPage authority 
 ## Current evidence-PR gate
 
 - Evidence PR: #198 (`docs(arin): record Task 8 memory surface evidence`)
-- Last inspected exact head: `297bb2bfd6d2f406347215604d72f9760c92d6d1`
-- Exact-head workflow result: 8/9 successful; `ZASI CI/CD Pipeline` failed because the fail-closed route regression correctly rejects the current raw dynamic delete segment.
+- Last inspected pre-hardening head: `3e5f03171dddcd891cbfd55e00165038851c7e29`
+- Pre-hardening workflow result: 8/9 successful; `ZASI CI/CD Pipeline` failed in unit tests because the fail-closed route regression correctly rejects the current raw dynamic delete segment.
+- Current hardening head includes `e548e7f127cac5508f5ce5d7ee78c6a13aed66a0`, which closes two additional proof gaps without weakening assertions: JavaScript `\\x`/`\\u`/octal route escapes are rejected before URL containment checks, and positional mutation authorization now validates the complete second-argument expression rather than its first whitespace-delimited token.
 - Runtime blocker: `MemoryPage` still constructs the DELETE route as `/api/v2/memory/${memoryId}`.
 - Canonical identifier contract: backend memory creation uses `issue_id("mem")`; `issue_id` returns `${prefix}_${secrets.token_urlsafe(16)}`.
 - Required GREEN fix: validate the browser-side delete identifier against the issued `mem_...` contract before route construction, reject any non-conforming identifier fail-closed, and only then encode the validated segment for the governed `/api/v2/memory/<id>` route. `encodeURIComponent()` alone is not accepted as the proof because dot-only input is not encoded by it.
