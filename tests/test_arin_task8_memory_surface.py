@@ -8,6 +8,7 @@ from pathlib import Path
 import posixpath
 import re
 import unittest
+from urllib.parse import unquote
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,9 +45,45 @@ class MemorySurfaceTests(unittest.TestCase):
 
     def _assert_memory_route(self, route: str) -> None:
         path_literal = route.split("?", 1)[0].split("#", 1)[0]
-        self.assertNotIn("..", path_literal.split("/"), "memory routes must not contain dot-segment escapes")
-        path = posixpath.normpath(path_literal)
+        decoded = path_literal
+        for _ in range(4):
+            next_decoded = unquote(decoded)
+            if next_decoded == decoded:
+                break
+            decoded = next_decoded
+        self.assertNotIn("..", decoded.split("/"), "memory routes must not contain encoded or literal dot-segment escapes")
+        self.assertNotIn(".", decoded.split("/"), "memory routes must not contain encoded or literal dot-segment aliases")
+        path = posixpath.normpath(decoded)
         self.assertTrue(path == "/api/v2/memory" or path.startswith("/api/v2/memory/"), f"unexpected MemoryPage API route: {route}")
+
+    @staticmethod
+    def _top_level_object_properties(options: str) -> list[str]:
+        """Split an object literal body only at top-level commas."""
+        properties: list[str] = []
+        start = 0
+        depth = 0
+        quote: str | None = None
+        escaped = False
+        for index, char in enumerate(options):
+            if quote is not None:
+                if escaped:
+                    escaped = False
+                elif char == "\\":
+                    escaped = True
+                elif char == quote:
+                    quote = None
+                continue
+            if char in "'\"`":
+                quote = char
+            elif char in "([{":
+                depth += 1
+            elif char in ")]}" and depth > 0:
+                depth -= 1
+            elif char == "," and depth == 0:
+                properties.append(options[start:index].strip())
+                start = index + 1
+        properties.append(options[start:].strip())
+        return [item for item in properties if item]
 
     def test_surface_derives_authority_from_authenticated_session(self) -> None:
         token = re.escape(self._session_token_name())
@@ -57,8 +94,6 @@ class MemorySurfaceTests(unittest.TestCase):
         )
 
     def test_surface_uses_only_governed_memory_routes(self) -> None:
-        # Audit both direct api.* calls and useApi hooks. Fail closed unless the
-        # first argument is a literal route provably contained by the memory API.
         call_pattern = re.compile(r"(?:api\.\w+(?:<[^>]+>)?|useApi(?:<[^>]+>)?)\(\s*")
         calls = list(call_pattern.finditer(self.surface))
         self.assertTrue(calls, "MemoryPage must expose governed API routes")
@@ -71,30 +106,25 @@ class MemorySurfaceTests(unittest.TestCase):
 
     def test_mutations_require_the_authenticated_token(self) -> None:
         token = self._session_token_name()
-
-        # Positional-token helpers carry authorization as the second argument.
         positional_pattern = re.compile(r"api\.(post|put|patch|delete)(?:<[^>]+>)?\(\s*(['\"`])(/api/v2/memory[^'\"`]*)\2\s*,\s*([^,}\s]+)")
         positional_mutations = list(positional_pattern.finditer(self.surface))
         for mutation in positional_mutations:
             self._assert_memory_route(mutation.group(3))
             self.assertEqual(mutation.group(4), token, f"{mutation.group(1)} memory mutation must use the authenticated session-derived token")
 
-        # request() carries authorization inside its options object. Validate
-        # the token property itself, not merely an occurrence of the token
-        # variable elsewhere in the options object.
         request_pattern = re.compile(r"api\.request\(\s*(['\"`])(/api/v2/memory[^'\"`]*)\1\s*,\s*\{([^}]*)\}", re.DOTALL)
         request_mutations = []
         for request in request_pattern.finditer(self.surface):
             options = request.group(3)
-            if re.search(r"method:\s*['\"](?:POST|PUT|PATCH|DELETE)['\"]", options):
+            properties = self._top_level_object_properties(options)
+            if any(re.fullmatch(r"method\s*:\s*['\"](?:POST|PUT|PATCH|DELETE)['\"]", prop) for prop in properties):
                 request_mutations.append(request)
                 self._assert_memory_route(request.group(2))
-                explicit_token = rf"(?:^|,)\s*token\s*:\s*{re.escape(token)}\s*(?=,|$)"
-                shorthand_token = rf"(?:^|,)\s*{re.escape(token)}\s*(?=,|$)"
-                self.assertTrue(
-                    re.search(explicit_token, options) or re.search(shorthand_token, options),
-                    "request memory mutation token property must use the authenticated session-derived token",
+                authenticated = any(
+                    re.fullmatch(rf"token\s*:\s*{re.escape(token)}", prop) or prop == token
+                    for prop in properties
                 )
+                self.assertTrue(authenticated, "request memory mutation top-level token property must use the authenticated session-derived token")
 
         self.assertTrue(positional_mutations or request_mutations, "MemoryPage must expose governed memory mutations")
 
