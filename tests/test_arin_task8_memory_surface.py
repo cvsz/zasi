@@ -48,26 +48,29 @@ class MemorySurfaceTests(unittest.TestCase):
         return token_match.group(1)
 
     def test_surface_derives_authority_from_authenticated_session(self) -> None:
-        token = self._session_token_name()
+        token = re.escape(self._session_token_name())
         self.assertRegex(
             self.surface,
-            rf"useApi<JsonRecord\[\]>\([^;]+,\s*{re.escape(token)}\s*&&",
-            "memory search must remain gated by the authenticated session-derived token",
+            rf"useApi<JsonRecord\[\]>\(\s*`/api/v2/memory/search\?\$\{{params\}}`\s*,\s*{token}\s*&&\s*\([^)]*\)\s*\?\s*{token}\s*:\s*null\s*\)",
+            "memory search must pass the authenticated session-derived token on its authorized branch",
         )
 
     def test_surface_uses_only_governed_memory_routes(self) -> None:
-        # Inspect the first path argument of every api.* call regardless of API
-        # version or quote style. Template suffixes are intentionally trimmed so
-        # `/api/v2/memory/${id}` is checked as the governed memory prefix.
-        routes = {
-            match.group(2)
-            for match in re.finditer(
-                r"api\.\w+(?:<[^>]+>)?\(\s*(['\"`])(/api/[^'\"`?${}\s]+)",
-                self.surface,
+        # Fail closed over every api.* call: its first argument must be a literal
+        # route whose provable prefix remains inside /api/v2/memory. Variable or
+        # helper-derived paths are rejected because this regression cannot prove
+        # their authority boundary statically.
+        call_pattern = re.compile(r"api\.\w+(?:<[^>]+>)?\(\s*")
+        calls = list(call_pattern.finditer(self.surface))
+        self.assertTrue(calls, "MemoryPage must expose governed API routes")
+        for call in calls:
+            remainder = self.surface[call.end() :]
+            route_match = re.match(r"(['\"`])(/api/[^'\"`?${}\s,)]*)", remainder)
+            self.assertIsNotNone(
+                route_match,
+                "every MemoryPage api.* call must use a literal /api/ route so its boundary is provable",
             )
-        }
-        self.assertTrue(routes, "MemoryPage must expose governed API routes")
-        for route in routes:
+            route = route_match.group(2)
             self.assertTrue(
                 route == "/api/v2/memory" or route.startswith("/api/v2/memory/"),
                 f"unexpected MemoryPage API route: {route}",
