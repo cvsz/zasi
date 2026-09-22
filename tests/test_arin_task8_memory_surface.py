@@ -43,8 +43,10 @@ class MemorySurfaceTests(unittest.TestCase):
         return token_match.group(1)
 
     def _assert_memory_route(self, route: str) -> None:
-        self.assertNotIn("..", route.split("?", 1)[0].split("#", 1)[0].split("/"), "memory routes must not contain dot-segment escapes")
-        path = posixpath.normpath(route.split("?", 1)[0].split("#", 1)[0])
+        path_literal = route.split("?", 1)[0].split("#", 1)[0]
+        self.assertNotIn("${", path_literal, "memory route path must not contain unprovable template interpolation")
+        self.assertNotIn("..", path_literal.split("/"), "memory routes must not contain dot-segment escapes")
+        path = posixpath.normpath(path_literal)
         self.assertTrue(path == "/api/v2/memory" or path.startswith("/api/v2/memory/"), f"unexpected MemoryPage API route: {route}")
 
     def test_surface_derives_authority_from_authenticated_session(self) -> None:
@@ -79,8 +81,8 @@ class MemorySurfaceTests(unittest.TestCase):
             self.assertEqual(mutation.group(4), token, f"{mutation.group(1)} memory mutation must use the authenticated session-derived token")
 
         # request() carries authorization inside its options object. Validate
-        # every request mutation independently instead of parsing it as a
-        # positional-token helper.
+        # the token property itself, not merely an occurrence of the token
+        # variable elsewhere in the options object.
         request_pattern = re.compile(r"api\.request\(\s*(['\"`])(/api/v2/memory[^'\"`]*)\1\s*,\s*\{([^}]*)\}", re.DOTALL)
         request_mutations = []
         for request in request_pattern.finditer(self.surface):
@@ -88,7 +90,12 @@ class MemorySurfaceTests(unittest.TestCase):
             if re.search(r"method:\s*['\"](?:POST|PUT|PATCH|DELETE)['\"]", options):
                 request_mutations.append(request)
                 self._assert_memory_route(request.group(2))
-                self.assertRegex(options, rf"(?:^|[,\s]){re.escape(token)}(?:[,\s]|$)", "request memory mutation must use the authenticated session-derived token")
+                explicit_token = rf"(?:^|,)\s*token\s*:\s*{re.escape(token)}\s*(?=,|$)"
+                shorthand_token = rf"(?:^|,)\s*{re.escape(token)}\s*(?=,|$)"
+                self.assertTrue(
+                    re.search(explicit_token, options) or re.search(shorthand_token, options),
+                    "request memory mutation token property must use the authenticated session-derived token",
+                )
 
         self.assertTrue(positional_mutations or request_mutations, "MemoryPage must expose governed memory mutations")
 
