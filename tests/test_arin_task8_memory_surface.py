@@ -37,6 +37,11 @@ class MemorySurfaceTests(unittest.TestCase):
 
     def _assert_memory_route(self, route: str) -> None:
         path_literal = route.split("?", 1)[0].split("#", 1)[0]
+        self.assertNotRegex(
+            path_literal,
+            r"\\(?:x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4}|u\{[0-9A-Fa-f]+\}|[0-7]{1,3})",
+            "memory routes must not use JavaScript character escapes that can become browser dot segments",
+        )
         interpolations = re.findall(r"\$\{([^{}]+)\}", path_literal)
         for expression in interpolations:
             self.assertRegex(
@@ -127,11 +132,11 @@ class MemorySurfaceTests(unittest.TestCase):
 
     def test_mutations_require_the_authenticated_token(self) -> None:
         token = self._session_token_name()
-        positional_pattern = re.compile(r"api\.(post|put|patch|delete)(?:<[^>]+>)?\(\s*(['\"`])(/api/v2/memory[^'\"`]*)\2\s*,\s*([^,}\s]+)")
+        positional_pattern = re.compile(r"api\.(post|put|patch|delete)(?:<[^>]+>)?\(\s*(['\"`])(/api/v2/memory[^'\"`]*)\2\s*,\s*([^,\n)]+)")
         positional_mutations = list(positional_pattern.finditer(self.surface))
         for mutation in positional_mutations:
             self._assert_memory_route(mutation.group(3))
-            self.assertEqual(mutation.group(4), token, f"{mutation.group(1)} memory mutation must use the authenticated session-derived token")
+            self.assertEqual(mutation.group(4).strip(), token, f"{mutation.group(1)} memory mutation must use exactly the authenticated session-derived token expression")
 
         request_start = re.compile(r"api\.request\(\s*(['\"`])(/api/v2/memory[^'\"`]*)\1\s*,\s*\{")
         request_mutations = []
