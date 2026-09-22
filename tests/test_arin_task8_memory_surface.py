@@ -70,19 +70,27 @@ class MemorySurfaceTests(unittest.TestCase):
 
     def test_mutations_require_the_authenticated_token(self) -> None:
         token = self._session_token_name()
-        mutation_pattern = re.compile(r"api\.(post|put|patch|delete|request)(?:<[^>]+>)?\(\s*(['\"`])(/api/v2/memory[^'\"`]*)\2\s*,\s*([^,}\s]+)")
-        mutations = list(mutation_pattern.finditer(self.surface))
-        self.assertTrue(mutations, "MemoryPage must expose governed memory mutations")
-        for mutation in mutations:
+
+        # Positional-token helpers carry authorization as the second argument.
+        positional_pattern = re.compile(r"api\.(post|put|patch|delete)(?:<[^>]+>)?\(\s*(['\"`])(/api/v2/memory[^'\"`]*)\2\s*,\s*([^,}\s]+)")
+        positional_mutations = list(positional_pattern.finditer(self.surface))
+        for mutation in positional_mutations:
             self._assert_memory_route(mutation.group(3))
             self.assertEqual(mutation.group(4), token, f"{mutation.group(1)} memory mutation must use the authenticated session-derived token")
 
-        # request() carries authorization in its options object rather than as a
-        # positional token; validate every DELETE request explicitly.
-        for request in re.finditer(r"api\.request\(\s*(`[^`]+`|'[^']+'|\"[^\"]+\")\s*,\s*\{([^}]*)\}", self.surface, re.DOTALL):
-            options = request.group(2)
-            if re.search(r"method:\s*['\"]DELETE['\"]", options):
-                self.assertRegex(options, rf"(?:^|[,\s]){re.escape(token)}(?:[,\s]|$)", "DELETE memory mutation must use the authenticated session-derived token")
+        # request() carries authorization inside its options object. Validate
+        # every request mutation independently instead of parsing it as a
+        # positional-token helper.
+        request_pattern = re.compile(r"api\.request\(\s*(['\"`])(/api/v2/memory[^'\"`]*)\1\s*,\s*\{([^}]*)\}", re.DOTALL)
+        request_mutations = []
+        for request in request_pattern.finditer(self.surface):
+            options = request.group(3)
+            if re.search(r"method:\s*['\"](?:POST|PUT|PATCH|DELETE)['\"]", options):
+                request_mutations.append(request)
+                self._assert_memory_route(request.group(2))
+                self.assertRegex(options, rf"(?:^|[,\s]){re.escape(token)}(?:[,\s]|$)", "request memory mutation must use the authenticated session-derived token")
+
+        self.assertTrue(positional_mutations or request_mutations, "MemoryPage must expose governed memory mutations")
 
     def test_surface_does_not_handle_service_credentials(self) -> None:
         lowered = self.surface.lower()
