@@ -37,7 +37,15 @@ class MemorySurfaceTests(unittest.TestCase):
 
     def _assert_memory_route(self, route: str) -> None:
         path_literal = route.split("?", 1)[0].split("#", 1)[0]
-        decoded = path_literal
+        interpolations = re.findall(r"\$\{([^{}]+)\}", path_literal)
+        for expression in interpolations:
+            self.assertRegex(
+                expression.strip(),
+                r"^encodeURIComponent\([A-Za-z_$][A-Za-z0-9_.$]*\)$",
+                "dynamic memory path segments must be encoded with encodeURIComponent before fetch URL parsing",
+            )
+        static_path = re.sub(r"\$\{[^{}]+\}", "encoded-segment", path_literal)
+        decoded = static_path
         for _ in range(4):
             next_decoded = unquote(decoded)
             if next_decoded == decoded:
