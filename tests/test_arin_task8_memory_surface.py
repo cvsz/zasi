@@ -125,8 +125,8 @@ class MemorySurfaceTests(unittest.TestCase):
         self.assertTrue(calls, "MemoryPage must expose governed API routes")
         for call in calls:
             remainder = self.surface[call.end():]
-            route_match = re.match(r"(['\"`])(/api/[^'\"`\s,)]*)", remainder)
-            self.assertIsNotNone(route_match, "every MemoryPage API call must use a literal /api/ route so its boundary is provable")
+            route_match = re.match(r"(['\"`])(/api/[^'\"`\s,)]*)\1\s*,", remainder)
+            self.assertIsNotNone(route_match, "every MemoryPage API call must use a complete literal /api/ route as its first argument so its boundary is provable")
             self._assert_memory_route(route_match.group(2))
         self.assertNotRegex(self.surface, r"\bfetch\s*\(")
 
@@ -138,7 +138,7 @@ class MemorySurfaceTests(unittest.TestCase):
             self._assert_memory_route(mutation.group(3))
             self.assertEqual(mutation.group(4).strip(), token, f"{mutation.group(1)} memory mutation must use exactly the authenticated session-derived token expression")
 
-        request_start = re.compile(r"api\.request\(\s*(['\"`])(/api/v2/memory[^'\"`]*)\1\s*,\s*\{")
+        request_start = re.compile(r"api\.request(?:<[^>]+>)?\(\s*(['\"`])(/api/v2/memory[^'\"`]*)\1\s*,\s*\{")
         request_mutations = []
         request_calls = list(request_start.finditer(self.surface))
         for request in request_calls:
