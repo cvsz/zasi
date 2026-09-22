@@ -5,6 +5,7 @@ memory APIs. It does not turn memory into the canonical zknowbase runtime and it
 grants no device, motion, tool, or actuator authority.
 """
 from pathlib import Path
+import posixpath
 import re
 import unittest
 
@@ -29,10 +30,7 @@ class MemorySurfaceTests(unittest.TestCase):
             r"const\s*\{\s*session(?:\s*:\s*(\w+))?\s*\}\s*=\s*useAuth\(\)",
             self.surface,
         )
-        self.assertIsNotNone(
-            auth_match,
-            "MemoryPage must obtain its session directly from useAuth()",
-        )
+        self.assertIsNotNone(auth_match, "MemoryPage must obtain its session directly from useAuth()")
         return auth_match.group(1) or "session"
 
     def _session_token_name(self) -> str:
@@ -41,11 +39,13 @@ class MemorySurfaceTests(unittest.TestCase):
             rf"const\s+(\w+)\s*=\s*{session}\?\.access_token\s*(?:\?\?|\|\|)\s*null",
             self.surface,
         )
-        self.assertIsNotNone(
-            token_match,
-            "MemoryPage must derive a token from the authenticated useAuth session",
-        )
+        self.assertIsNotNone(token_match, "MemoryPage must derive a token from the authenticated useAuth session")
         return token_match.group(1)
+
+    def _assert_memory_route(self, route: str) -> None:
+        self.assertNotIn("..", route.split("?", 1)[0].split("#", 1)[0].split("/"), "memory routes must not contain dot-segment escapes")
+        path = posixpath.normpath(route.split("?", 1)[0].split("#", 1)[0])
+        self.assertTrue(path == "/api/v2/memory" or path.startswith("/api/v2/memory/"), f"unexpected MemoryPage API route: {route}")
 
     def test_surface_derives_authority_from_authenticated_session(self) -> None:
         token = re.escape(self._session_token_name())
@@ -56,39 +56,33 @@ class MemorySurfaceTests(unittest.TestCase):
         )
 
     def test_surface_uses_only_governed_memory_routes(self) -> None:
-        # Fail closed over every api.* call: its first argument must be a literal
-        # route whose provable prefix remains inside /api/v2/memory. Variable or
-        # helper-derived paths are rejected because this regression cannot prove
-        # their authority boundary statically.
-        call_pattern = re.compile(r"api\.\w+(?:<[^>]+>)?\(\s*")
+        # Audit both direct api.* calls and useApi hooks. Fail closed unless the
+        # first argument is a literal route provably contained by the memory API.
+        call_pattern = re.compile(r"(?:api\.\w+(?:<[^>]+>)?|useApi(?:<[^>]+>)?)\(\s*")
         calls = list(call_pattern.finditer(self.surface))
         self.assertTrue(calls, "MemoryPage must expose governed API routes")
         for call in calls:
             remainder = self.surface[call.end() :]
-            route_match = re.match(r"(['\"`])(/api/[^'\"`?${}\s,)]*)", remainder)
-            self.assertIsNotNone(
-                route_match,
-                "every MemoryPage api.* call must use a literal /api/ route so its boundary is provable",
-            )
-            route = route_match.group(2)
-            self.assertTrue(
-                route == "/api/v2/memory" or route.startswith("/api/v2/memory/"),
-                f"unexpected MemoryPage API route: {route}",
-            )
+            route_match = re.match(r"(['\"`])(/api/[^'\"`\s,)]*)", remainder)
+            self.assertIsNotNone(route_match, "every MemoryPage API call must use a literal /api/ route so its boundary is provable")
+            self._assert_memory_route(route_match.group(2))
         self.assertNotRegex(self.surface, r"\bfetch\s*\(")
 
     def test_mutations_require_the_authenticated_token(self) -> None:
-        token = re.escape(self._session_token_name())
-        self.assertRegex(
-            self.surface,
-            rf"api\.post\(\s*['\"]/api/v2/memory['\"]\s*,\s*{token}\s*,",
-            "memory creation must use the authenticated session-derived token",
-        )
-        self.assertRegex(
-            self.surface,
-            rf"api\.request\(\s*`/api/v2/memory/\$\{{memoryId\}}`\s*,\s*\{{\s*{token}\s*,\s*method:\s*['\"]DELETE['\"]",
-            "memory deletion must use the authenticated session-derived token",
-        )
+        token = self._session_token_name()
+        mutation_pattern = re.compile(r"api\.(post|put|patch|delete|request)(?:<[^>]+>)?\(\s*(['\"`])(/api/v2/memory[^'\"`]*)\2\s*,\s*([^,}\s]+)")
+        mutations = list(mutation_pattern.finditer(self.surface))
+        self.assertTrue(mutations, "MemoryPage must expose governed memory mutations")
+        for mutation in mutations:
+            self._assert_memory_route(mutation.group(3))
+            self.assertEqual(mutation.group(4), token, f"{mutation.group(1)} memory mutation must use the authenticated session-derived token")
+
+        # request() carries authorization in its options object rather than as a
+        # positional token; validate every DELETE request explicitly.
+        for request in re.finditer(r"api\.request\(\s*(`[^`]+`|'[^']+'|\"[^\"]+\")\s*,\s*\{([^}]*)\}", self.surface, re.DOTALL):
+            options = request.group(2)
+            if re.search(r"method:\s*['\"]DELETE['\"]", options):
+                self.assertRegex(options, rf"(?:^|[,\s]){re.escape(token)}(?:[,\s]|$)", "DELETE memory mutation must use the authenticated session-derived token")
 
     def test_surface_does_not_handle_service_credentials(self) -> None:
         lowered = self.surface.lower()
