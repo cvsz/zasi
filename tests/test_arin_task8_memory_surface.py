@@ -51,8 +51,12 @@ class MemorySurfaceTests(unittest.TestCase):
             if next_decoded == decoded:
                 break
             decoded = next_decoded
-        self.assertNotIn("..", decoded.split("/"), "memory routes must not contain encoded or literal dot-segment escapes")
-        self.assertNotIn(".", decoded.split("/"), "memory routes must not contain encoded or literal dot-segment aliases")
+        # WHATWG special-scheme URL parsing treats backslashes as path separators.
+        # Normalize them before dot-segment and containment checks so the proof
+        # matches the browser behavior used by fetch().
+        decoded = decoded.replace("\\", "/")
+        self.assertNotIn("..", decoded.split("/"), "memory routes must not contain encoded, literal, or backslash dot-segment escapes")
+        self.assertNotIn(".", decoded.split("/"), "memory routes must not contain encoded, literal, or backslash dot-segment aliases")
         path = posixpath.normpath(decoded)
         self.assertTrue(path == "/api/v2/memory" or path.startswith("/api/v2/memory/"), f"unexpected MemoryPage API route: {route}")
 
@@ -120,9 +124,22 @@ class MemorySurfaceTests(unittest.TestCase):
             if any(re.fullmatch(r"method\s*:\s*['\"](?:POST|PUT|PATCH|DELETE)['\"]", prop) for prop in properties):
                 request_mutations.append(request)
                 self._assert_memory_route(request.group(2))
-                authenticated = any(
-                    re.fullmatch(rf"token\s*:\s*{re.escape(token)}", prop) or prop == token
-                    for prop in properties
+                self.assertFalse(
+                    any(prop.startswith("...") for prop in properties),
+                    "request memory mutation options must not use spreads because they can override authorization",
+                )
+                token_properties = [
+                    prop for prop in properties
+                    if prop == token or re.match(r"^token\s*:", prop)
+                ]
+                self.assertEqual(
+                    len(token_properties),
+                    1,
+                    "request memory mutation must have exactly one top-level token property",
+                )
+                authenticated = bool(
+                    re.fullmatch(rf"token\s*:\s*{re.escape(token)}", token_properties[0])
+                    or token_properties[0] == token
                 )
                 self.assertTrue(authenticated, "request memory mutation top-level token property must use the authenticated session-derived token")
 
