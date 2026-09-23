@@ -25,11 +25,10 @@ Record the exact-head evidence for the bounded ARIN Task 8 MemoryPage authority 
 ## Current evidence-PR gate
 
 - Evidence PR: #198 (`docs(arin): record Task 8 memory surface evidence`)
-- Exact inspected head before this evidence refresh: `248ae578ecbf9de2e26c1bcc037e2db34d8e6d78`
+- Exact inspected head before this evidence refresh: `72a6d4e5d3dfb720606599a79458e91fa3928265`
 - Exact-head workflow result: 8/9 successful.
 - Successful groups: Production GO Gate Contract, Security Evidence Pack, Lint & Code Style, Docker Container Image Build & Publish, CodeQL Security Analysis, HA and Canary Rehearsal Evidence, Backup Restore and DR Evidence, and Immutable Rollback Evidence.
-- Failing group: `ZASI CI/CD Pipeline`. Both Python 3.12 and Python 3.11 reached `Run unit tests` and failed there; dependency audit succeeded. Downstream coverage/static-boundary/browser evidence was skipped after the unit-test failure.
-- The fail-closed regression intentionally rejects the current unproved dynamic delete route rather than weakening the governed memory boundary.
+- Failing group: `ZASI CI/CD Pipeline`. The fail-closed regression intentionally rejects the current unproved dynamic delete route rather than weakening the governed memory boundary.
 - Current hardening includes `e548e7f127cac5508f5ce5d7ee78c6a13aed66a0`, which closes two additional proof gaps without weakening assertions: JavaScript `\\x`/`\\u`/octal route escapes are rejected before URL containment checks, and positional mutation authorization validates the complete second-argument expression rather than its first whitespace-delimited token.
 - Runtime blocker: `MemoryPage` still constructs the DELETE route as `/api/v2/memory/${memoryId}`.
 - Canonical identifier contract: backend memory creation uses `issue_id("mem")`; `issue_id` returns `${prefix}_${secrets.token_urlsafe(16)}`.
