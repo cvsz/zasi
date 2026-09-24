@@ -125,7 +125,7 @@ class MemorySurfaceTests(unittest.TestCase):
         self.assertTrue(calls, "MemoryPage must expose governed API routes")
         for call in calls:
             remainder = self.surface[call.end():]
-            route_match = re.match(r"(['\"`])(/api/[^'\"`\s,)]*)\1\s*,", remainder)
+            route_match = re.match(r"(['\"`])(/api/[^'\"`\s,]*)\1\s*,", remainder)
             self.assertIsNotNone(route_match, "every MemoryPage API call must use a complete literal /api/ route as its first argument so its boundary is provable")
             self._assert_memory_route(route_match.group(2))
         self.assertNotRegex(self.surface, r"\bfetch\s*\(")
