@@ -379,6 +379,43 @@ class ProductionGoGateTests(unittest.TestCase):
         with self.assertRaisesRegex(GateError, "future"):
             self.validate(item)
 
+    def test_ancestor_candidate_with_evidence_only_diff_is_go(self):
+        release = "e" * 40
+        result = self.validate(
+            evidence(),
+            expected_commit=release,
+            ancestor_check=lambda a, d: a == COMMIT and d == release,
+            diff_check=lambda a, d: ["evidence/staging/latest.json"],
+        )
+        self.assertEqual(result["decision"], "GO")
+
+    def test_non_ancestor_candidate_is_rejected(self):
+        with self.assertRaisesRegex(GateError, "does not match"):
+            self.validate(
+                evidence(),
+                expected_commit="e" * 40,
+                ancestor_check=lambda a, d: False,
+                diff_check=lambda a, d: ["evidence/staging/latest.json"],
+            )
+
+    def test_ancestor_candidate_with_code_diff_is_rejected(self):
+        with self.assertRaisesRegex(GateError, "only evidence/staging/latest.json may change"):
+            self.validate(
+                evidence(),
+                expected_commit="e" * 40,
+                ancestor_check=lambda a, d: True,
+                diff_check=lambda a, d: ["evidence/staging/latest.json", "backend/app.py"],
+            )
+
+    def test_ancestor_candidate_with_unverifiable_diff_is_rejected(self):
+        with self.assertRaisesRegex(GateError, "cannot verify release tree"):
+            self.validate(
+                evidence(),
+                expected_commit="e" * 40,
+                ancestor_check=lambda a, d: True,
+                diff_check=lambda a, d: None,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

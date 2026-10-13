@@ -78,10 +78,16 @@ class TestZASIBackendIntegration(unittest.TestCase):
             self.assertEqual(data.get("openapi"), "3.0.3")
             self.assertIn("/api/status", data.get("paths", {}))
             self.assertIn("410", data["paths"]["/api/jarvis/chat"]["post"]["responses"])
+            self.assertIn("410", data["paths"]["/api/jarvis/stream"]["post"]["responses"])
 
     def test_legacy_jarvis_chat_is_retired(self):
         payload = json.dumps({"message": "status report", "persona": "JARVIS"}).encode()
         req = urllib.request.Request(self._url("/api/jarvis/chat"), data=payload, headers={"Content-Type": "application/json"})
+        self._assert_retired(req)
+
+    def test_legacy_jarvis_stream_is_retired(self):
+        payload = json.dumps({"message": "status report", "persona": "JARVIS"}).encode()
+        req = urllib.request.Request(self._url("/api/jarvis/stream"), data=payload, headers={"Content-Type": "application/json"})
         self._assert_retired(req)
 
     def test_legacy_mutation_is_retired(self):

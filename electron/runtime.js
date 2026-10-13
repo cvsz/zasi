@@ -20,6 +20,11 @@ function hasBundledApp(appRoot) {
   });
 }
 
+function isPathInside(root, candidate) {
+  const relative = path.relative(root, candidate);
+  return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
+}
+
 function applyPackagedStateDefaults(env, userDataPath) {
   const launchEnv = { ...env };
   if (typeof userDataPath !== 'string' || !path.isAbsolute(userDataPath)) {
@@ -29,6 +34,7 @@ function applyPackagedStateDefaults(env, userDataPath) {
     );
   }
 
+  const resolvedUserDataPath = path.resolve(userDataPath);
   for (const variable of ['ZASI_DATABASE_PATH', 'ZASI_ARTIFACT_DIRECTORY']) {
     if (Object.prototype.hasOwnProperty.call(launchEnv, variable)) {
       const value = String(launchEnv[variable]).trim();
@@ -38,11 +44,17 @@ function applyPackagedStateDefaults(env, userDataPath) {
           `${variable} must be an absolute path in packaged Electron mode.`,
         );
       }
-      launchEnv[variable] = value;
+      const resolvedValue = path.resolve(value);
+      if (!isPathInside(resolvedUserDataPath, resolvedValue)) {
+        throw runtimeError(
+          'PACKAGED_STATE_PATH_INVALID',
+          `${variable} must resolve inside the packaged Electron user-data directory.`,
+        );
+      }
+      launchEnv[variable] = resolvedValue;
     }
   }
 
-  const resolvedUserDataPath = path.resolve(userDataPath);
   if (!Object.prototype.hasOwnProperty.call(launchEnv, 'ZASI_DATABASE_PATH')) {
     launchEnv.ZASI_DATABASE_PATH = path.join(
       resolvedUserDataPath,

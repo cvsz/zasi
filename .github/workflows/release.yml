@@ -65,6 +65,9 @@ jobs:
             | xargs -0 -r jq -s '.' > "$RULESET_DIR/expanded.json"
           test -s "$RULESET_DIR/expanded.json" || printf '[]\n' > "$RULESET_DIR/expanded.json"
 
+          python scripts/world_room_realtime_evidence.py \
+            --evidence evidence/staging/latest.json
+
           python scripts/production_go_gate.py \
             --evidence evidence/staging/latest.json \
             --expected-commit "$RELEASE_COMMIT" \
@@ -84,14 +87,14 @@ jobs:
         with:
           node-version: "22.14.0"
 
-      - name: Install build and SBOM tooling
-        run: pip install '.[dev]' build
-
       - name: Build bundled cockpit before packaging
         run: |
           scripts/npm_ci_audit.sh
           npm run typecheck
           npm run build
+
+      - name: Install build and SBOM tooling
+        run: pip install '.[dev]' build
 
       - name: Build Wheel & Tarball
         run: python3 -m build
@@ -106,6 +109,10 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$ZASI_RELEASE_GPG_PRIVATE_KEY"
+          mkdir -p ~/.gnupg
+          chmod 700 ~/.gnupg
+          printf '%s\n' "allow-loopback-pinentry" >> ~/.gnupg/gpg-agent.conf
+          gpg-connect-agent reloadagent /bye || true
           printf '%s' "$ZASI_RELEASE_GPG_PRIVATE_KEY" | gpg --batch --import
 
       - name: Sign and verify release artifacts

@@ -12,15 +12,17 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import ParseResult, urlparse
 
 SHA40 = re.compile(r"^[0-9a-f]{40}$")
 DIGEST = re.compile(r"^ghcr\.io/[a-z0-9_.-]+/[a-z0-9_.-]+@sha256:[0-9a-f]{64}$")
 PASS = "passed"
 MAX_EVIDENCE_AGE = timedelta(hours=6)
+EVIDENCE_PATH = "evidence/staging/latest.json"
 MAIN_REF_TARGETS = {"~DEFAULT_BRANCH", "refs/heads/main"}
 REQUIRED_PRODUCTION_CHECKS = frozenset({
     "Test (Python 3.11)",
@@ -195,12 +197,41 @@ def validate_governance(rulesets: Any) -> dict[str, Any]:
     raise GateError("no active GitHub ruleset fully protects main with the required production controls" + suffix)
 
 
+def _is_git_ancestor(ancestor: str, descendant: str) -> bool:
+    """Check git ancestry without raising; False when git is unavailable."""
+    try:
+        result = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", ancestor, descendant],
+            capture_output=True,
+        )
+    except OSError:
+        return False
+    return result.returncode == 0
+
+
+def _git_changed_paths(ancestor: str, descendant: str) -> list[str] | None:
+    """List paths changed between two commits; None when git is unavailable."""
+    try:
+        result = subprocess.run(
+            ["git", "diff", "--name-only", ancestor, descendant],
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+    if result.returncode != 0:
+        return None
+    return [line for line in result.stdout.splitlines() if line.strip()]
+
+
 def validate_evidence(
     data: dict[str, Any],
     *,
     expected_commit: str,
     rulesets: Any,
     now: datetime | None = None,
+    ancestor_check: Callable[[str, str], bool] | None = None,
+    diff_check: Callable[[str, str], list[str] | None] | None = None,
 ) -> dict[str, Any]:
     governance = validate_governance(rulesets)
     _require(data.get("schema_version") == 1, "schema_version must be 1")
@@ -210,8 +241,27 @@ def validate_evidence(
     _require(isinstance(candidate_commit, str) and SHA40.fullmatch(candidate_commit) is not None, "candidate_commit must be a lowercase 40-character git SHA")
     _require(isinstance(previous_commit, str) and SHA40.fullmatch(previous_commit) is not None, "previous_commit must be a lowercase 40-character git SHA")
     _require(SHA40.fullmatch(expected_commit) is not None, "expected commit must be a lowercase 40-character git SHA")
-    _require(candidate_commit == expected_commit, "evidence candidate_commit does not match the release commit")
     _require(previous_commit != candidate_commit, "previous_commit and candidate_commit must differ")
+    if candidate_commit != expected_commit:
+        # The evidence commit itself may only add the evidence file: the
+        # exercised artifact must be bit-identical to the released artifact.
+        # Strict equality is unsatisfiable (the image digest depends on the
+        # tag SHA, which depends on the evidence naming the digest), so an
+        # ancestor candidate is accepted iff nothing but the evidence file
+        # changed between candidate and release commit.
+        is_ancestor = ancestor_check or _is_git_ancestor
+        _require(
+            is_ancestor(candidate_commit, expected_commit),
+            "evidence candidate_commit does not match the release commit (must equal it or be its ancestor)",
+        )
+        changed = diff_check or _git_changed_paths
+        paths = changed(candidate_commit, expected_commit)
+        _require(paths is not None, "cannot verify release tree against evidence candidate")
+        _require(bool(paths), "evidence candidate must differ from the release commit")
+        _require(
+            all(path == EVIDENCE_PATH for path in paths),
+            "only evidence/staging/latest.json may change between evidence candidate and release commit",
+        )
 
     candidate_image = data.get("candidate_image")
     previous_image = data.get("previous_image")
