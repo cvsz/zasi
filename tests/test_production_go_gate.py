@@ -64,9 +64,9 @@ def evidence():
             "image": CANDIDATE,
             "realtime_session_established": True,
             "audio_sent": True,
-            "audio_response_received": True,
-            "governed_turn_completed": True,
-            "latency_ms": 250,
+            "audio_received": True,
+            "upstream_configured": True,
+            "response_latency_ms": 250,
         },
         "canary": {
             "status": "passed",
@@ -92,9 +92,9 @@ def evidence():
             "world_room_image": PREVIOUS,
             "realtime_session_established": True,
             "audio_sent": True,
-            "audio_response_received": True,
-            "governed_turn_completed": True,
-            "latency_ms": 250,
+            "audio_received": True,
+            "upstream_configured": True,
+            "response_latency_ms": 250,
             "duration_seconds": 45,
         },
     }
@@ -114,7 +114,7 @@ class ProductionGoGateTests(unittest.TestCase):
         for phase in ("world_room", "rollback"):
             for field in (
                 "realtime_session_established", "audio_sent",
-                "audio_response_received", "governed_turn_completed",
+                "audio_received", "upstream_configured",
             ):
                 for value in (None, False, "true", 1):
                     with self.subTest(phase=phase, field=field, value=value):
@@ -132,10 +132,10 @@ class ProductionGoGateTests(unittest.TestCase):
                 with self.subTest(phase=phase, latency=value):
                     item = evidence()
                     if value is None:
-                        item[phase].pop("latency_ms")
+                        item[phase].pop("response_latency_ms")
                     else:
-                        item[phase]["latency_ms"] = value
-                    with self.assertRaisesRegex(GateError, "latency_ms"):
+                        item[phase]["response_latency_ms"] = value
+                    with self.assertRaisesRegex(GateError, "response_latency_ms"):
                         self.validate(item)
 
     def test_valid_external_evidence_is_go(self):
