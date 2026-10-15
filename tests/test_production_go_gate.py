@@ -62,6 +62,11 @@ def evidence():
             "smoke_case": "join, speak, receive realtime response",
             "endpoint_url": "https://staging.example.com/world-room",
             "image": CANDIDATE,
+            "realtime_session_established": True,
+            "audio_sent": True,
+            "audio_response_received": True,
+            "governed_turn_completed": True,
+            "latency_ms": 250,
         },
         "canary": {
             "status": "passed",
@@ -85,6 +90,11 @@ def evidence():
             "world_room_smoke_case": "join, speak, receive realtime response after rollback",
             "world_room_status": "passed",
             "world_room_image": PREVIOUS,
+            "realtime_session_established": True,
+            "audio_sent": True,
+            "audio_response_received": True,
+            "governed_turn_completed": True,
+            "latency_ms": 250,
             "duration_seconds": 45,
         },
     }
@@ -99,6 +109,34 @@ class ProductionGoGateTests(unittest.TestCase):
             now=kwargs.pop("now", NOW),
             **kwargs,
         )
+
+    def test_world_room_audio_proof_is_required_for_both_phases(self):
+        for phase in ("world_room", "rollback"):
+            for field in (
+                "realtime_session_established", "audio_sent",
+                "audio_response_received", "governed_turn_completed",
+            ):
+                for value in (None, False, "true", 1):
+                    with self.subTest(phase=phase, field=field, value=value):
+                        item = evidence()
+                        if value is None:
+                            item[phase].pop(field)
+                        else:
+                            item[phase][field] = value
+                        with self.assertRaisesRegex(GateError, field):
+                            self.validate(item)
+
+    def test_world_room_latency_must_be_bounded_numeric(self):
+        for phase in ("world_room", "rollback"):
+            for value in (None, True, False, "250", 0, -1, 2001, float("nan"), float("inf")):
+                with self.subTest(phase=phase, latency=value):
+                    item = evidence()
+                    if value is None:
+                        item[phase].pop("latency_ms")
+                    else:
+                        item[phase]["latency_ms"] = value
+                    with self.assertRaisesRegex(GateError, "latency_ms"):
+                        self.validate(item)
 
     def test_valid_external_evidence_is_go(self):
         result = self.validate(evidence())
