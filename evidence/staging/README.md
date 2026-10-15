@@ -16,7 +16,7 @@ A production release tag is allowed only when `scripts/production_go_gate.py` va
 - `health.observed_commit` is copied from the live external `/health/ready` response and must equal `candidate_commit`; `health.identity_source` must be `artifact`.
 - `runtime.observed_image` must equal the exact immutable `candidate_image` and `runtime.inspector` must be `docker`.
 - World Room and canary evidence identify the exact `candidate_image` digest.
-- Both candidate `world_room` and post-rollback `rollback` must include `realtime_session_established`, `audio_sent`, `audio_received`, and `upstream_configured` and `completed_turns` (integer >= 1) set to JSON `true`, plus a measured numeric `response_latency_ms` greater than zero and at most 2000. A proxy-only/no-key/no-audio smoke test must be rejected.
+- Both candidate `world_room` and post-rollback `rollback` must include `realtime_session_established`, `audio_sent`, `audio_received`, and `upstream_configured` set to JSON `true`, plus `completed_turns` as an integer >= 1, plus a measured numeric `response_latency_ms` greater than zero and at most 2000. A proxy-only/no-key/no-audio smoke test must be rejected.
 - controlled canary evidence contains at least 20 requests, error rate <= 1%, and p95 <= 2000 ms.
 - rollback redeployed the exact `previous_image` digest in <= 300 seconds on that same staging origin.
 - after rollback, `scripts/observe_container_image.sh <container> <previous_image>` must independently verify the running previous digest.
