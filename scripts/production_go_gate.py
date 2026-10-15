@@ -224,6 +224,25 @@ def _git_changed_paths(ancestor: str, descendant: str) -> list[str] | None:
     return [line for line in result.stdout.splitlines() if line.strip()]
 
 
+def _require_audio_turn_proof(obj: dict[str, Any], name: str) -> None:
+    """Fail closed unless real realtime/audio turn evidence is recorded."""
+    for field in (
+        "realtime_session_established",
+        "audio_sent",
+        "audio_response_received",
+        "governed_turn_completed",
+    ):
+        _require(obj.get(field) is True, f"{name}.{field} must be true")
+    latency = obj.get("latency_ms")
+    _require(
+        isinstance(latency, (int, float))
+        and not isinstance(latency, bool)
+        and 0 < latency <= 2000
+        and latency == latency,
+        f"{name}.latency_ms must be finite and > 0 and <= 2000",
+    )
+
+
 def validate_evidence(
     data: dict[str, Any],
     *,
@@ -296,6 +315,7 @@ def validate_evidence(
     _require(isinstance(world_room.get("smoke_case"), str) and world_room["smoke_case"].strip(), "world_room.smoke_case is required")
     _canonical_world_room(world_room.get("endpoint_url"), "world_room.endpoint_url", staging_url)
     _require(world_room.get("image") == candidate_image, "world_room.image must equal candidate_image")
+    _require_audio_turn_proof(world_room, "world_room")
 
     canary = _passed(data.get("canary"), "canary")
     canary_at = _phase_timestamp(canary, "canary", previous=world_room_at, envelope=observed_at)
@@ -326,6 +346,7 @@ def validate_evidence(
     )
     _require(rollback.get("world_room_status") == PASS, "rollback.world_room_status must be 'passed'")
     _require(rollback.get("world_room_image") == previous_image, "rollback.world_room_image must equal previous_image")
+    _require_audio_turn_proof(rollback, "rollback")
     duration = rollback.get("duration_seconds")
     _require(isinstance(duration, (int, float)) and not isinstance(duration, bool) and 0 < float(duration) <= 300, "rollback.duration_seconds must be > 0 and <= 300")
 
