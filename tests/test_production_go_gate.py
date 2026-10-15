@@ -65,7 +65,7 @@ def evidence():
             "realtime_session_established": True,
             "audio_sent": True,
             "audio_received": True,
-            "upstream_configured": True,
+            "upstream_configured": True, "completed_turns": 1,
             "response_latency_ms": 250,
         },
         "canary": {
@@ -93,7 +93,7 @@ def evidence():
             "realtime_session_established": True,
             "audio_sent": True,
             "audio_received": True,
-            "upstream_configured": True,
+            "upstream_configured": True, "completed_turns": 1,
             "response_latency_ms": 250,
             "duration_seconds": 45,
         },
