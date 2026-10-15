@@ -229,17 +229,19 @@ def _require_audio_turn_proof(obj: dict[str, Any], name: str) -> None:
     for field in (
         "realtime_session_established",
         "audio_sent",
-        "audio_response_received",
-        "governed_turn_completed",
+        "audio_received",
+        "upstream_configured",
     ):
         _require(obj.get(field) is True, f"{name}.{field} must be true")
-    latency = obj.get("latency_ms")
+    turns = obj.get("completed_turns")
+    _require(isinstance(turns, int) and not isinstance(turns, bool) and turns >= 1, f"{name}.completed_turns must be at least 1")
+    latency = obj.get("response_latency_ms")
     _require(
         isinstance(latency, (int, float))
         and not isinstance(latency, bool)
         and 0 < latency <= 2000
         and latency == latency,
-        f"{name}.latency_ms must be finite and > 0 and <= 2000",
+        f"{name}.response_latency_ms must be finite and > 0 and <= 2000",
     )
 
 
