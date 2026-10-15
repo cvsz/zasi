@@ -16,7 +16,7 @@ A production release tag is allowed only when `scripts/production_go_gate.py` va
 - `health.observed_commit` is copied from the live external `/health/ready` response and must equal `candidate_commit`; `health.identity_source` must be `artifact`.
 - `runtime.observed_image` must equal the exact immutable `candidate_image` and `runtime.inspector` must be `docker`.
 - World Room and canary evidence identify the exact `candidate_image` digest.
-- Both candidate `world_room` and post-rollback `rollback` must include `realtime_session_established`, `audio_sent`, `audio_response_received`, and `governed_turn_completed` set to JSON `true`, plus a measured numeric `latency_ms` greater than zero and at most 2000. A proxy-only/no-key/no-audio smoke test must be rejected.
+- Both candidate `world_room` and post-rollback `rollback` must include `realtime_session_established`, `audio_sent`, `audio_received`, and `upstream_configured` and `completed_turns` (integer >= 1) set to JSON `true`, plus a measured numeric `response_latency_ms` greater than zero and at most 2000. A proxy-only/no-key/no-audio smoke test must be rejected.
 - controlled canary evidence contains at least 20 requests, error rate <= 1%, and p95 <= 2000 ms.
 - rollback redeployed the exact `previous_image` digest in <= 300 seconds on that same staging origin.
 - after rollback, `scripts/observe_container_image.sh <container> <previous_image>` must independently verify the running previous digest.
@@ -57,9 +57,10 @@ Do not inject release identity through `ZASI_RELEASE_COMMIT` or `ZASI_RELEASE_IM
     "image": "ghcr.io/cvsz/zasi@sha256:<candidate-64-hex-digest>",
     "realtime_session_established": true,
     "audio_sent": true,
-    "audio_response_received": true,
-    "governed_turn_completed": true,
-    "latency_ms": 250
+    "audio_received": true,
+    "upstream_configured": true,
+    "completed_turns": 1,
+    "response_latency_ms": 250
   },
   "canary": {
     "status": "passed",
@@ -85,9 +86,10 @@ Do not inject release identity through `ZASI_RELEASE_COMMIT` or `ZASI_RELEASE_IM
     "world_room_image": "ghcr.io/cvsz/zasi@sha256:<previous-64-hex-digest>",
     "realtime_session_established": true,
     "audio_sent": true,
-    "audio_response_received": true,
-    "governed_turn_completed": true,
-    "latency_ms": 250,
+    "audio_received": true,
+    "upstream_configured": true,
+    "completed_turns": 1,
+    "response_latency_ms": 250,
     "duration_seconds": 45
   }
 }
