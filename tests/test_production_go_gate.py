@@ -126,6 +126,18 @@ class ProductionGoGateTests(unittest.TestCase):
                         with self.assertRaisesRegex(GateError, field):
                             self.validate(item)
 
+    def test_world_room_completed_turns_must_be_positive_integer(self):
+        for phase in ("world_room", "rollback"):
+            for value in (None, False, True, 0, -1, 1.0, "1"):
+                with self.subTest(phase=phase, turns=value):
+                    item = evidence()
+                    if value is None:
+                        item[phase].pop("completed_turns")
+                    else:
+                        item[phase]["completed_turns"] = value
+                    with self.assertRaisesRegex(GateError, "completed_turns"):
+                        self.validate(item)
+
     def test_world_room_latency_must_be_bounded_numeric(self):
         for phase in ("world_room", "rollback"):
             for value in (None, True, False, "250", 0, -1, 2001, float("nan"), float("inf")):
