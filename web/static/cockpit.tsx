@@ -1306,7 +1306,10 @@ function MemoryPage() {
     const remove = async (memoryId: string): Promise<void> => {
         if (!token) return;
         try {
-            await api.request(`/api/v2/memory/${memoryId}`, { token, method: 'DELETE' });
+            if (!/^mem_[A-Za-z0-9_-]{22}$/.test(memoryId)) {
+                throw new Error('Invalid memory identifier');
+            }
+            await api.request(`/api/v2/memory/${encodeURIComponent(memoryId)}`, { token, method: 'DELETE' });
             addToast('Memory deleted', 'success');
         } catch (error) {
             addToast(`Failed: ${errorMessage(error)}`, 'error');
