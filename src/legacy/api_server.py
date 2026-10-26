@@ -187,8 +187,8 @@ class ZASIWebServer:
                 self.end_headers()
                 self.wfile.write(json.dumps(parent._get_system_snapshot()).encode())
 
-            def log_message(self, format, *args):
-                pass
+            def log_message(self, format, *args):  # type: ignore[override]
+                """Suppress per-request stdout noise from BaseHTTPServer."""
 
         try:
             socketserver.TCPServer.allow_reuse_address = True
