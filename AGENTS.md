@@ -11,7 +11,7 @@
 
 ### 1.1 Branch Protection — production-main Ruleset
 
-The main branch is protected by the production-main ruleset at .github/rulesets/production-main.json.
+The intended main-branch policy is defined by .github/rulesets/production-main.json. This file is desired-state documentation; it does not apply GitHub settings by itself. Verify the live Ruleset API after an authorized administrator reconciles the server-side configuration.
 
 **Required status checks** (all must pass before merge):
 - Test (Python 3.11), Test (Python 3.12)
@@ -28,8 +28,14 @@ The main branch is protected by the production-main ruleset at .github/rulesets/
 **Key rules:**
 - Branch deletion: blocked
 - Non-fast-forward push: blocked
-- Required review count: 0 (review thread resolution required)
+- Required review count: 1
+- CODEOWNERS review required
+- Stale approvals dismissed on new commits
+- Approval required after the latest push
+- Review threads must be resolved
 - Strict required status checks: enforced on create
+- No bypass actors are permitted
+- Until live Ruleset API read-back confirms these settings, treat independent-review enforcement as NOT ENFORCED
 
 ### 1.2 GitHub Environments
 
