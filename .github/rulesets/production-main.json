@@ -35,51 +35,21 @@
         "strict_required_status_checks_policy": true,
         "do_not_enforce_on_create": false,
         "required_status_checks": [
-          {
-            "context": "Test (Python 3.11)"
-          },
-          {
-            "context": "Test (Python 3.12)"
-          },
-          {
-            "context": "Build Distribution"
-          },
-          {
-            "context": "Docker Build Check"
-          },
-          {
-            "context": "Dependency Review"
-          },
-          {
-            "context": "Python Syntax & React TypeScript Validation"
-          },
-          {
-            "context": "Analyze (actions)"
-          },
-          {
-            "context": "Analyze (javascript-typescript)"
-          },
-          {
-            "context": "Analyze (python)"
-          },
-          {
-            "context": "Build and Security Scan Docker Image"
-          },
-          {
-            "context": "Build security evidence"
-          },
-          {
-            "context": "Clean PostgreSQL backup restore rehearsal"
-          },
-          {
-            "context": "Local two-replica canary and failure rehearsal"
-          },
-          {
-            "context": "Base to candidate to immutable rollback"
-          },
-          {
-            "context": "Validate production GO evidence contract"
-          }
+          {"context": "Test (Python 3.11)"},
+          {"context": "Test (Python 3.12)"},
+          {"context": "Build Distribution"},
+          {"context": "Docker Build Check"},
+          {"context": "Dependency Review"},
+          {"context": "Python Syntax & React TypeScript Validation"},
+          {"context": "Analyze (actions)"},
+          {"context": "Analyze (javascript-typescript)"},
+          {"context": "Analyze (python)"},
+          {"context": "Build and Security Scan Docker Image"},
+          {"context": "Build security evidence"},
+          {"context": "Clean PostgreSQL backup restore rehearsal"},
+          {"context": "Local two-replica canary and failure rehearsal"},
+          {"context": "Base to candidate to immutable rollback"},
+          {"context": "Validate production GO evidence contract"}
         ]
       }
     }
