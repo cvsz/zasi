@@ -26,7 +26,7 @@
     "@types/three": "^0.186.0",
     "electron": "44.3.0",
     "electron-builder": "26.15.3",
-    "semver": "7.8.5",
+    "semver": "7.8.6",
     "typescript": "7.0.2",
     "vite": "8.3.4"
   },
