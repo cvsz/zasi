@@ -173,5 +173,5 @@ def test_runtime_consumer_rollback_requires_no_data_or_transport_migration():
     assert client.evidence(direct_payload) == runtime_result.evidence
     assert len(requests) == 2
     assert all(request.method == "POST" for request in requests)
-    assert all(request.url.path == "/api/v1/rag/query" for request in requests)
+    assert all(request.url.path == "/api/v1/query" for request in requests)
     assert all(request.headers["X-ZWorkforce-Tenant-ID"] == "tenant-a" for request in requests)
