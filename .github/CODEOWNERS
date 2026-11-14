@@ -1,0 +1,3 @@
+# Require independent review for every pull request.
+# The live ruleset must also require CODEOWNERS approval; this file alone is not enforcement.
+* @policedbc
